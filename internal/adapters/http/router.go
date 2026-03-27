@@ -1,6 +1,12 @@
 package http
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+	"path/filepath"
+	"runtime"
+
+	"github.com/gin-gonic/gin"
+)
 
 func NewRouter(app App) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -9,6 +15,10 @@ func NewRouter(app App) *gin.Engine {
 	router.Use(gin.Recovery())
 
 	handlers := NewBoardHandlers(app)
+	router.GET("/board", func(c *gin.Context) {
+		c.File(filepath.Join(boardAssetDir(), "index.html"))
+	})
+	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)
 	router.GET("/board/tasks", handlers.TaskBoard)
 	router.GET("/board/runs/:id", handlers.RunDetail)
@@ -19,4 +29,9 @@ func NewRouter(app App) *gin.Engine {
 	router.POST("/gateways/openclaw/command", handlers.OpenClawCommand)
 
 	return router
+}
+
+func boardAssetDir() string {
+	_, filename, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(filename), "..", "..", "..", "web", "board")
 }

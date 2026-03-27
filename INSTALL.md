@@ -23,9 +23,10 @@ Current verification and adapter-level checks:
 ```bash
 go test ./...
 go test ./internal/adapters/http ./test
+go test ./internal/bootstrap -run Serve
 ```
 
-The `serve` command still needs the final runtime wiring layer before it exposes the full board and gateway flow.
+The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow. The remaining runtime work is primarily live smoke-testing against a real `codex` CLI and deepening the CLI command surface.
 
 ## Repository Purpose
 

@@ -24,13 +24,13 @@ The currently implemented slice now includes:
 - command and query handlers
 - OpenClaw gateway normalization
 - Codex runner adapter
-- HTTP board router and endpoint tests
+- HTTP board router, board assets, and endpoint tests
+- runtime wiring for `serve` with SQLite-backed board and gateway flow
 
 The remaining work for Phase 1 is concentrated in:
 
-- runtime wiring so `serve` hosts the board and gateway end-to-end
 - richer CLI command integration on top of handlers
-- final polish of the board UI and full runtime smoke checks
+- fuller board UI interactions and runtime smoke checks against a live `codex` CLI
 
 ## Architecture Constraints
 
@@ -72,7 +72,7 @@ go test ./...
 go run ./cmd/foreman --help
 ```
 
-When the `serve` path grows beyond the bootstrap stub:
+To run the local control plane:
 
 ```bash
 go run ./cmd/foreman serve

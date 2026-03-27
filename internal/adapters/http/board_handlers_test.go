@@ -60,6 +60,17 @@ func TestRunDetailEndpointReturnsArtifactSummaries(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "assistant_summary")
 }
 
+func TestBoardIndexServesHTML(t *testing.T) {
+	router := NewRouter(newFakeHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Foreman Board")
+}
+
 func TestOpenClawGatewayEndpointReturnsResponseEnvelope(t *testing.T) {
 	router := NewRouter(newFakeHTTPApp())
 
