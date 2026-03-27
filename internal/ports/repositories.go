@@ -58,4 +58,39 @@ type LeaseRepository interface {
 	Release(scopeKey string) error
 }
 
-type BoardQueryRepository interface{}
+type ModuleBoardRow struct {
+	ModuleID   string
+	Name       string
+	BoardState string
+}
+
+type TaskBoardRow struct {
+	TaskID          string
+	ModuleID        string
+	Summary         string
+	State           string
+	Priority        int
+	PendingApproval bool
+}
+
+type RunDetailRecord struct {
+	Run         Run
+	TaskSummary string
+	Artifacts   []ArtifactRecord
+}
+
+type ApprovalQueueRow struct {
+	ApprovalID string
+	TaskID     string
+	ModuleID   string
+	Summary    string
+	Reason     string
+	State      string
+}
+
+type BoardQueryRepository interface {
+	ListModules(projectID string) ([]ModuleBoardRow, error)
+	ListTasks(projectID string) ([]TaskBoardRow, error)
+	GetRunDetail(runID string) (RunDetailRecord, error)
+	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
+}
