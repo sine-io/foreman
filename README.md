@@ -13,21 +13,24 @@ What remains here is only Foreman-related content:
 - Go bootstrap code under [`cmd/foreman`](/root/link/repo/cmd/foreman) and [`internal`](/root/link/repo/internal)
 - Foreman architecture and implementation docs under [`docs/superpowers/specs`](/root/link/repo/docs/superpowers/specs) and [`docs/superpowers/plans`](/root/link/repo/docs/superpowers/plans)
 
-The current implemented slice is still early:
+The currently implemented slice now includes:
 
 - Go module and binary bootstrap
 - config/bootstrap/runtime seam
 - `cobra` root command and `serve`
 - `zerolog` setup
-
-The planned Phase 1 slice adds:
-
-- domain model with `DDD Lite`
-- light `CQRS`
-- SQLite-backed state
-- OpenClaw gateway
+- domain aggregates and strict approval policy
+- SQLite schema, repositories, and artifact filesystem store
+- command and query handlers
+- OpenClaw gateway normalization
 - Codex runner adapter
-- board HTTP UI with light interactions
+- HTTP board router, board assets, and endpoint tests
+- runtime wiring for `serve` with SQLite-backed board and gateway flow
+
+The remaining work for Phase 1 is concentrated in:
+
+- richer CLI command integration on top of handlers
+- fuller board UI interactions and runtime smoke checks against a live `codex` CLI
 
 ## Architecture Constraints
 
@@ -69,7 +72,7 @@ go test ./...
 go run ./cmd/foreman --help
 ```
 
-When the `serve` path grows beyond the bootstrap stub:
+To run the local control plane:
 
 ```bash
 go run ./cmd/foreman serve

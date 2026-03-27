@@ -18,11 +18,15 @@ go test ./...
 go run ./cmd/foreman --help
 ```
 
-At the current bootstrap stage, the `serve` command exists but still represents only the earliest control-plane seam:
+Current verification and adapter-level checks:
 
 ```bash
-go run ./cmd/foreman serve
+go test ./...
+go test ./internal/adapters/http ./test
+go test ./internal/bootstrap -run Serve
 ```
+
+The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow. The remaining runtime work is primarily live smoke-testing against a real `codex` CLI and deepening the CLI command surface.
 
 ## Repository Purpose
 

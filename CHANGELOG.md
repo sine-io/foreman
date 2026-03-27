@@ -21,3 +21,12 @@
 - Added config/bootstrap/runtime seam
 - Added `cobra` root command and `serve`
 - Added `zerolog` setup
+
+### Phase 1 Progress
+
+- Added domain aggregates and strict approval policy
+- Added SQLite-backed repositories and artifact storage
+- Added command handlers, query models, OpenClaw gateway, and Codex runner adapter
+- Added HTTP board routes and end-to-end HTTP tests
+- Wired `serve` to the real SQLite-backed app runtime and board endpoints
+- Added bootstrap integration tests covering OpenClaw-to-board flow
