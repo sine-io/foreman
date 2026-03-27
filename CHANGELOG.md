@@ -32,3 +32,4 @@
 - Added bootstrap integration tests covering OpenClaw-to-board flow
 - Wired CLI project/module/task commands to the real application handlers
 - Wired the board UI to live module/task/approval HTTP data
+- Validated the Phase 1 flow against a live `codex` CLI and persisted completed run artifacts

@@ -107,7 +107,7 @@ func BuildApp(cfg Config) (App, error) {
 		tasks,
 		leases,
 		strictPolicy{},
-		codex.NewCodexAdapter(nil),
+		codex.NewCodexAdapter(nil, repoRoot, cfg.ArtifactRoot),
 		approvals,
 		runs,
 		artifacts,

@@ -28,9 +28,12 @@ The currently implemented slice now includes:
 - runtime wiring for `serve` with SQLite-backed board and gateway flow
 - CLI project/module/task commands wired to real handlers
 
-The remaining work for Phase 1 is concentrated in:
+Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
-- runtime smoke checks against a live `codex` CLI
+Work beyond Phase 1 is now concentrated in:
+
+- richer board controls and polish
+- additional runner and gateway adapters
 
 ## Architecture Constraints
 

@@ -30,9 +30,14 @@ func TestDispatchAcquiresRepoLeaseAndStartsRun(t *testing.T) {
 
 	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
 	require.NoError(t, err)
-	require.Equal(t, "running", out.RunState)
+	require.Equal(t, "completed", out.RunState)
 	require.Equal(t, "repo:project-1", leases.scopeKey)
+	require.Equal(t, "repo:project-1", leases.releasedScopeKey)
 	require.Equal(t, "task-1", runs.saved.TaskID)
+
+	savedTask, err := tasks.Get("task-1")
+	require.NoError(t, err)
+	require.Equal(t, task.TaskStateCompleted, savedTask.State)
 }
 
 func TestDispatchCreatesApprovalWhenRiskyActionDetected(t *testing.T) {
@@ -83,8 +88,9 @@ func TestDispatchIndexesAssistantSummaryArtifact(t *testing.T) {
 }
 
 type fakeLeaseRepo struct {
-	taskID   string
-	scopeKey string
+	taskID           string
+	scopeKey         string
+	releasedScopeKey string
 }
 
 func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
@@ -94,7 +100,7 @@ func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
 }
 
 func (f *fakeLeaseRepo) Release(scopeKey string) error {
-	f.scopeKey = scopeKey
+	f.releasedScopeKey = scopeKey
 	return nil
 }
 
@@ -113,7 +119,7 @@ func (fakeRunner) Dispatch(req ports.RunRequest) (ports.Run, error) {
 		ID:                   "run-1",
 		TaskID:               req.TaskID,
 		RunnerKind:           "codex",
-		State:                "running",
+		State:                "completed",
 		AssistantSummaryPath: "artifacts/tasks/task-1/assistant_summary.txt",
 	}, nil
 }

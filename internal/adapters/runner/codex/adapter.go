@@ -2,6 +2,7 @@ package codex
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -10,30 +11,53 @@ import (
 )
 
 type executor interface {
-	Run(name string, args ...string) error
+	Run(name string, args ...string) ([]byte, error)
 }
 
 type shellExecutor struct{}
 
-func (shellExecutor) Run(name string, args ...string) error {
+func (shellExecutor) Run(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
-	return cmd.Run()
+	return cmd.CombinedOutput()
 }
 
 type Adapter struct {
-	exec executor
+	exec         executor
+	workdir      string
+	artifactRoot string
 }
 
-func NewCodexAdapter(exec executor) *Adapter {
+func NewCodexAdapter(exec executor, workdir, artifactRoot string) *Adapter {
 	if exec == nil {
 		exec = shellExecutor{}
 	}
 
-	return &Adapter{exec: exec}
+	if workdir == "" {
+		workdir = "."
+	}
+	if artifactRoot == "" {
+		artifactRoot = filepath.Join(workdir, "artifacts")
+	}
+
+	return &Adapter{
+		exec:         exec,
+		workdir:      workdir,
+		artifactRoot: artifactRoot,
+	}
 }
 
 func (a *Adapter) Dispatch(req ports.RunRequest) (ports.Run, error) {
-	if err := a.exec.Run("codex", "exec", "-C", ".", req.Command); err != nil {
+	output, err := a.exec.Run("codex", "exec", "-C", a.workdir, req.Command)
+	if err != nil {
+		return ports.Run{}, err
+	}
+
+	relativeSummaryPath := filepath.Join("tasks", req.TaskID, "assistant_summary.txt")
+	fullSummaryPath := filepath.Join(a.artifactRoot, relativeSummaryPath)
+	if err := os.MkdirAll(filepath.Dir(fullSummaryPath), 0o755); err != nil {
+		return ports.Run{}, err
+	}
+	if err := os.WriteFile(fullSummaryPath, output, 0o644); err != nil {
 		return ports.Run{}, err
 	}
 
@@ -41,8 +65,8 @@ func (a *Adapter) Dispatch(req ports.RunRequest) (ports.Run, error) {
 		ID:                   fmt.Sprintf("run-%d", time.Now().UnixNano()),
 		TaskID:               req.TaskID,
 		RunnerKind:           "codex",
-		State:                "running",
-		AssistantSummaryPath: filepath.Join("artifacts", "tasks", req.TaskID, "assistant_summary.txt"),
+		State:                "completed",
+		AssistantSummaryPath: fullSummaryPath,
 	}, nil
 }
 

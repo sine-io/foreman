@@ -100,6 +100,9 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 	}
 
 	repoTask.State = task.TaskStateRunning
+	if run.State == "completed" {
+		repoTask.State = task.TaskStateCompleted
+	}
 	if err := h.Tasks.Save(repoTask); err != nil {
 		return DispatchTaskResult{}, err
 	}
@@ -107,6 +110,12 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 	artifactID, err := h.Artifacts.Create(repoTask.ID, "assistant_summary", run.AssistantSummaryPath)
 	if err != nil {
 		return DispatchTaskResult{}, err
+	}
+
+	if run.State == "completed" {
+		if err := h.Leases.Release(repoTask.WriteScope); err != nil {
+			return DispatchTaskResult{}, err
+		}
 	}
 
 	return DispatchTaskResult{
