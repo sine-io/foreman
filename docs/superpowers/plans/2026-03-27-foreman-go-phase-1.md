@@ -197,6 +197,108 @@ Explicitly out of scope for this plan:
 - Modify: `CHANGELOG.md`
   Responsibility change: add Foreman repo split and Go bootstrap status.
 
+## Milestones
+
+### Milestone 1: Foundation Slice
+
+**Scope:** Task 1, Task 2, Task 3
+
+**Goal at this milestone:**
+
+- `foreman` binary boots cleanly
+- domain aggregates and strict policy rules exist
+- SQLite schema and repositories exist
+- artifact storage seam exists
+
+**Milestone verification:**
+
+```bash
+go test ./internal/bootstrap ./internal/adapters/cli
+go test ./internal/domain/...
+go test ./internal/infrastructure/store/sqlite
+go test ./...
+```
+
+### Milestone 2: Application Core Slice
+
+**Scope:** Task 4, Task 5
+
+**Goal at this milestone:**
+
+- command handlers persist and transition tasks
+- query handlers produce board-ready read models
+- command side and query side both run against SQLite-backed repositories
+
+**Milestone verification:**
+
+```bash
+go test ./internal/app/command
+go test ./internal/app/query
+go test ./internal/infrastructure/store/sqlite
+go test ./...
+```
+
+### Milestone 3: Execution Pipeline Slice
+
+**Scope:** Task 6, Task 7, Task 8
+
+**Goal at this milestone:**
+
+- OpenClaw envelopes normalize into Foreman commands
+- Codex runner adapter dispatches writable work
+- dispatch orchestration enforces lease + approval flow + artifact indexing
+
+**Milestone verification:**
+
+```bash
+go test ./internal/adapters/gateway/openclaw
+go test ./internal/adapters/runner/codex
+go test ./internal/app/command -run Dispatch
+go test ./...
+```
+
+### Milestone 4: Vertical Slice and Runtime
+
+**Scope:** Task 9
+
+**Goal at this milestone:**
+
+- `serve` exposes a working local runtime
+- board HTTP routes, actions, and assets are reachable
+- OpenClaw command -> persistence -> board-visible state works end-to-end
+- docs reflect actual runnable status
+
+**Milestone verification:**
+
+```bash
+go test ./internal/bootstrap -run Serve
+go test ./internal/adapters/http ./test -run Phase1
+go run ./cmd/foreman --help
+go test ./...
+```
+
+## Milestone Integration Rule
+
+After a milestone reaches its goal and all milestone verification commands pass, integrate that milestone into `origin/main` immediately instead of waiting for the entire Phase 1 plan to finish.
+
+**Important note:** GitHub CLI does not provide a standalone `gh push` command. The required GitHub CLI step here is `gh auth setup-git`, which configures GitHub authentication for the actual `git push` transport.
+
+Use this exact integration sequence after each milestone:
+
+- [ ] Run the milestone-specific verification commands listed above
+- [ ] Run the full suite: `go test ./...`
+- [ ] Configure GitHub auth for Git operations: `gh auth setup-git`
+- [ ] Update local main: `git checkout main && git pull --ff-only origin main`
+- [ ] Merge the milestone branch: `git merge --no-ff <milestone-branch> -m "merge: integrate <milestone-name>"`
+- [ ] Push the updated main branch: `git push origin main`
+
+Suggested branch names:
+
+- Milestone 1: `phase1-m1-foundation`
+- Milestone 2: `phase1-m2-app-core`
+- Milestone 3: `phase1-m3-execution-pipeline`
+- Milestone 4: `phase1-m4-vertical-slice`
+
 ## Task 1: Bootstrap the Go Binary and Dependency Boundaries
 
 **Files:**
