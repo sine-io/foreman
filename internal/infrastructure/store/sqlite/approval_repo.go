@@ -34,3 +34,13 @@ func (r *ApprovalRepository) Get(id string) (approval.Approval, error) {
 	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status)
 	return a, err
 }
+
+func (r *ApprovalRepository) FindPendingByTask(taskID string) (approval.Approval, error) {
+	var a approval.Approval
+	err := r.db.QueryRow(
+		`select id, task_id, reason, state from approvals where task_id = ? and state = ? limit 1`,
+		taskID,
+		approval.StatusPending,
+	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status)
+	return a, err
+}

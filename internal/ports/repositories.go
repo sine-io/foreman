@@ -50,6 +50,7 @@ type ArtifactRepository interface {
 type ApprovalRepository interface {
 	Save(approval.Approval) error
 	Get(id string) (approval.Approval, error)
+	FindPendingByTask(taskID string) (approval.Approval, error)
 }
 
 type LeaseRepository interface {

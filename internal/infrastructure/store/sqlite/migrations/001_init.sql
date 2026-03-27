@@ -14,6 +14,9 @@ create table if not exists modules (
 create table if not exists tasks (
   id text primary key,
   module_id text not null references modules(id),
+  summary text not null default '',
+  acceptance text not null default '',
+  priority integer not null default 0,
   task_type text not null,
   state text not null,
   write_scope text not null

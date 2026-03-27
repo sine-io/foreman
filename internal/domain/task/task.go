@@ -1,5 +1,10 @@
 package task
 
+import (
+	"fmt"
+	"strings"
+)
+
 type TaskType string
 
 const (
@@ -24,6 +29,8 @@ type Task struct {
 	ModuleID   string
 	Type       TaskType
 	Summary    string
+	Acceptance string
+	Priority   int
 	WriteScope string
 	State      TaskState
 }
@@ -51,5 +58,16 @@ func (t Task) CanTransition(next TaskState) bool {
 		return next == TaskStateLeased || next == TaskStateCanceled
 	default:
 		return false
+	}
+}
+
+func ParseTaskType(raw string) (TaskType, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case string(TaskTypeRead):
+		return TaskTypeRead, nil
+	case string(TaskTypeWrite):
+		return TaskTypeWrite, nil
+	default:
+		return "", fmt.Errorf("unsupported task type: %s", raw)
 	}
 }
