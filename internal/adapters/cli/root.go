@@ -20,6 +20,8 @@ func NewRootCommand(app bootstrap.App) *cobra.Command {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.AddCommand(newServeCommand(app))
+	cmd.AddCommand(newProjectCommand(app))
+	cmd.AddCommand(newActionCommand(app))
 
 	return cmd
 }

@@ -1,0 +1,51 @@
+:root {
+  --bg: #f4f1e8;
+  --panel: #fffaf0;
+  --ink: #1f2a1f;
+  --accent: #9b5d2e;
+  --line: #d8cbb6;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", sans-serif;
+  background:
+    radial-gradient(circle at top left, #fff7e2, transparent 24rem),
+    linear-gradient(180deg, #f7f2e8 0%, var(--bg) 100%);
+  color: var(--ink);
+}
+
+.board-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.board-header {
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.subtitle {
+  max-width: 40rem;
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.board-card {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--panel);
+  box-shadow: 0 14px 30px rgba(80, 53, 24, 0.08);
+}

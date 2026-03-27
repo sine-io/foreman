@@ -18,11 +18,14 @@ go test ./...
 go run ./cmd/foreman --help
 ```
 
-At the current bootstrap stage, the `serve` command exists but still represents only the earliest control-plane seam:
+Current verification and adapter-level checks:
 
 ```bash
-go run ./cmd/foreman serve
+go test ./...
+go test ./internal/adapters/http ./test
 ```
+
+The `serve` command still needs the final runtime wiring layer before it exposes the full board and gateway flow.
 
 ## Repository Purpose
 
