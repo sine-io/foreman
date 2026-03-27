@@ -13,7 +13,35 @@
         <h1>Local Control Plane Board</h1>
         <p class="subtitle">Board HTTP surface for modules, tasks, approvals, and run detail.</p>
       </header>
-      <section id="board-root" class="board-grid"></section>
+      <section class="board-toolbar">
+        <label class="board-label" for="project-id">Project ID</label>
+        <input id="project-id" class="board-input" value="demo" />
+        <button id="refresh-board" class="board-button" type="button">Refresh</button>
+        <p id="board-status" class="board-status">Loading board data...</p>
+      </section>
+      <section id="board-root" class="board-layout">
+        <article class="board-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Modules</p>
+            <h2>Module Board</h2>
+          </header>
+          <div id="modules-root" class="column-grid"></div>
+        </article>
+        <article class="board-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Tasks</p>
+            <h2>Task Board</h2>
+          </header>
+          <div id="tasks-root" class="column-grid"></div>
+        </article>
+        <article class="board-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Approvals</p>
+            <h2>Pending Queue</h2>
+          </header>
+          <div id="approvals-root" class="approval-list"></div>
+        </article>
+      </section>
     </main>
     <script src="/board/assets/app.js"></script>
   </body>

@@ -21,6 +21,7 @@ func NewRouter(app App) *gin.Engine {
 	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)
 	router.GET("/board/tasks", handlers.TaskBoard)
+	router.GET("/board/approvals", handlers.ApprovalQueue)
 	router.GET("/board/runs/:id", handlers.RunDetail)
 	router.POST("/board/tasks/:id/approve", handlers.ApproveTask)
 	router.POST("/board/tasks/:id/retry", handlers.RetryTask)

@@ -36,16 +36,142 @@ body {
   max-width: 40rem;
 }
 
-.board-grid {
+.board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.board-label,
+.board-status {
+  font-size: 0.95rem;
+}
+
+.board-input {
+  min-width: 14rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffdf7;
+}
+
+.board-button {
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff7ec;
+  cursor: pointer;
+}
+
+.board-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 1.2fr 1.5fr 1fr;
   gap: 1rem;
 }
 
-.board-card {
+.board-panel {
   padding: 1.25rem;
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--panel);
   box-shadow: 0 14px 30px rgba(80, 53, 24, 0.08);
+}
+
+.panel-header {
+  margin-bottom: 1rem;
+}
+
+.panel-header h2,
+.column-header h3 {
+  margin: 0;
+}
+
+.panel-kicker {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.column-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.board-column {
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.column-header span {
+  min-width: 1.75rem;
+  text-align: center;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: #f0e1c7;
+}
+
+.column-cards {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+}
+
+.board-card,
+.approval-card {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: #fffdf7;
+}
+
+.board-card strong,
+.approval-summary {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.approval-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.approval-reason,
+.approval-meta,
+.empty-state,
+.board-card p {
+  margin: 0;
+}
+
+.approval-meta {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: #6d5e4c;
+}
+
+.empty-state {
+  color: #6d5e4c;
+}
+
+@media (max-width: 960px) {
+  .board-layout {
+    grid-template-columns: 1fr;
+  }
 }

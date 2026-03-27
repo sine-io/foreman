@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sine-io/foreman/internal/app/command"
+	"github.com/sine-io/foreman/internal/app/query"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	"github.com/sine-io/foreman/internal/domain/project"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,10 @@ func (f *fakeApp) CreateTask(cmd command.CreateTaskCommand) (command.TaskDTO, er
 		Summary:  cmd.Title,
 		Priority: cmd.Priority,
 	}, nil
+}
+
+func (f *fakeApp) ApprovalQueue(projectID string) (query.ApprovalQueueView, error) {
+	return query.ApprovalQueueView{}, nil
 }
 
 func (f *fakeApp) ApproveTask(cmd command.ApproveTaskCommand) (string, error) {

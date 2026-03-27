@@ -13,6 +13,7 @@ import (
 type App interface {
 	ModuleBoard(projectID string) (query.ModuleBoardView, error)
 	TaskBoard(projectID string) (query.TaskBoardView, error)
+	ApprovalQueue(projectID string) (query.ApprovalQueueView, error)
 	RunDetail(runID string) (query.RunDetailView, error)
 	ApproveTask(command.ApproveTaskCommand) (string, error)
 	RetryTask(command.RetryTaskCommand) (string, error)
@@ -41,6 +42,16 @@ func (h *BoardHandlers) ModuleBoard(c *gin.Context) {
 
 func (h *BoardHandlers) TaskBoard(c *gin.Context) {
 	view, err := h.app.TaskBoard(c.Query("project_id"))
+	if err != nil {
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(nethttp.StatusOK, view)
+}
+
+func (h *BoardHandlers) ApprovalQueue(c *gin.Context) {
+	view, err := h.app.ApprovalQueue(c.Query("project_id"))
 	if err != nil {
 		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

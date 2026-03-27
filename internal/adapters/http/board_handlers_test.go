@@ -60,6 +60,18 @@ func TestRunDetailEndpointReturnsArtifactSummaries(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "assistant_summary")
 }
 
+func TestApprovalQueueEndpointReturnsPendingItems(t *testing.T) {
+	router := NewRouter(newFakeHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/approvals?project_id=demo", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "approval-1")
+	require.Contains(t, rec.Body.String(), "git push origin main")
+}
+
 func TestBoardIndexServesHTML(t *testing.T) {
 	router := NewRouter(newFakeHTTPApp())
 
@@ -69,6 +81,18 @@ func TestBoardIndexServesHTML(t *testing.T) {
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "Foreman Board")
+}
+
+func TestBoardJavaScriptAssetServesInteractiveApp(t *testing.T) {
+	router := NewRouter(newFakeHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/app.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "/board/tasks")
+	require.Contains(t, rec.Body.String(), "/board/approvals")
 }
 
 func TestOpenClawGatewayEndpointReturnsResponseEnvelope(t *testing.T) {
@@ -160,6 +184,21 @@ func (a *fakeHTTPApp) RunDetail(runID string) (query.RunDetailView, error) {
 		TaskSummary: "Bootstrap board",
 		Artifacts: []query.ArtifactSummary{
 			{ID: "artifact-1", Kind: "assistant_summary", Summary: "Created board view"},
+		},
+	}, nil
+}
+
+func (a *fakeHTTPApp) ApprovalQueue(projectID string) (query.ApprovalQueueView, error) {
+	return query.ApprovalQueueView{
+		Items: []query.ApprovalCard{
+			{
+				ApprovalID: "approval-1",
+				TaskID:     "task-1",
+				ModuleID:   "module-1",
+				Summary:    "Review push",
+				Reason:     "git push origin main",
+				State:      "pending",
+			},
 		},
 	}, nil
 }

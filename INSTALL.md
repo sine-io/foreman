@@ -26,7 +26,7 @@ go test ./internal/adapters/cli ./internal/adapters/http ./test
 go test ./internal/bootstrap -run Serve
 ```
 
-The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow, and the CLI command surface can create projects/modules/tasks plus run task actions. The remaining runtime work is primarily live smoke-testing against a real `codex` CLI.
+The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow, the CLI command surface can create projects/modules/tasks plus run task actions, and the board UI reads real module/task/approval data from the HTTP endpoints. The remaining runtime work is primarily live smoke-testing against a real `codex` CLI.
 
 ## Repository Purpose
 

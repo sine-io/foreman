@@ -26,6 +26,7 @@ type App interface {
 	CreateProject(command.CreateProjectCommand) (projectpkg.Project, error)
 	CreateModule(command.CreateModuleCommand) (modulepkg.Module, error)
 	CreateTask(command.CreateTaskCommand) (command.TaskDTO, error)
+	ApprovalQueue(projectID string) (query.ApprovalQueueView, error)
 	ApproveTask(command.ApproveTaskCommand) (string, error)
 	RetryTask(command.RetryTaskCommand) (string, error)
 	CancelTask(command.CancelTaskCommand) (string, error)
@@ -165,6 +166,10 @@ func (a *app) CreateTask(cmd command.CreateTaskCommand) (command.TaskDTO, error)
 
 func (a *app) TaskBoard(projectID string) (query.TaskBoardView, error) {
 	return query.NewTaskBoardQuery(a.board).Execute(projectID)
+}
+
+func (a *app) ApprovalQueue(projectID string) (query.ApprovalQueueView, error) {
+	return query.NewApprovalQueueQuery(a.board).Execute(projectID)
 }
 
 func (a *app) RunDetail(runID string) (query.RunDetailView, error) {

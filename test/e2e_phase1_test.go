@@ -61,6 +61,10 @@ func (a *e2eApp) TaskBoard(projectID string) (query.TaskBoardView, error) {
 	return view, nil
 }
 
+func (a *e2eApp) ApprovalQueue(projectID string) (query.ApprovalQueueView, error) {
+	return query.ApprovalQueueView{}, nil
+}
+
 func (a *e2eApp) RunDetail(runID string) (query.RunDetailView, error) {
 	return query.RunDetailView{}, nil
 }
