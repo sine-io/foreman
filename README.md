@@ -26,10 +26,10 @@ The currently implemented slice now includes:
 - Codex runner adapter
 - HTTP board router, board assets, and endpoint tests
 - runtime wiring for `serve` with SQLite-backed board and gateway flow
+- CLI project/module/task commands wired to real handlers
 
 The remaining work for Phase 1 is concentrated in:
 
-- richer CLI command integration on top of handlers
 - fuller board UI interactions and runtime smoke checks against a live `codex` CLI
 
 ## Architecture Constraints

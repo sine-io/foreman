@@ -22,11 +22,11 @@ Current verification and adapter-level checks:
 
 ```bash
 go test ./...
-go test ./internal/adapters/http ./test
+go test ./internal/adapters/cli ./internal/adapters/http ./test
 go test ./internal/bootstrap -run Serve
 ```
 
-The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow. The remaining runtime work is primarily live smoke-testing against a real `codex` CLI and deepening the CLI command surface.
+The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow, and the CLI command surface can create projects/modules/tasks plus run task actions. The remaining runtime work is primarily live smoke-testing against a real `codex` CLI.
 
 ## Repository Purpose
 

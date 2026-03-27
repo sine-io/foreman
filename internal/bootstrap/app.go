@@ -17,11 +17,19 @@ import (
 	"github.com/sine-io/foreman/internal/app/query"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
+	projectpkg "github.com/sine-io/foreman/internal/domain/project"
 	"github.com/sine-io/foreman/internal/infrastructure/store/sqlite"
 )
 
 type App interface {
 	Serve(context.Context) error
+	CreateProject(command.CreateProjectCommand) (projectpkg.Project, error)
+	CreateModule(command.CreateModuleCommand) (modulepkg.Module, error)
+	CreateTask(command.CreateTaskCommand) (command.TaskDTO, error)
+	ApproveTask(command.ApproveTaskCommand) (string, error)
+	RetryTask(command.RetryTaskCommand) (string, error)
+	CancelTask(command.CancelTaskCommand) (string, error)
+	ReprioritizeTask(command.ReprioritizeTaskCommand) (string, error)
 }
 
 type app struct {
@@ -137,6 +145,22 @@ func (a *app) Serve(ctx context.Context) error {
 
 func (a *app) ModuleBoard(projectID string) (query.ModuleBoardView, error) {
 	return query.NewModuleBoardQuery(a.board).Execute(projectID)
+}
+
+func (a *app) CreateProject(cmd command.CreateProjectCommand) (projectpkg.Project, error) {
+	if cmd.RepoRoot == "" {
+		cmd.RepoRoot = a.repoRoot
+	}
+
+	return a.createProject.Handle(cmd)
+}
+
+func (a *app) CreateModule(cmd command.CreateModuleCommand) (modulepkg.Module, error) {
+	return a.createModule.Handle(cmd)
+}
+
+func (a *app) CreateTask(cmd command.CreateTaskCommand) (command.TaskDTO, error) {
+	return a.createTask.Handle(cmd)
 }
 
 func (a *app) TaskBoard(projectID string) (query.TaskBoardView, error) {

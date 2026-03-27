@@ -30,3 +30,4 @@
 - Added HTTP board routes and end-to-end HTTP tests
 - Wired `serve` to the real SQLite-backed app runtime and board endpoints
 - Added bootstrap integration tests covering OpenClaw-to-board flow
+- Wired CLI project/module/task commands to the real application handlers
