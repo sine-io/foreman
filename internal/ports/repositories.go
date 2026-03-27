@@ -23,10 +23,11 @@ type TaskRepository interface {
 }
 
 type Run struct {
-	ID         string
-	TaskID     string
-	RunnerKind string
-	State      string
+	ID                   string
+	TaskID               string
+	RunnerKind           string
+	State                string
+	AssistantSummaryPath string
 }
 
 type RunRepository interface {
