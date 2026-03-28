@@ -169,6 +169,15 @@ For v1, `risk level` must come from a persisted approval field rather than being
 
 Existing approvals should keep the risk metadata they were created with, even if policy rules change later.
 
+The canonical v1 risk enum and precedence must be:
+
+1. `critical`
+2. `high`
+3. `medium`
+4. `low`
+
+Queue ordering must use that explicit precedence, not lexical ordering of the displayed label.
+
 ## Action Semantics
 
 ### Approve
@@ -185,7 +194,7 @@ Result handling:
 
 - if execution finishes quickly, the UI may show `completed`
 - if execution starts and continues, the UI should show `running`
-- if dispatch fails after approval, the approval remains `approved` and the UI should show the failure result explicitly
+- if dispatch fails after approval, the approval remains `approved`, the task moves to `approved_pending_dispatch`, and the UI should show the failure result explicitly
 - repeated `approve` against an already-approved approval should be a no-op success that returns current authoritative state and must not trigger a second dispatch
 - `approve` against an already-rejected approval should return `409 Conflict` with current approval and task state
 
@@ -261,6 +270,8 @@ The workbench should operate primarily on `approval_id`, not `task_id`, because 
 
 Action responses should return the authoritative resulting approval and task state so the UI can update deterministically after success, retries, or conflicts.
 
+For v1, `artifact links` means links to the existing Foreman run-detail or artifact-detail surfaces, not raw filesystem paths and not a new trace explorer.
+
 ## Data And State Requirements
 
 The workbench relies on Foreman remaining the source of truth for:
@@ -271,6 +282,20 @@ The workbench relies on Foreman remaining the source of truth for:
 - artifacts
 
 The UI should not infer approval state from board columns.
+
+For this sub-project, the task state model must explicitly support:
+
+- `waiting_approval`
+- `approved_pending_dispatch`
+- `running`
+- `completed`
+- `ready`
+
+`approved_pending_dispatch` is required so the system can represent:
+
+- approval completed successfully
+- automatic dispatch attempted
+- dispatch failed before the task actually entered running/completed state
 
 For the workbench view, the server should assemble a unified approval-review read model from persisted control-plane state.
 
@@ -292,6 +317,7 @@ For v1, the approval record should carry these approval-specific metadata fields
 - `policy_rule`
 - `approval_reason`
 - `rejection_reason`
+- `task_state`
 
 ### Persisted Fields
 
@@ -337,6 +363,7 @@ The workbench should treat action results as explicit operator outcomes, not sil
 If approval succeeds but dispatch fails:
 
 - keep the approval as `approved`
+- move the task to `approved_pending_dispatch`
 - return the dispatch failure clearly
 - do not reopen the approval automatically
 
@@ -355,11 +382,17 @@ If reject validation fails because the reason is missing:
 
 ### Missing Or Stale Approval
 
-If the selected `approval_id` no longer exists or is no longer pending:
+If the selected `approval_id` no longer exists:
 
-- the workbench should show a clear non-pending or not-found state
+- the workbench should show a clear not-found state
 - the queue should refresh
-- the operator should not be left viewing misleading stale pending data
+- the operator should not be left viewing misleading stale data
+
+If the selected `approval_id` exists but is no longer pending:
+
+- the workbench should keep rendering the historical review view for that approval
+- the queue should refresh and remove the processed item from the pending list
+- the page should clearly show that the approval is no longer actionable
 
 ## Planning Anchor In The Existing Runtime
 
