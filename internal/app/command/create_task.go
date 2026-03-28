@@ -1,6 +1,8 @@
 package command
 
 import (
+	"database/sql"
+
 	"github.com/sine-io/foreman/internal/domain/task"
 	"github.com/sine-io/foreman/internal/ports"
 )
@@ -24,16 +26,26 @@ type TaskDTO struct {
 }
 
 type CreateTaskHandler struct {
-	Tasks ports.TaskRepository
+	Modules ports.ModuleRepository
+	Tasks   ports.TaskRepository
 }
 
-func NewCreateTaskHandler(tasks ports.TaskRepository) *CreateTaskHandler {
-	return &CreateTaskHandler{Tasks: tasks}
+func NewCreateTaskHandler(modules ports.ModuleRepository, tasks ports.TaskRepository) *CreateTaskHandler {
+	return &CreateTaskHandler{
+		Modules: modules,
+		Tasks:   tasks,
+	}
 }
 
 func (h *CreateTaskHandler) Handle(cmd CreateTaskCommand) (TaskDTO, error) {
 	taskType, err := task.ParseTaskType(cmd.TaskType)
 	if err != nil {
+		return TaskDTO{}, err
+	}
+	if _, err := h.Modules.Get(cmd.ModuleID); err != nil {
+		if err == sql.ErrNoRows {
+			return TaskDTO{}, err
+		}
 		return TaskDTO{}, err
 	}
 

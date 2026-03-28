@@ -40,21 +40,22 @@ func TestHandleCreateProjectReturnsCreatedProject(t *testing.T) {
 func TestHandleCreateModuleReturnsCreatedModule(t *testing.T) {
 	harness := newHarness()
 	svc := harness.newService()
+	harness.mustCreateProject(t, "project-1")
 
 	out, err := svc.Handle(context.Background(), Request{
 		Kind:        "create_module",
 		SessionID:   "mgr-1",
 		ProjectID:   "project-1",
-		ModuleID:    "module-1",
+		ModuleID:    "module-2",
 		Name:        "Inbox",
 		Description: "OpenClaw ingress module",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "module_created", out.Kind)
 	require.Equal(t, "project-1", out.ProjectID)
-	require.Equal(t, "module-1", out.ModuleID)
+	require.Equal(t, "module-2", out.ModuleID)
 
-	saved, err := harness.modules.Get("module-1")
+	saved, err := harness.modules.Get("module-2")
 	require.NoError(t, err)
 	require.Equal(t, "project-1", saved.ProjectID)
 	require.Equal(t, "Inbox", saved.Name)
@@ -63,6 +64,8 @@ func TestHandleCreateModuleReturnsCreatedModule(t *testing.T) {
 func TestHandleCreateTaskReturnsCompletionWhenDispatchFinishes(t *testing.T) {
 	harness := newHarness()
 	svc := harness.newService()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
 
 	out, err := svc.Handle(context.Background(), Request{
 		Kind:      "create_task",
@@ -83,6 +86,8 @@ func TestHandleCreateTaskReturnsCompletionWhenDispatchFinishes(t *testing.T) {
 
 func TestHandleCreateTaskReturnsApprovalNeededWhenPolicyRequiresApproval(t *testing.T) {
 	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
 	harness.policyDecision = domainpolicy.Decision{
 		RequiresApproval: true,
 		Reason:           "git push origin main requires approval",
@@ -103,6 +108,8 @@ func TestHandleCreateTaskReturnsApprovalNeededWhenPolicyRequiresApproval(t *test
 
 func TestHandleDispatchTaskReturnsCompletionForExistingTask(t *testing.T) {
 	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
 	require.NoError(t, harness.tasks.Save(task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Dispatch me", "repo:project-1")))
 	svc := harness.newService()
 
@@ -116,43 +123,126 @@ func TestHandleDispatchTaskReturnsCompletionForExistingTask(t *testing.T) {
 	require.Equal(t, "task-1", out.TaskID)
 }
 
-func TestTaskStatusReturnsPersistedRunAndApprovalState(t *testing.T) {
+func TestHandleCreateModuleReturnsErrorWhenProjectMissing(t *testing.T) {
 	harness := newHarness()
-	harness.board.tasksByProject["project-1"] = []ports.TaskBoardRow{
-		{
-			TaskID:          "task-1",
-			ModuleID:        "module-1",
-			Summary:         "Summarize the module status",
-			State:           "waiting_approval",
-			Priority:        10,
-			PendingApproval: true,
-		},
+	svc := harness.newService()
+
+	_, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_module",
+		SessionID: "mgr-1",
+		ProjectID: "project-missing",
+		ModuleID:  "module-1",
+		Name:      "Inbox",
+	})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestHandleCreateTaskReturnsErrorWhenModuleMissing(t *testing.T) {
+	harness := newHarness()
+	svc := harness.newService()
+	harness.mustCreateProject(t, "project-1")
+
+	_, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-1",
+		ModuleID:  "module-missing",
+		Summary:   "Summarize the module status",
+	})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestHandleCreateTaskReturnsErrorWhenProjectMissing(t *testing.T) {
+	harness := newHarness()
+	svc := harness.newService()
+
+	_, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-missing",
+		ModuleID:  "module-1",
+		Summary:   "Summarize the module status",
+	})
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestHandleCreateTaskReturnsErrorWhenModuleBelongsToDifferentProject(t *testing.T) {
+	harness := newHarness()
+	svc := harness.newService()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateProject(t, "project-2")
+	harness.mustCreateModule(t, "module-2", "project-2")
+
+	_, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-1",
+		ModuleID:  "module-2",
+		Summary:   "Summarize the module status",
+	})
+	require.EqualError(t, err, "module module-2 does not belong to project project-1")
+}
+
+func TestTaskStatusUsesRequestedProjectBoard(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateProject(t, "project-2")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.mustCreateModule(t, "module-2", "project-2")
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
 	}
 	svc := harness.newService()
 
-	view, err := svc.TaskStatus(context.Background(), "task-1")
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-2",
+		ProjectID: "project-2",
+		ModuleID:  "module-2",
+		Summary:   "git push origin main",
+	})
 	require.NoError(t, err)
-	require.Equal(t, "task-1", view.TaskID)
+	require.Equal(t, "approval_needed", out.Kind)
+
+	view, err := svc.TaskStatus(context.Background(), "project-2", out.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, out.TaskID, view.TaskID)
 	require.Equal(t, "waiting_approval", view.State)
 	require.True(t, view.PendingApproval)
 }
 
-func TestBoardSnapshotReturnsModuleAndTaskColumns(t *testing.T) {
+func TestBoardSnapshotReturnsModuleAndTaskColumnsFromPersistedState(t *testing.T) {
 	harness := newHarness()
-	harness.board.modulesByProject["project-1"] = []ports.ModuleBoardRow{
-		{ModuleID: "module-1", Name: "Inbox", BoardState: "active"},
-	}
-	harness.board.tasksByProject["project-1"] = []ports.TaskBoardRow{
-		{TaskID: "task-1", ModuleID: "module-1", Summary: "Bootstrap board", State: "ready", Priority: 10},
-	}
 	svc := harness.newService()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+
+	module, err := harness.modules.Get("module-1")
+	require.NoError(t, err)
+	module.State = modulepkg.BoardStateActive
+	require.NoError(t, harness.modules.Save(module))
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-1",
+		ModuleID:  "module-1",
+		Summary:   "Bootstrap board",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "completion", out.Kind)
+
+	status, err := svc.TaskStatus(context.Background(), "project-1", out.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, "completed", status.State)
 
 	view, err := svc.BoardSnapshot(context.Background(), "project-1")
 	require.NoError(t, err)
 	require.Equal(t, "project-1", view.ProjectID)
 	require.Len(t, view.Modules["Implementing"], 1)
-	require.Len(t, view.Tasks["Ready"], 1)
-	require.Equal(t, "task-1", view.Tasks["Ready"][0].TaskID)
+	require.Len(t, view.Tasks["Done"], 1)
+	require.Equal(t, out.TaskID, view.Tasks["Done"][0].TaskID)
 }
 
 type serviceHarness struct {
@@ -166,24 +256,27 @@ type serviceHarness struct {
 }
 
 func newHarness() *serviceHarness {
-	return &serviceHarness{
+	harness := &serviceHarness{
 		projects:  newFakeProjectRepo(),
 		modules:   newFakeModuleRepo(),
 		tasks:     newFakeTaskRepo(),
 		approvals: &fakeApprovalRepo{byTaskID: map[string]approval.Approval{}},
 		runs:      &fakeRunRepo{},
-		board: &fakeBoardQueryRepo{
-			modulesByProject: map[string][]ports.ModuleBoardRow{},
-			tasksByProject:   map[string][]ports.TaskBoardRow{},
-		},
 	}
+	harness.board = &fakeBoardQueryRepo{
+		modules:   harness.modules,
+		tasks:     harness.tasks,
+		approvals: harness.approvals,
+	}
+
+	return harness
 }
 
 func (h *serviceHarness) newService() *Service {
 	return NewService(Dependencies{
 		CreateProject: command.NewCreateProjectHandler(h.projects),
-		CreateModule:  command.NewCreateModuleHandler(h.modules),
-		CreateTask:    command.NewCreateTaskHandler(h.tasks),
+		CreateModule:  command.NewCreateModuleHandler(h.projects, h.modules),
+		CreateTask:    command.NewCreateTaskHandler(h.modules, h.tasks),
 		DispatchTask: command.NewDispatchTaskHandler(
 			h.tasks,
 			&fakeLeaseRepo{},
@@ -200,6 +293,29 @@ func (h *serviceHarness) newService() *Service {
 			ModuleID:  "module-1",
 		},
 	})
+}
+
+func (h *serviceHarness) mustCreateProject(t *testing.T, projectID string) {
+	t.Helper()
+
+	_, err := command.NewCreateProjectHandler(h.projects).Handle(command.CreateProjectCommand{
+		ID:       projectID,
+		Name:     projectID,
+		RepoRoot: "/tmp/" + projectID,
+	})
+	require.NoError(t, err)
+}
+
+func (h *serviceHarness) mustCreateModule(t *testing.T, moduleID, projectID string) {
+	t.Helper()
+
+	_, err := command.NewCreateModuleHandler(h.projects, h.modules).Handle(command.CreateModuleCommand{
+		ID:          moduleID,
+		ProjectID:   projectID,
+		Name:        moduleID,
+		Description: moduleID + " description",
+	})
+	require.NoError(t, err)
 }
 
 type fakeProjectRepo struct {
@@ -376,16 +492,48 @@ func (f *fakeArtifactRepo) Get(id string) (ports.ArtifactRecord, error) {
 }
 
 type fakeBoardQueryRepo struct {
-	modulesByProject map[string][]ports.ModuleBoardRow
-	tasksByProject   map[string][]ports.TaskBoardRow
+	modules   *fakeModuleRepo
+	tasks     *fakeTaskRepo
+	approvals *fakeApprovalRepo
 }
 
 func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
-	return f.modulesByProject[projectID], nil
+	rows := make([]ports.ModuleBoardRow, 0, len(f.modules.byID))
+	for _, value := range f.modules.byID {
+		if value.ProjectID != projectID {
+			continue
+		}
+
+		rows = append(rows, ports.ModuleBoardRow{
+			ModuleID:   value.ID,
+			Name:       value.Name,
+			BoardState: string(value.State),
+		})
+	}
+
+	return rows, nil
 }
 
 func (f *fakeBoardQueryRepo) ListTasks(projectID string) ([]ports.TaskBoardRow, error) {
-	return f.tasksByProject[projectID], nil
+	rows := make([]ports.TaskBoardRow, 0, len(f.tasks.byID))
+	for _, value := range f.tasks.byID {
+		module, err := f.modules.Get(value.ModuleID)
+		if err != nil || module.ProjectID != projectID {
+			continue
+		}
+
+		_, approvalErr := f.approvals.FindPendingByTask(value.ID)
+		rows = append(rows, ports.TaskBoardRow{
+			TaskID:          value.ID,
+			ModuleID:        value.ModuleID,
+			Summary:         value.Summary,
+			State:           string(value.State),
+			Priority:        value.Priority,
+			PendingApproval: approvalErr == nil,
+		})
+	}
+
+	return rows, nil
 }
 
 func (f *fakeBoardQueryRepo) GetRunDetail(runID string) (ports.RunDetailRecord, error) {

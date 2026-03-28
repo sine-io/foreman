@@ -17,10 +17,11 @@ type DispatchTaskCommand struct {
 }
 
 type DispatchTaskResult struct {
-	TaskState   string
-	RunState    string
-	ApprovalID  string
-	ArtifactIDs []string
+	TaskState      string
+	RunState       string
+	ApprovalID     string
+	ApprovalReason string
+	ArtifactIDs    []string
 }
 
 type DispatchTaskHandler struct {
@@ -77,8 +78,9 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 		}
 
 		return DispatchTaskResult{
-			TaskState:  string(repoTask.State),
-			ApprovalID: record.ID,
+			TaskState:      string(repoTask.State),
+			ApprovalID:     record.ID,
+			ApprovalReason: record.Reason,
 		}, nil
 	}
 

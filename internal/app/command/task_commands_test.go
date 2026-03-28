@@ -6,13 +6,16 @@ import (
 	"testing"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
+	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	"github.com/sine-io/foreman/internal/domain/task"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCreateTaskPersistsReadyTask(t *testing.T) {
 	repo := newFakeTaskRepo()
-	handler := NewCreateTaskHandler(repo)
+	modules := newFakeModuleRepo()
+	require.NoError(t, modules.Save(modulepkg.New("module-1", "project-1", "Module 1", "")))
+	handler := NewCreateTaskHandler(modules, repo)
 
 	out, err := handler.Handle(CreateTaskCommand{
 		ModuleID:   "module-1",
@@ -29,6 +32,20 @@ func TestCreateTaskPersistsReadyTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Implement board query", saved.Summary)
 	require.Equal(t, 10, saved.Priority)
+}
+
+func TestCreateTaskReturnsErrorWhenModuleMissing(t *testing.T) {
+	handler := NewCreateTaskHandler(newFakeModuleRepo(), newFakeTaskRepo())
+
+	_, err := handler.Handle(CreateTaskCommand{
+		ModuleID:   "module-missing",
+		Title:      "Implement board query",
+		TaskType:   "write",
+		WriteScope: "repo:project-1",
+		Acceptance: "Board query returns module columns",
+		Priority:   10,
+	})
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func TestApproveTaskMarksApprovalResolved(t *testing.T) {
@@ -114,6 +131,30 @@ func (f *fakeTaskRepo) Get(id string) (task.Task, error) {
 	value, ok := f.byID[id]
 	if !ok {
 		return task.Task{}, sql.ErrNoRows
+	}
+
+	return value, nil
+}
+
+type fakeModuleRepo struct {
+	byID map[string]modulepkg.Module
+}
+
+func newFakeModuleRepo() *fakeModuleRepo {
+	return &fakeModuleRepo{
+		byID: map[string]modulepkg.Module{},
+	}
+}
+
+func (f *fakeModuleRepo) Save(value modulepkg.Module) error {
+	f.byID[value.ID] = value
+	return nil
+}
+
+func (f *fakeModuleRepo) Get(id string) (modulepkg.Module, error) {
+	value, ok := f.byID[id]
+	if !ok {
+		return modulepkg.Module{}, sql.ErrNoRows
 	}
 
 	return value, nil

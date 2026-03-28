@@ -95,7 +95,7 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
-		moduleID, err := s.resolveModuleID(req.ModuleID)
+		moduleID, err := s.resolveModuleID(req.ModuleID, projectID)
 		if err != nil {
 			return Response{}, err
 		}
@@ -120,15 +120,15 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 	}
 }
 
-func (s *Service) TaskStatus(ctx context.Context, taskID string) (TaskStatusView, error) {
+func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (TaskStatusView, error) {
 	_ = ctx
 
-	projectID, err := s.resolveProjectID("")
+	resolvedProjectID, err := s.resolveProjectID(projectID)
 	if err != nil {
 		return TaskStatusView{}, err
 	}
 
-	board, err := s.QueryTaskBoard.Execute(projectID)
+	board, err := s.QueryTaskBoard.Execute(resolvedProjectID)
 	if err != nil {
 		return TaskStatusView{}, err
 	}
@@ -214,11 +214,8 @@ func (s *Service) dispatchResponse(taskID, projectID, moduleID, requestedAction,
 
 	if result.TaskState == "waiting_approval" {
 		summary := fallbackSummary
-		if result.ApprovalID != "" && s.DispatchTask.Approvals != nil {
-			approval, err := s.DispatchTask.Approvals.Get(result.ApprovalID)
-			if err == nil && approval.Reason != "" {
-				summary = approval.Reason
-			}
+		if result.ApprovalReason != "" {
+			summary = result.ApprovalReason
 		}
 
 		return Response{
@@ -240,23 +237,39 @@ func (s *Service) dispatchResponse(taskID, projectID, moduleID, requestedAction,
 }
 
 func (s *Service) resolveProjectID(projectID string) (string, error) {
-	if projectID != "" {
-		return projectID, nil
+	resolved := projectID
+	if resolved == "" {
+		resolved = s.Defaults.ProjectID
 	}
-	if s.Defaults.ProjectID != "" {
-		return s.Defaults.ProjectID, nil
+	if resolved == "" {
+		return "", fmt.Errorf("project_id is required")
 	}
-	return "", fmt.Errorf("project_id is required")
+
+	if _, err := s.CreateModule.Projects.Get(resolved); err != nil {
+		return "", err
+	}
+
+	return resolved, nil
 }
 
-func (s *Service) resolveModuleID(moduleID string) (string, error) {
-	if moduleID != "" {
-		return moduleID, nil
+func (s *Service) resolveModuleID(moduleID, projectID string) (string, error) {
+	resolved := moduleID
+	if resolved == "" {
+		resolved = s.Defaults.ModuleID
 	}
-	if s.Defaults.ModuleID != "" {
-		return s.Defaults.ModuleID, nil
+	if resolved == "" {
+		return "", fmt.Errorf("module_id is required")
 	}
-	return "", fmt.Errorf("module_id is required")
+
+	record, err := s.CreateTask.Modules.Get(resolved)
+	if err != nil {
+		return "", err
+	}
+	if record.ProjectID != projectID {
+		return "", fmt.Errorf("module %s does not belong to project %s", resolved, projectID)
+	}
+
+	return resolved, nil
 }
 
 func firstNonEmpty(values ...string) string {
