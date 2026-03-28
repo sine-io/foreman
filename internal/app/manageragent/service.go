@@ -80,9 +80,6 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
-		if err := ctxErr(ctx); err != nil {
-			return Response{}, err
-		}
 
 		return Response{
 			Kind:      "project_created",
@@ -102,9 +99,6 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 			Description: req.Description,
 		})
 		if err != nil {
-			return Response{}, err
-		}
-		if err := ctxErr(ctx); err != nil {
 			return Response{}, err
 		}
 
@@ -133,9 +127,6 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 			Priority:   firstPositive(req.Priority, s.Defaults.Priority, 10),
 		})
 		if err != nil {
-			return Response{}, err
-		}
-		if err := ctxErr(ctx); err != nil {
 			return Response{}, err
 		}
 

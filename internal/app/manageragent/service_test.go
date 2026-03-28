@@ -37,6 +37,25 @@ func TestHandleCreateProjectReturnsCreatedProject(t *testing.T) {
 	require.Equal(t, "/tmp/alpha", saved.RepoRoot)
 }
 
+func TestHandleReturnsContextErrorBeforeStartingSideEffects(t *testing.T) {
+	harness := newHarness()
+	svc := harness.newService()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := svc.Handle(ctx, Request{
+		Kind:      "create_project",
+		SessionID: "mgr-1",
+		ProjectID: "project-1",
+		Name:      "Alpha",
+		RepoRoot:  "/tmp/alpha",
+	})
+	require.ErrorIs(t, err, context.Canceled)
+
+	_, err = harness.projects.Get("project-1")
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
 func TestHandleCreateModuleReturnsCreatedModule(t *testing.T) {
 	harness := newHarness()
 	svc := harness.newService()
