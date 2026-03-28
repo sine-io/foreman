@@ -40,3 +40,16 @@
 - Moved OpenClaw onto the manager-agent service path
 - Added a Foreman-native manager HTTP API under `/api/manager/*`
 - Wired the bootstrap/runtime path to expose the manager service
+
+## 2026-03-28
+
+### Phase 2 Control-Plane Hardening
+
+- Replaced ad-hoc SQLite bootstrap with ordered, idempotent migrations
+- Added explicit `created_at` ordering metadata for runs, approvals, and artifacts
+- Made latest run and approval lookups deterministic instead of relying on implicit SQLite row order
+- Added a dedicated manager task-status query model backed by persisted task/run/approval state
+- Added tx-bound SQLite repositories plus a transaction runner for command-side atomicity
+- Made dispatch and approval transitions retry-safe under duplicate dispatch and approval retries
+- Hardened completed-run retries so lease cleanup is retried instead of leaving write scopes stranded
+- Documented repeated-dispatch and approval-gated smoke flows for the manager API

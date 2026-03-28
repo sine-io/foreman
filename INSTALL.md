@@ -44,6 +44,62 @@ curl http://localhost:8080/api/manager/projects/demo/board
 
 These routes expose the normalized manager-agent contract directly from Foreman without ACP or channel/gateway concerns.
 
+## Control-Plane Hardening Smoke
+
+With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:
+
+1. Create a normal task and note the returned `task_id`.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"create_task","summary":"Summarize current project status"}'
+```
+
+2. Read the authoritative persisted status.
+
+```bash
+curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
+```
+
+3. Dispatch the same task again.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"dispatch_task","project_id":"demo","task_id":"<task-id>"}'
+```
+
+4. Read task status again and confirm Foreman returns the persisted run/task state instead of creating a duplicate run.
+
+```bash
+curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
+```
+
+5. Create a risky task and note the returned `task_id`.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"create_task","summary":"git push origin main"}'
+```
+
+6. Confirm the task is approval-gated, then repeat dispatch and verify the same pending approval is reused.
+
+```bash
+curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"dispatch_task","project_id":"demo","task_id":"<task-id>"}'
+curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
+```
+
+Expected outcomes:
+
+- repeated `dispatch_task` returns authoritative persisted state instead of re-running completed work
+- approval-gated retries do not create duplicate pending approvals
+- task status reports latest run and latest approval consistently through `/api/manager/tasks/:id`
+
 ## Repository Purpose
 
 This repository is now Foreman-only.
