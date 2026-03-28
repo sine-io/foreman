@@ -122,7 +122,6 @@ func (a *fakeHTTPApp) TaskStatus(ctx context.Context, projectID, taskID string) 
 		ModuleID:  "module-1",
 		Summary:   task.Summary,
 		State:     task.State,
-		Priority:  task.Priority,
 		RunID:     "run-1",
 		RunState:  "completed",
 	}, nil

@@ -122,6 +122,7 @@ func BuildApp(cfg Config) (App, error) {
 		CreateModule:     instance.createModule,
 		CreateTask:       instance.createTask,
 		DispatchTask:     instance.dispatchTask,
+		QueryTaskStatus:  query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
 		QueryModuleBoard: query.NewModuleBoardQuery(board),
 		QueryTaskBoard:   query.NewTaskBoardQuery(board),
 		Defaults: appmanageragent.Defaults{

@@ -69,18 +69,16 @@ func (h *ManagerHandlers) ManagerTaskStatus(c *gin.Context) {
 	}
 
 	c.JSON(nethttp.StatusOK, managerTaskStatusResponse{
-		TaskID:          view.TaskID,
-		ProjectID:       view.ProjectID,
-		ModuleID:        view.ModuleID,
-		Summary:         view.Summary,
-		State:           view.State,
-		Priority:        view.Priority,
-		RunID:           view.RunID,
-		RunState:        view.RunState,
-		ApprovalID:      view.ApprovalID,
-		ApprovalReason:  view.ApprovalReason,
-		ApprovalState:   view.ApprovalState,
-		PendingApproval: view.PendingApproval,
+		TaskID:         view.TaskID,
+		ProjectID:      view.ProjectID,
+		ModuleID:       view.ModuleID,
+		Summary:        view.Summary,
+		State:          view.State,
+		RunID:          view.RunID,
+		RunState:       view.RunState,
+		ApprovalID:     view.ApprovalID,
+		ApprovalReason: view.ApprovalReason,
+		ApprovalState:  view.ApprovalState,
 	})
 }
 

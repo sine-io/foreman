@@ -1,5 +1,7 @@
 package manageragent
 
+import "github.com/sine-io/foreman/internal/app/query"
+
 type Request struct {
 	Kind        string
 	SessionID   string
@@ -24,20 +26,7 @@ type Response struct {
 	Summary   string
 }
 
-type TaskStatusView struct {
-	TaskID          string
-	ProjectID       string
-	ModuleID        string
-	Summary         string
-	State           string
-	Priority        int
-	RunID           string
-	RunState        string
-	ApprovalID      string
-	ApprovalReason  string
-	ApprovalState   string
-	PendingApproval bool
-}
+type TaskStatusView = query.TaskStatusView
 
 type ModuleSnapshot struct {
 	ModuleID string

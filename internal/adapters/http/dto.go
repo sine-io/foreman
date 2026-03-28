@@ -33,18 +33,16 @@ type managerCommandResponse struct {
 }
 
 type managerTaskStatusResponse struct {
-	TaskID          string `json:"task_id"`
-	ProjectID       string `json:"project_id"`
-	ModuleID        string `json:"module_id"`
-	Summary         string `json:"summary"`
-	State           string `json:"state"`
-	Priority        int    `json:"priority"`
-	RunID           string `json:"run_id,omitempty"`
-	RunState        string `json:"run_state,omitempty"`
-	ApprovalID      string `json:"approval_id,omitempty"`
-	ApprovalReason  string `json:"approval_reason,omitempty"`
-	ApprovalState   string `json:"approval_state,omitempty"`
-	PendingApproval bool   `json:"pending_approval"`
+	TaskID         string `json:"task_id"`
+	ProjectID      string `json:"project_id"`
+	ModuleID       string `json:"module_id"`
+	Summary        string `json:"summary"`
+	State          string `json:"state"`
+	RunID          string `json:"run_id,omitempty"`
+	RunState       string `json:"run_state,omitempty"`
+	ApprovalID     string `json:"approval_id,omitempty"`
+	ApprovalReason string `json:"approval_reason,omitempty"`
+	ApprovalState  string `json:"approval_state,omitempty"`
 }
 
 type managerBoardSnapshotResponse struct {

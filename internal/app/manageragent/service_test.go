@@ -269,7 +269,6 @@ func TestTaskStatusUsesRequestedProjectBoard(t *testing.T) {
 	require.Equal(t, out.TaskID, view.TaskID)
 	require.Equal(t, "project-2", view.ProjectID)
 	require.Equal(t, "waiting_approval", view.State)
-	require.True(t, view.PendingApproval)
 	require.NotEmpty(t, view.ApprovalID)
 	require.Equal(t, "git push origin main requires approval", view.ApprovalReason)
 	require.Equal(t, "pending", view.ApprovalState)
@@ -340,7 +339,6 @@ func TestTaskStatusKeepsLatestApprovalAfterApprovalDecision(t *testing.T) {
 	require.Equal(t, approvalRecord.ID, view.ApprovalID)
 	require.Equal(t, "git push origin main requires approval", view.ApprovalReason)
 	require.Equal(t, "approved", view.ApprovalState)
-	require.False(t, view.PendingApproval)
 }
 
 type serviceHarness struct {
@@ -390,6 +388,7 @@ func (h *serviceHarness) newService() *Service {
 			h.runs,
 			&fakeArtifactRepo{},
 		),
+		QueryTaskStatus:  query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
 		QueryModuleBoard: query.NewModuleBoardQuery(h.board),
 		QueryTaskBoard:   query.NewTaskBoardQuery(h.board),
 		Defaults: Defaults{

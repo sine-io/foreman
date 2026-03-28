@@ -2,7 +2,6 @@ package manageragent
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/sine-io/foreman/internal/app/command"
@@ -28,6 +27,7 @@ type Dependencies struct {
 	CreateModule     *command.CreateModuleHandler
 	CreateTask       *command.CreateTaskHandler
 	DispatchTask     *command.DispatchTaskHandler
+	QueryTaskStatus  *query.TaskStatusQuery
 	QueryModuleBoard *query.ModuleBoardQuery
 	QueryTaskBoard   *query.TaskBoardQuery
 	Defaults         Defaults
@@ -43,6 +43,7 @@ type Service struct {
 	CreateModule     *command.CreateModuleHandler
 	CreateTask       *command.CreateTaskHandler
 	DispatchTask     *command.DispatchTaskHandler
+	QueryTaskStatus  *query.TaskStatusQuery
 	QueryModuleBoard *query.ModuleBoardQuery
 	QueryTaskBoard   *query.TaskBoardQuery
 	Defaults         Defaults
@@ -59,6 +60,7 @@ func NewService(deps Dependencies) *Service {
 		CreateModule:     deps.CreateModule,
 		CreateTask:       deps.CreateTask,
 		DispatchTask:     deps.DispatchTask,
+		QueryTaskStatus:  deps.QueryTaskStatus,
 		QueryModuleBoard: deps.QueryModuleBoard,
 		QueryTaskBoard:   deps.QueryTaskBoard,
 		Defaults:         deps.Defaults,
@@ -166,49 +168,7 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 		return TaskStatusView{}, err
 	}
 
-	taskRecord, err := s.Tasks.Get(taskID)
-	if err != nil {
-		return TaskStatusView{}, err
-	}
-	moduleRecord, err := s.Modules.Get(taskRecord.ModuleID)
-	if err != nil {
-		return TaskStatusView{}, err
-	}
-	if moduleRecord.ProjectID != resolvedProjectID {
-		return TaskStatusView{}, fmt.Errorf("task %s does not belong to project %s", taskID, resolvedProjectID)
-	}
-
-	view := TaskStatusView{
-		TaskID:    taskRecord.ID,
-		ProjectID: moduleRecord.ProjectID,
-		ModuleID:  taskRecord.ModuleID,
-		Summary:   taskRecord.Summary,
-		State:     string(taskRecord.State),
-		Priority:  taskRecord.Priority,
-	}
-
-	runRecord, err := s.Runs.FindByTask(taskID)
-	if err == nil {
-		view.RunID = runRecord.ID
-		view.RunState = runRecord.State
-	} else if err != nil && err != sql.ErrNoRows {
-		return TaskStatusView{}, err
-	}
-
-	approvalRecord, err := s.Approvals.FindPendingByTask(taskID)
-	if err == sql.ErrNoRows {
-		approvalRecord, err = s.Approvals.FindLatestByTask(taskID)
-	}
-	if err == nil {
-		view.ApprovalID = approvalRecord.ID
-		view.ApprovalReason = approvalRecord.Reason
-		view.ApprovalState = string(approvalRecord.Status)
-		view.PendingApproval = approvalRecord.Status == "pending"
-	} else if err != nil && err != sql.ErrNoRows {
-		return TaskStatusView{}, err
-	}
-
-	return view, nil
+	return s.QueryTaskStatus.Execute(resolvedProjectID, taskID)
 }
 
 func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSnapshotView, error) {
