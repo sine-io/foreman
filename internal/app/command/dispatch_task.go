@@ -81,7 +81,7 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 
 	decision := h.Policy.Evaluate(requestedAction)
 	if decision.RequiresApproval {
-		approved, err := h.hasApprovedDispatch(repoTask.ID, repoTask.State)
+		approved, err := h.hasApprovedDispatch(repoTask.ID)
 		if err != nil {
 			return DispatchTaskResult{}, err
 		}
@@ -224,11 +224,7 @@ func (h *DispatchTaskHandler) authoritativeRunResult(repoTask task.Task, run por
 	return persistedRunResult(repoTask, run), nil
 }
 
-func (h *DispatchTaskHandler) hasApprovedDispatch(taskID string, state task.TaskState) (bool, error) {
-	if state != task.TaskStateLeased {
-		return false, nil
-	}
-
+func (h *DispatchTaskHandler) hasApprovedDispatch(taskID string) (bool, error) {
 	latest, err := h.Approvals.FindLatestByTask(taskID)
 	if err != nil {
 		if err == sql.ErrNoRows {
