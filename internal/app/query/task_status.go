@@ -11,16 +11,18 @@ import (
 )
 
 type TaskStatusView struct {
-	TaskID         string
-	ProjectID      string
-	ModuleID       string
-	Summary        string
-	State          string
-	RunID          string
-	RunState       string
-	ApprovalID     string
-	ApprovalReason string
-	ApprovalState  string
+	TaskID          string
+	ProjectID       string
+	ModuleID        string
+	Summary         string
+	State           string
+	Priority        int
+	RunID           string
+	RunState        string
+	ApprovalID      string
+	ApprovalReason  string
+	ApprovalState   string
+	PendingApproval bool
 }
 
 type TaskStatusRepository interface {
@@ -95,6 +97,7 @@ func (q *TaskStatusQuery) Execute(projectID, taskID string) (TaskStatusView, err
 		ModuleID:  taskRecord.ModuleID,
 		Summary:   taskRecord.Summary,
 		State:     string(taskRecord.State),
+		Priority:  taskRecord.Priority,
 	}
 
 	runRecord, err := q.Repo.FindByTask(taskID)
@@ -113,6 +116,7 @@ func (q *TaskStatusQuery) Execute(projectID, taskID string) (TaskStatusView, err
 		view.ApprovalID = approvalRecord.ID
 		view.ApprovalReason = approvalRecord.Reason
 		view.ApprovalState = string(approvalRecord.Status)
+		view.PendingApproval = approvalRecord.Status == approval.StatusPending
 	} else if err != nil && err != sql.ErrNoRows {
 		return TaskStatusView{}, err
 	}
