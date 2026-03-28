@@ -144,6 +144,7 @@ It should be organized into four sections:
 4. `Actions`
    - `Approve`
    - `Reject`
+   - conditional `Retry Dispatch` when task state is `approved_pending_dispatch`
    - rejection reason input
    - recent result or action feedback
 
@@ -215,6 +216,25 @@ Additional reject semantics:
 - repeated `reject` against an already-rejected approval should be a no-op success that returns current authoritative state
 - `reject` against an already-approved approval should return `409 Conflict` with current approval and task state
 
+### Retry Dispatch
+
+`Retry Dispatch` is a v1 workbench action, but it should only appear when:
+
+- approval status is `approved`
+- current task state is `approved_pending_dispatch`
+
+Semantics:
+
+- it reuses the existing dispatch path
+- it must not create a new approval
+- success moves the task to `running` or `completed`
+- failure leaves the task in `approved_pending_dispatch`
+
+Additional retry semantics:
+
+- repeated retry while the task is already `running` or `completed` should return the current authoritative state
+- retry against a `pending` or `rejected` approval should return `409 Conflict`
+
 ## Interaction Flow
 
 The approved v1 flow is:
@@ -239,6 +259,14 @@ On `Reject`:
 - task is returned to `ready`
 - the right panel shows the rejection outcome
 - the left queue advances to the next pending approval if one exists
+
+On `Retry Dispatch` for an `approved_pending_dispatch` item:
+
+- operator triggers retry from the same detail view
+- dispatch is attempted again without reopening approval
+- the right panel updates to the latest task/run state
+- if retry succeeds, the historical approval remains approved and the task moves forward
+- if retry fails again, the item remains in historical review with `approved_pending_dispatch`
 
 If no next item exists, the workbench should show an empty state instead of stale details.
 
@@ -265,6 +293,10 @@ Add workbench-specific manager-facing endpoints:
 - `POST /api/manager/approvals/:id/reject`
   - requires a rejection reason in the request body
   - rejects and moves the task back to `ready`
+
+- `POST /api/manager/approvals/:id/retry-dispatch`
+  - only valid when approval is already `approved` and task state is `approved_pending_dispatch`
+  - retries dispatch without creating a new approval
 
 The workbench should operate primarily on `approval_id`, not `task_id`, because the object under review is the approval decision itself.
 
@@ -324,7 +356,6 @@ For v1, the approval record should carry these approval-specific metadata fields
 - `policy_rule`
 - `approval_reason`
 - `rejection_reason`
-- `task_state`
 
 ### Persisted Fields
 
@@ -346,6 +377,7 @@ Rationale:
 
 The following fields can be assembled at read time from other control-plane records:
 
+- current `task_state`
 - task context
 - latest run context
 - assistant summary preview
@@ -429,6 +461,7 @@ V1 must include:
 - next-item queue advancement
 - latest run and artifact summary context
 - approval-centered manager API endpoints
+- `retry-dispatch` recovery flow for `approved_pending_dispatch`
 
 V1 must not include:
 
@@ -447,10 +480,12 @@ Implementation planning should cover:
 - approval detail query tests
 - approve action tests
 - reject action tests
+- retry-dispatch action tests
 - UI tests for queue selection and post-action advancement
 - regression tests for:
   - approval remains approved even when post-approval dispatch fails
   - reject requires a reason
+  - retry-dispatch does not create a new approval
   - processed approvals leave the pending queue
   - approval workbench deep links load the expected approval
 
