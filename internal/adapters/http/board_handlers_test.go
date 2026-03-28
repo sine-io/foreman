@@ -95,6 +95,57 @@ func TestBoardJavaScriptAssetServesInteractiveApp(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "/board/approvals")
 }
 
+func TestApprovalWorkbenchPageServesHTML(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/approvals/workbench?project_id=demo", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Approval Workbench")
+	require.Contains(t, rec.Body.String(), "/board/assets/approval-workbench.js")
+}
+
+func TestApprovalWorkbenchJavaScriptAssetServesManagerApprovalClient(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/approval-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "/api/manager/projects/")
+	require.Contains(t, rec.Body.String(), "/api/manager/approvals/")
+	require.Contains(t, rec.Body.String(), "/retry-dispatch")
+}
+
+func TestApprovalWorkbenchJavaScriptUsesApprovalIDURLState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/approval-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "searchParams.set(\"approval_id\", approvalId)")
+	require.Contains(t, rec.Body.String(), "searchParams.get(\"approval_id\")")
+}
+
+func TestApprovalWorkbenchJavaScriptAdvancesToNextItemAfterAction(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/approval-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "const currentIndex = state.queue.findIndex((item) => item.approval_id === approvalId);")
+	require.Contains(t, rec.Body.String(), "const nextItem = state.queue[currentIndex + 1] || state.queue[currentIndex - 1] || null;")
+	require.Contains(t, rec.Body.String(), "await selectApproval(nextItem.approval_id);")
+}
+
 func TestOpenClawGatewayEndpointReturnsResponseEnvelope(t *testing.T) {
 	router := NewRouter(newFakeHTTPApp())
 

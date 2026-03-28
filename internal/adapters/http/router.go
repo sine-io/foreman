@@ -18,6 +18,9 @@ func NewRouter(app App) *gin.Engine {
 	router.GET("/board", func(c *gin.Context) {
 		c.File(filepath.Join(boardAssetDir(), "index.html"))
 	})
+	router.GET("/board/approvals/workbench", func(c *gin.Context) {
+		c.File(filepath.Join(boardAssetDir(), "approval-workbench.html"))
+	})
 	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)
 	router.GET("/board/tasks", handlers.TaskBoard)
