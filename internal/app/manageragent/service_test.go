@@ -8,34 +8,92 @@ import (
 	"github.com/sine-io/foreman/internal/app/command"
 	"github.com/sine-io/foreman/internal/app/query"
 	"github.com/sine-io/foreman/internal/domain/approval"
+	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
+	projectpkg "github.com/sine-io/foreman/internal/domain/project"
 	"github.com/sine-io/foreman/internal/domain/task"
 	"github.com/sine-io/foreman/internal/ports"
 	"github.com/stretchr/testify/require"
 )
 
+func TestHandleCreateProjectReturnsCreatedProject(t *testing.T) {
+	harness := newHarness()
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_project",
+		SessionID: "mgr-1",
+		ProjectID: "project-1",
+		Name:      "Alpha",
+		RepoRoot:  "/tmp/alpha",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "project_created", out.Kind)
+	require.Equal(t, "project-1", out.ProjectID)
+
+	saved, err := harness.projects.Get("project-1")
+	require.NoError(t, err)
+	require.Equal(t, "Alpha", saved.Name)
+	require.Equal(t, "/tmp/alpha", saved.RepoRoot)
+}
+
+func TestHandleCreateModuleReturnsCreatedModule(t *testing.T) {
+	harness := newHarness()
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:        "create_module",
+		SessionID:   "mgr-1",
+		ProjectID:   "project-1",
+		ModuleID:    "module-1",
+		Name:        "Inbox",
+		Description: "OpenClaw ingress module",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "module_created", out.Kind)
+	require.Equal(t, "project-1", out.ProjectID)
+	require.Equal(t, "module-1", out.ModuleID)
+
+	saved, err := harness.modules.Get("module-1")
+	require.NoError(t, err)
+	require.Equal(t, "project-1", saved.ProjectID)
+	require.Equal(t, "Inbox", saved.Name)
+}
+
 func TestHandleCreateTaskReturnsCompletionWhenDispatchFinishes(t *testing.T) {
-	svc := newTestService(domainpolicy.Decision{}, nil)
+	harness := newHarness()
+	svc := harness.newService()
 
 	out, err := svc.Handle(context.Background(), Request{
 		Kind:      "create_task",
 		SessionID: "mgr-1",
+		ProjectID: "project-1",
+		ModuleID:  "module-1",
 		Summary:   "Summarize the module status",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "completion", out.Kind)
 	require.NotEmpty(t, out.TaskID)
+
+	saved, err := harness.tasks.Get(out.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, "module-1", saved.ModuleID)
+	require.Equal(t, "repo:project-1", saved.WriteScope)
 }
 
 func TestHandleCreateTaskReturnsApprovalNeededWhenPolicyRequiresApproval(t *testing.T) {
-	svc := newTestService(domainpolicy.Decision{
+	harness := newHarness()
+	harness.policyDecision = domainpolicy.Decision{
 		RequiresApproval: true,
 		Reason:           "git push origin main requires approval",
-	}, nil)
+	}
+	svc := harness.newService()
 
 	out, err := svc.Handle(context.Background(), Request{
 		Kind:      "create_task",
 		SessionID: "mgr-2",
+		ProjectID: "project-1",
+		ModuleID:  "module-1",
 		Summary:   "git push origin main",
 	})
 	require.NoError(t, err)
@@ -43,17 +101,34 @@ func TestHandleCreateTaskReturnsApprovalNeededWhenPolicyRequiresApproval(t *test
 	require.NotEmpty(t, out.Summary)
 }
 
+func TestHandleDispatchTaskReturnsCompletionForExistingTask(t *testing.T) {
+	harness := newHarness()
+	require.NoError(t, harness.tasks.Save(task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Dispatch me", "repo:project-1")))
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:    "dispatch_task",
+		TaskID:  "task-1",
+		Summary: "Dispatch me",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "completion", out.Kind)
+	require.Equal(t, "task-1", out.TaskID)
+}
+
 func TestTaskStatusReturnsPersistedRunAndApprovalState(t *testing.T) {
-	svc := newTestService(domainpolicy.Decision{}, []ports.TaskBoardRow{
+	harness := newHarness()
+	harness.board.tasksByProject["project-1"] = []ports.TaskBoardRow{
 		{
 			TaskID:          "task-1",
-			ModuleID:        "module-default",
+			ModuleID:        "module-1",
 			Summary:         "Summarize the module status",
 			State:           "waiting_approval",
 			Priority:        10,
 			PendingApproval: true,
 		},
-	})
+	}
+	svc := harness.newService()
 
 	view, err := svc.TaskStatus(context.Background(), "task-1")
 	require.NoError(t, err)
@@ -62,23 +137,111 @@ func TestTaskStatusReturnsPersistedRunAndApprovalState(t *testing.T) {
 	require.True(t, view.PendingApproval)
 }
 
-func newTestService(policyDecision domainpolicy.Decision, boardRows []ports.TaskBoardRow) *Service {
-	tasks := newFakeTaskRepo()
-	approvals := &fakeApprovalRepo{byTaskID: map[string]approval.Approval{}}
+func TestBoardSnapshotReturnsModuleAndTaskColumns(t *testing.T) {
+	harness := newHarness()
+	harness.board.modulesByProject["project-1"] = []ports.ModuleBoardRow{
+		{ModuleID: "module-1", Name: "Inbox", BoardState: "active"},
+	}
+	harness.board.tasksByProject["project-1"] = []ports.TaskBoardRow{
+		{TaskID: "task-1", ModuleID: "module-1", Summary: "Bootstrap board", State: "ready", Priority: 10},
+	}
+	svc := harness.newService()
 
-	return NewService(
-		command.NewCreateTaskHandler(tasks),
-		command.NewDispatchTaskHandler(
-			tasks,
+	view, err := svc.BoardSnapshot(context.Background(), "project-1")
+	require.NoError(t, err)
+	require.Equal(t, "project-1", view.ProjectID)
+	require.Len(t, view.Modules["Implementing"], 1)
+	require.Len(t, view.Tasks["Ready"], 1)
+	require.Equal(t, "task-1", view.Tasks["Ready"][0].TaskID)
+}
+
+type serviceHarness struct {
+	projects       *fakeProjectRepo
+	modules        *fakeModuleRepo
+	tasks          *fakeTaskRepo
+	approvals      *fakeApprovalRepo
+	runs           *fakeRunRepo
+	board          *fakeBoardQueryRepo
+	policyDecision domainpolicy.Decision
+}
+
+func newHarness() *serviceHarness {
+	return &serviceHarness{
+		projects:  newFakeProjectRepo(),
+		modules:   newFakeModuleRepo(),
+		tasks:     newFakeTaskRepo(),
+		approvals: &fakeApprovalRepo{byTaskID: map[string]approval.Approval{}},
+		runs:      &fakeRunRepo{},
+		board: &fakeBoardQueryRepo{
+			modulesByProject: map[string][]ports.ModuleBoardRow{},
+			tasksByProject:   map[string][]ports.TaskBoardRow{},
+		},
+	}
+}
+
+func (h *serviceHarness) newService() *Service {
+	return NewService(Dependencies{
+		CreateProject: command.NewCreateProjectHandler(h.projects),
+		CreateModule:  command.NewCreateModuleHandler(h.modules),
+		CreateTask:    command.NewCreateTaskHandler(h.tasks),
+		DispatchTask: command.NewDispatchTaskHandler(
+			h.tasks,
 			&fakeLeaseRepo{},
-			fakePolicy{decision: policyDecision},
+			fakePolicy{decision: h.policyDecision},
 			fakeRunner{},
-			approvals,
-			&fakeRunRepo{},
+			h.approvals,
+			h.runs,
 			&fakeArtifactRepo{},
 		),
-		query.NewTaskBoardQuery(fakeBoardQueryRepo{tasks: boardRows}),
-	)
+		QueryModuleBoard: query.NewModuleBoardQuery(h.board),
+		QueryTaskBoard:   query.NewTaskBoardQuery(h.board),
+		Defaults: Defaults{
+			ProjectID: "project-1",
+			ModuleID:  "module-1",
+		},
+	})
+}
+
+type fakeProjectRepo struct {
+	byID map[string]projectpkg.Project
+}
+
+func newFakeProjectRepo() *fakeProjectRepo {
+	return &fakeProjectRepo{byID: map[string]projectpkg.Project{}}
+}
+
+func (f *fakeProjectRepo) Save(value projectpkg.Project) error {
+	f.byID[value.ID] = value
+	return nil
+}
+
+func (f *fakeProjectRepo) Get(id string) (projectpkg.Project, error) {
+	value, ok := f.byID[id]
+	if !ok {
+		return projectpkg.Project{}, sql.ErrNoRows
+	}
+	return value, nil
+}
+
+type fakeModuleRepo struct {
+	byID map[string]modulepkg.Module
+}
+
+func newFakeModuleRepo() *fakeModuleRepo {
+	return &fakeModuleRepo{byID: map[string]modulepkg.Module{}}
+}
+
+func (f *fakeModuleRepo) Save(value modulepkg.Module) error {
+	f.byID[value.ID] = value
+	return nil
+}
+
+func (f *fakeModuleRepo) Get(id string) (modulepkg.Module, error) {
+	value, ok := f.byID[id]
+	if !ok {
+		return modulepkg.Module{}, sql.ErrNoRows
+	}
+	return value, nil
 }
 
 type fakeTaskRepo struct {
@@ -213,21 +376,22 @@ func (f *fakeArtifactRepo) Get(id string) (ports.ArtifactRecord, error) {
 }
 
 type fakeBoardQueryRepo struct {
-	tasks []ports.TaskBoardRow
+	modulesByProject map[string][]ports.ModuleBoardRow
+	tasksByProject   map[string][]ports.TaskBoardRow
 }
 
-func (f fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
-	return nil, nil
+func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
+	return f.modulesByProject[projectID], nil
 }
 
-func (f fakeBoardQueryRepo) ListTasks(projectID string) ([]ports.TaskBoardRow, error) {
-	return f.tasks, nil
+func (f *fakeBoardQueryRepo) ListTasks(projectID string) ([]ports.TaskBoardRow, error) {
+	return f.tasksByProject[projectID], nil
 }
 
-func (f fakeBoardQueryRepo) GetRunDetail(runID string) (ports.RunDetailRecord, error) {
+func (f *fakeBoardQueryRepo) GetRunDetail(runID string) (ports.RunDetailRecord, error) {
 	return ports.RunDetailRecord{}, sql.ErrNoRows
 }
 
-func (f fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
+func (f *fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return nil, nil
 }
