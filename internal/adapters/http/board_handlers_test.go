@@ -146,6 +146,33 @@ func TestApprovalWorkbenchJavaScriptAdvancesToNextItemAfterAction(t *testing.T) 
 	require.Contains(t, rec.Body.String(), "await selectApproval(nextItem.approval_id);")
 }
 
+func TestApprovalWorkbenchJavaScriptClearsStaleApprovalIDOnProjectSwitch(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/approval-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "const previousProjectId = state.projectId;")
+	require.Contains(t, rec.Body.String(), "const projectChanged = nextProjectId !== previousProjectId;")
+	require.Contains(t, rec.Body.String(), "const requestedApprovalID = projectChanged ? \"\" : readApprovalID();")
+}
+
+func TestApprovalWorkbenchJavaScriptClearsStateBeforeRefreshFailureCanRender(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/approval-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "state.queue = [];")
+	require.Contains(t, rec.Body.String(), "state.detail = null;")
+	require.Contains(t, rec.Body.String(), "state.selectedApprovalID = \"\";")
+	require.Contains(t, rec.Body.String(), "state.queueState = \"loading\";")
+}
+
 func TestOpenClawGatewayEndpointReturnsResponseEnvelope(t *testing.T) {
 	router := NewRouter(newFakeHTTPApp())
 

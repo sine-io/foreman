@@ -54,6 +54,14 @@ if (projectInput && refreshButton && statusNode && queueRoot && detailRoot) {
     statusNode.dataset.tone = tone;
   };
 
+  const clearWorkbenchState = () => {
+    state.queue = [];
+    state.detail = null;
+    state.selectedApprovalID = "";
+    state.detailState = "idle";
+    state.queueState = "loading";
+  };
+
   const renderQueue = () => {
     if (state.queueState === "loading" && !state.queue.length) {
       queueRoot.innerHTML = '<p class="empty-state">Loading queue...</p>';
@@ -331,18 +339,31 @@ if (projectInput && refreshButton && statusNode && queueRoot && detailRoot) {
   };
 
   const refreshWorkbench = async () => {
-    state.projectId = projectInput.value.trim() || "demo";
+    const previousProjectId = state.projectId;
+    const nextProjectId = projectInput.value.trim() || "demo";
+    const projectChanged = nextProjectId !== previousProjectId;
+    const requestedApprovalID = projectChanged ? "" : readApprovalID();
+
+    state.projectId = nextProjectId;
     projectInput.value = state.projectId;
     state.notice = "";
     state.noticeTone = "info";
-    updateURLState(state.projectId, readApprovalID());
+    clearWorkbenchState();
+    updateURLState(state.projectId, requestedApprovalID);
+    renderQueue();
+    renderDetail();
     setStatus(`Loading ${state.projectId} approvals...`);
 
     try {
       await loadQueue();
-      const requestedApprovalID = readApprovalID();
-      if (requestedApprovalID) {
+      const queuedApproval = requestedApprovalID
+        ? state.queue.find((item) => item.approval_id === requestedApprovalID)
+        : null;
+
+      if (queuedApproval) {
         await selectApproval(requestedApprovalID);
+      } else if (requestedApprovalID && !projectChanged) {
+        await loadApproval(requestedApprovalID);
       } else if (state.queue.length) {
         await selectApproval(state.queue[0].approval_id);
       } else {
@@ -357,6 +378,7 @@ if (projectInput && refreshButton && statusNode && queueRoot && detailRoot) {
       setStatus(`Loaded ${state.projectId} approvals.`);
     } catch (error) {
       console.error(error);
+      state.queueState = "error";
       state.detail = null;
       state.detailState = "error";
       state.notice = error.message || "Failed to load approval workbench.";
@@ -454,8 +476,7 @@ if (projectInput && refreshButton && statusNode && queueRoot && detailRoot) {
     }
   });
   window.addEventListener("popstate", () => {
-    state.projectId = readProjectID();
-    projectInput.value = state.projectId;
+    projectInput.value = readProjectID();
     refreshWorkbench();
   });
 
