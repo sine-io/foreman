@@ -123,6 +123,29 @@ func TestHandleDispatchTaskReturnsCompletionForExistingTask(t *testing.T) {
 	require.Equal(t, "task-1", out.TaskID)
 }
 
+func TestHandleDispatchTaskReturnsApprovalNeededForStoredRiskyTask(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(riskyTask))
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
+	}
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "dispatch_task",
+		ProjectID: "project-1",
+		TaskID:    "task-1",
+		Summary:   "totally safe summary",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approval_needed", out.Kind)
+	require.Equal(t, "git push origin main requires approval", out.Summary)
+}
+
 func TestHandleCreateModuleReturnsErrorWhenProjectMissing(t *testing.T) {
 	harness := newHarness()
 	svc := harness.newService()
@@ -274,6 +297,9 @@ func newHarness() *serviceHarness {
 
 func (h *serviceHarness) newService() *Service {
 	return NewService(Dependencies{
+		Projects:      h.projects,
+		Modules:       h.modules,
+		Tasks:         h.tasks,
 		CreateProject: command.NewCreateProjectHandler(h.projects),
 		CreateModule:  command.NewCreateModuleHandler(h.projects, h.modules),
 		CreateTask:    command.NewCreateTaskHandler(h.modules, h.tasks),

@@ -7,6 +7,7 @@ import (
 
 	"github.com/sine-io/foreman/internal/app/command"
 	"github.com/sine-io/foreman/internal/app/query"
+	"github.com/sine-io/foreman/internal/ports"
 )
 
 type Defaults struct {
@@ -18,6 +19,9 @@ type Defaults struct {
 }
 
 type Dependencies struct {
+	Projects         ports.ProjectRepository
+	Modules          ports.ModuleRepository
+	Tasks            ports.TaskRepository
 	CreateProject    *command.CreateProjectHandler
 	CreateModule     *command.CreateModuleHandler
 	CreateTask       *command.CreateTaskHandler
@@ -28,6 +32,9 @@ type Dependencies struct {
 }
 
 type Service struct {
+	Projects         ports.ProjectRepository
+	Modules          ports.ModuleRepository
+	Tasks            ports.TaskRepository
 	CreateProject    *command.CreateProjectHandler
 	CreateModule     *command.CreateModuleHandler
 	CreateTask       *command.CreateTaskHandler
@@ -39,6 +46,9 @@ type Service struct {
 
 func NewService(deps Dependencies) *Service {
 	return &Service{
+		Projects:         deps.Projects,
+		Modules:          deps.Modules,
+		Tasks:            deps.Tasks,
 		CreateProject:    deps.CreateProject,
 		CreateModule:     deps.CreateModule,
 		CreateTask:       deps.CreateTask,
@@ -112,9 +122,27 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 			return Response{}, err
 		}
 
-		return s.dispatchResponse(taskDTO.ID, projectID, moduleID, req.Summary, taskDTO.Summary)
+		return s.dispatchResponse(taskDTO.ID, projectID, moduleID)
 	case "dispatch_task":
-		return s.dispatchResponse(req.TaskID, req.ProjectID, req.ModuleID, req.Summary, req.Summary)
+		projectID, err := s.resolveProjectID(req.ProjectID)
+		if err != nil {
+			return Response{}, err
+		}
+
+		taskRecord, err := s.Tasks.Get(req.TaskID)
+		if err != nil {
+			return Response{}, err
+		}
+
+		moduleRecord, err := s.Modules.Get(taskRecord.ModuleID)
+		if err != nil {
+			return Response{}, err
+		}
+		if moduleRecord.ProjectID != projectID {
+			return Response{}, fmt.Errorf("task %s does not belong to project %s", req.TaskID, projectID)
+		}
+
+		return s.dispatchResponse(req.TaskID, projectID, moduleRecord.ID)
 	default:
 		return Response{}, fmt.Errorf("unsupported manager-agent action: %s", req.Kind)
 	}
@@ -203,17 +231,22 @@ func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSna
 	return view, nil
 }
 
-func (s *Service) dispatchResponse(taskID, projectID, moduleID, requestedAction, fallbackSummary string) (Response, error) {
+func (s *Service) dispatchResponse(taskID, projectID, moduleID string) (Response, error) {
+	taskRecord, err := s.Tasks.Get(taskID)
+	if err != nil {
+		return Response{}, err
+	}
+
 	result, err := s.DispatchTask.Handle(command.DispatchTaskCommand{
 		TaskID:          taskID,
-		RequestedAction: requestedAction,
+		RequestedAction: taskRecord.Summary,
 	})
 	if err != nil {
 		return Response{}, err
 	}
 
 	if result.TaskState == "waiting_approval" {
-		summary := fallbackSummary
+		summary := taskRecord.Summary
 		if result.ApprovalReason != "" {
 			summary = result.ApprovalReason
 		}
@@ -232,7 +265,7 @@ func (s *Service) dispatchResponse(taskID, projectID, moduleID, requestedAction,
 		ProjectID: projectID,
 		ModuleID:  moduleID,
 		TaskID:    taskID,
-		Summary:   fallbackSummary,
+		Summary:   taskRecord.Summary,
 	}, nil
 }
 
@@ -245,7 +278,7 @@ func (s *Service) resolveProjectID(projectID string) (string, error) {
 		return "", fmt.Errorf("project_id is required")
 	}
 
-	if _, err := s.CreateModule.Projects.Get(resolved); err != nil {
+	if _, err := s.Projects.Get(resolved); err != nil {
 		return "", err
 	}
 
@@ -261,7 +294,7 @@ func (s *Service) resolveModuleID(moduleID, projectID string) (string, error) {
 		return "", fmt.Errorf("module_id is required")
 	}
 
-	record, err := s.CreateTask.Modules.Get(resolved)
+	record, err := s.Modules.Get(resolved)
 	if err != nil {
 		return "", err
 	}
