@@ -1,14 +1,9 @@
 package manageragent
 
-type Command struct {
-	Kind      string
-	SessionID string
-	TaskID    string
-	Summary   string
-}
+import appmanageragent "github.com/sine-io/foreman/internal/app/manageragent"
 
-type Result struct {
-	Kind    string
-	TaskID  string
-	Summary string
-}
+type Request = appmanageragent.Request
+type Response = appmanageragent.Response
+
+type Command = Request
+type Result = Response

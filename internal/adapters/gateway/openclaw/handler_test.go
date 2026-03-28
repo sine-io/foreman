@@ -26,34 +26,35 @@ func TestOpenClawEncodesApprovalNeededResponse(t *testing.T) {
 	require.Contains(t, string(msg), "approval_needed")
 }
 
-func TestOpenClawHandlerReturnsCompletionResponse(t *testing.T) {
-	handler := NewHandler(
-		fakeCommandBus{
-			result: manageragent.Result{
-				Kind:    "completion",
-				TaskID:  "task-1",
-				Summary: "task created",
-			},
+func TestOpenClawHandlerDelegatesToManagerService(t *testing.T) {
+	svc := fakeManagerService{
+		response: manageragent.Response{
+			Kind:   "completion",
+			TaskID: "task-1",
 		},
-		fakeQueryBus{},
-	)
+	}
 
+	handler := NewHandler(&svc)
 	resp, err := handler.Handle(context.Background(), Envelope{
-		SessionID: "oc-session-1",
+		SessionID: "oc-1",
 		Action:    "create_task",
-		Summary:   "task created",
+		Summary:   "Bootstrap board",
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.Kind)
 	require.Equal(t, "completion", resp.Kind)
+	require.Equal(t, manageragent.Request{
+		Kind:      "create_task",
+		SessionID: "oc-1",
+		Summary:   "Bootstrap board",
+	}, svc.received)
 }
 
-type fakeCommandBus struct {
-	result manageragent.Result
+type fakeManagerService struct {
+	response manageragent.Response
+	received manageragent.Request
 }
 
-func (f fakeCommandBus) Dispatch(ctx context.Context, cmd manageragent.Command) (manageragent.Result, error) {
-	return f.result, nil
+func (f *fakeManagerService) Handle(ctx context.Context, req manageragent.Request) (manageragent.Response, error) {
+	f.received = req
+	return f.response, nil
 }
-
-type fakeQueryBus struct{}

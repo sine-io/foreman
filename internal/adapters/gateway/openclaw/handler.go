@@ -20,26 +20,47 @@ type Response struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-type commandBus interface {
+type Service interface {
+	Handle(context.Context, manageragent.Request) (manageragent.Response, error)
+}
+
+type legacyCommandBus interface {
 	Dispatch(context.Context, manageragent.Command) (manageragent.Result, error)
 }
 
 type Handler struct {
-	commands commandBus
-	queries  any
+	service Service
 }
 
-func NewHandler(commands commandBus, queries any) *Handler {
-	return &Handler{
-		commands: commands,
-		queries:  queries,
+func NewHandler(service any, _ ...any) *Handler {
+	switch svc := service.(type) {
+	case Service:
+		return &Handler{service: svc}
+	case legacyCommandBus:
+		return &Handler{service: legacyServiceAdapter{commandBus: svc}}
+	default:
+		panic("openclaw.NewHandler requires manager service or legacy command bus")
 	}
 }
 
-func DecodeEnvelope(payload []byte) (manageragent.Command, error) {
+type legacyServiceAdapter struct {
+	commandBus legacyCommandBus
+}
+
+func (a legacyServiceAdapter) Handle(ctx context.Context, req manageragent.Request) (manageragent.Response, error) {
+	return a.commandBus.Dispatch(ctx, req)
+}
+
+func NewServiceHandler(service Service) *Handler {
+	return &Handler{
+		service: service,
+	}
+}
+
+func DecodeEnvelope(payload []byte) (manageragent.Request, error) {
 	var env Envelope
 	if err := json.Unmarshal(payload, &env); err != nil {
-		return manageragent.Command{}, err
+		return manageragent.Request{}, err
 	}
 
 	return mapEnvelope(env), nil
@@ -50,15 +71,15 @@ func EncodeResponse(resp Response) ([]byte, error) {
 }
 
 func (h *Handler) Handle(ctx context.Context, env Envelope) (Response, error) {
-	result, err := h.commands.Dispatch(ctx, mapEnvelope(env))
+	result, err := h.service.Handle(ctx, mapEnvelope(env))
 	if err != nil {
 		return Response{}, err
 	}
 
-	return EncodeDomainResult(result), nil
+	return encodeResponse(result), nil
 }
 
-func EncodeDomainResult(result manageragent.Result) Response {
+func encodeResponse(result manageragent.Response) Response {
 	return Response{
 		Kind:    result.Kind,
 		TaskID:  result.TaskID,
@@ -66,8 +87,8 @@ func EncodeDomainResult(result manageragent.Result) Response {
 	}
 }
 
-func mapEnvelope(env Envelope) manageragent.Command {
-	return manageragent.Command{
+func mapEnvelope(env Envelope) manageragent.Request {
+	return manageragent.Request{
 		Kind:      env.Action,
 		SessionID: env.SessionID,
 		TaskID:    env.TaskID,
