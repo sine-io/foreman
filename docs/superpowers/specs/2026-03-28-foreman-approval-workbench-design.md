@@ -270,7 +270,7 @@ The workbench should operate primarily on `approval_id`, not `task_id`, because 
 
 Action responses should return the authoritative resulting approval and task state so the UI can update deterministically after success, retries, or conflicts.
 
-For v1, `artifact links` means links to the existing Foreman run-detail or artifact-detail surfaces, not raw filesystem paths and not a new trace explorer.
+For v1, `artifact links` means links to the existing Foreman run-detail surface only, not raw filesystem paths, not a new artifact-detail page, and not a trace explorer.
 
 ## Data And State Requirements
 
@@ -296,6 +296,13 @@ For this sub-project, the task state model must explicitly support:
 - approval completed successfully
 - automatic dispatch attempted
 - dispatch failed before the task actually entered running/completed state
+
+Exit semantics for `approved_pending_dispatch` in v1:
+
+- it is a manual recovery state, not a background retry state
+- the operator may trigger dispatch again from the workbench
+- successful retry moves the task to `running` or `completed`
+- failed retry leaves the task in `approved_pending_dispatch`
 
 For the workbench view, the server should assemble a unified approval-review read model from persisted control-plane state.
 
