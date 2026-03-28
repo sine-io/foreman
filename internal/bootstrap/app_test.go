@@ -94,6 +94,37 @@ func TestServeRoutesRiskyActionsIntoApprovalQueue(t *testing.T) {
 	require.NoError(t, <-errCh)
 }
 
+func TestServeExposesManagerCommandAPI(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	resp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/commands",
+		"application/json",
+		strings.NewReader(`{"kind":"create_task","summary":"Bootstrap board"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, resp.StatusCode)
+
+	var payload map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	require.Equal(t, "completion", payload["kind"])
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 

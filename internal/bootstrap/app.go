@@ -184,8 +184,27 @@ func (a *app) CreateTask(cmd command.CreateTaskCommand) (command.TaskDTO, error)
 	return a.createTask.Handle(cmd)
 }
 
+func (a *app) Handle(ctx context.Context, req appmanageragent.Request) (appmanageragent.Response, error) {
+	if err := a.ensureDefaultProject(); err != nil {
+		return appmanageragent.Response{}, err
+	}
+	if err := a.ensureDefaultModule(); err != nil {
+		return appmanageragent.Response{}, err
+	}
+
+	return a.manager.Handle(ctx, req)
+}
+
 func (a *app) TaskBoard(projectID string) (query.TaskBoardView, error) {
 	return query.NewTaskBoardQuery(a.board).Execute(projectID)
+}
+
+func (a *app) TaskStatus(ctx context.Context, projectID, taskID string) (appmanageragent.TaskStatusView, error) {
+	return a.manager.TaskStatus(ctx, projectID, taskID)
+}
+
+func (a *app) BoardSnapshot(ctx context.Context, projectID string) (appmanageragent.BoardSnapshotView, error) {
+	return a.manager.BoardSnapshot(ctx, projectID)
 }
 
 func (a *app) ApprovalQueue(projectID string) (query.ApprovalQueueView, error) {
