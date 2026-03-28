@@ -3,6 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,6 +59,37 @@ func TestOpenUpgradesLegacyDatabaseAndRecordsMigrations(t *testing.T) {
 	requireColumn(t, db, "runs", "created_at")
 	requireColumn(t, db, "approvals", "created_at")
 	requireColumn(t, db, "artifacts", "created_at")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
+}
+
+func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "concurrent.db")
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			db, err := Open(path)
+			if err == nil {
+				err = db.Close()
+			}
+			errs <- err
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	db, err := Open(path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
 	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
 }
 
