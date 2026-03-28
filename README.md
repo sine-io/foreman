@@ -30,6 +30,7 @@ The currently implemented slice now includes:
 - a Foreman-native manager-agent API for upstream integrations
 - deterministic manager-facing task status reconstruction from persisted task/run/approval state
 - retry-safe dispatch and approval handling with tx-bound SQLite persistence
+- approval workbench queue/detail/action endpoints, including `approved_pending_dispatch` retry-dispatch recovery
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
@@ -112,12 +113,34 @@ curl -X POST http://localhost:8080/api/manager/commands \
   -d '{"kind":"dispatch_task","project_id":"demo","task_id":"<task-id>"}'
 ```
 
+## Approval Workbench
+
+Approval workbench spec and execution plan:
+
+- [`docs/superpowers/specs/2026-03-28-foreman-approval-workbench-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-28-foreman-approval-workbench-design.md)
+- [`docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md)
+
+Approval workbench entry flow:
+
+- Board entry: [`/board/approvals/workbench?project_id=demo`](/root/link/repo/board/approvals/workbench?project_id=demo)
+- Manager API queue entry: `GET /api/manager/projects/demo/approvals`
+- Risky `create_task` or `dispatch_task` requests return `kind: "approval_needed"` and leave the task in `waiting_approval`
+- Load approval detail with `GET /api/manager/approvals/<approval-id>`
+- Resolve the approval with `POST /api/manager/approvals/<approval-id>/approve` or `POST /api/manager/approvals/<approval-id>/reject`
+
+Approval workbench recovery flow:
+
+- `approved_pending_dispatch` means the approval is already granted, but Foreman still has to resume or recover dispatch safely
+- Use `POST /api/manager/approvals/<approval-id>/retry-dispatch` to continue from that persisted recovery point instead of creating a new approval
+- `retry-dispatch` is the recovery path for approved work that could not move directly from approval resolution back into runner execution
+
 ## Control-Plane Guarantees
 
 - Manager task status is reconstructed from persisted task, run, and approval records instead of ad-hoc board columns.
 - Latest run and approval lookups use explicit ordering metadata, so repeated reads do not depend on SQLite `rowid`.
 - Re-dispatch is retry-safe: if an authoritative run already exists, Foreman returns the persisted state instead of re-invoking the runner.
 - Approval creation and approval resolution are atomic. Repeated risky dispatches reuse the existing pending approval instead of creating duplicates.
+- Approved work can pause in `approved_pending_dispatch` and resume later through the approval workbench `retry-dispatch` path.
 - Completed-run retries also retry lease cleanup, so a transient release failure does not leave the write scope stranded permanently.
 
 ## Status Notes
