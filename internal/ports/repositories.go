@@ -33,6 +33,7 @@ type Run struct {
 type RunRepository interface {
 	Save(Run) error
 	Get(id string) (Run, error)
+	FindByTask(taskID string) (Run, error)
 }
 
 type ArtifactRecord struct {

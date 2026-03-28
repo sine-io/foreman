@@ -148,6 +148,13 @@ func (f *fakeRunRepo) Get(id string) (ports.Run, error) {
 	return f.saved, nil
 }
 
+func (f *fakeRunRepo) FindByTask(taskID string) (ports.Run, error) {
+	if f.saved.TaskID != taskID {
+		return ports.Run{}, sql.ErrNoRows
+	}
+	return f.saved, nil
+}
+
 type fakeArtifactRepo struct {
 	nextID string
 }

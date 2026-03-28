@@ -22,6 +22,8 @@ type Dependencies struct {
 	Projects         ports.ProjectRepository
 	Modules          ports.ModuleRepository
 	Tasks            ports.TaskRepository
+	Runs             ports.RunRepository
+	Approvals        ports.ApprovalRepository
 	CreateProject    *command.CreateProjectHandler
 	CreateModule     *command.CreateModuleHandler
 	CreateTask       *command.CreateTaskHandler
@@ -35,6 +37,8 @@ type Service struct {
 	Projects         ports.ProjectRepository
 	Modules          ports.ModuleRepository
 	Tasks            ports.TaskRepository
+	Runs             ports.RunRepository
+	Approvals        ports.ApprovalRepository
 	CreateProject    *command.CreateProjectHandler
 	CreateModule     *command.CreateModuleHandler
 	CreateTask       *command.CreateTaskHandler
@@ -49,6 +53,8 @@ func NewService(deps Dependencies) *Service {
 		Projects:         deps.Projects,
 		Modules:          deps.Modules,
 		Tasks:            deps.Tasks,
+		Runs:             deps.Runs,
+		Approvals:        deps.Approvals,
 		CreateProject:    deps.CreateProject,
 		CreateModule:     deps.CreateModule,
 		CreateTask:       deps.CreateTask,
@@ -156,29 +162,45 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 		return TaskStatusView{}, err
 	}
 
-	board, err := s.QueryTaskBoard.Execute(resolvedProjectID)
+	taskRecord, err := s.Tasks.Get(taskID)
 	if err != nil {
 		return TaskStatusView{}, err
 	}
-
-	for _, cards := range board.Columns {
-		for _, card := range cards {
-			if card.ID != taskID {
-				continue
-			}
-
-			return TaskStatusView{
-				TaskID:          card.ID,
-				ModuleID:        card.ModuleID,
-				Summary:         card.Summary,
-				State:           card.State,
-				Priority:        card.Priority,
-				PendingApproval: card.PendingApproval,
-			}, nil
-		}
+	moduleRecord, err := s.Modules.Get(taskRecord.ModuleID)
+	if err != nil {
+		return TaskStatusView{}, err
+	}
+	if moduleRecord.ProjectID != resolvedProjectID {
+		return TaskStatusView{}, fmt.Errorf("task %s does not belong to project %s", taskID, resolvedProjectID)
 	}
 
-	return TaskStatusView{}, sql.ErrNoRows
+	view := TaskStatusView{
+		TaskID:    taskRecord.ID,
+		ProjectID: moduleRecord.ProjectID,
+		ModuleID:  taskRecord.ModuleID,
+		Summary:   taskRecord.Summary,
+		State:     string(taskRecord.State),
+		Priority:  taskRecord.Priority,
+	}
+
+	runRecord, err := s.Runs.FindByTask(taskID)
+	if err == nil {
+		view.RunID = runRecord.ID
+		view.RunState = runRecord.State
+	} else if err != nil && err != sql.ErrNoRows {
+		return TaskStatusView{}, err
+	}
+
+	approvalRecord, err := s.Approvals.FindPendingByTask(taskID)
+	if err == nil {
+		view.ApprovalID = approvalRecord.ID
+		view.ApprovalReason = approvalRecord.Reason
+		view.PendingApproval = true
+	} else if err != nil && err != sql.ErrNoRows {
+		return TaskStatusView{}, err
+	}
+
+	return view, nil
 }
 
 func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSnapshotView, error) {
@@ -261,7 +283,7 @@ func (s *Service) dispatchResponse(taskID, projectID, moduleID string) (Response
 	}
 
 	return Response{
-		Kind:      "completion",
+		Kind:      responseKind(result),
 		ProjectID: projectID,
 		ModuleID:  moduleID,
 		TaskID:    taskID,
@@ -321,4 +343,14 @@ func firstPositive(values ...int) int {
 		}
 	}
 	return 0
+}
+
+func responseKind(result command.DispatchTaskResult) string {
+	if result.TaskState == "waiting_approval" {
+		return "approval_needed"
+	}
+	if result.RunState == "completed" || result.TaskState == "completed" {
+		return "completion"
+	}
+	return "in_progress"
 }

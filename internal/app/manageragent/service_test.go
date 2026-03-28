@@ -146,6 +146,23 @@ func TestHandleDispatchTaskReturnsApprovalNeededForStoredRiskyTask(t *testing.T)
 	require.Equal(t, "git push origin main requires approval", out.Summary)
 }
 
+func TestHandleDispatchTaskReturnsInProgressWhenRunHasNotCompleted(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	require.NoError(t, harness.tasks.Save(task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Dispatch me", "repo:project-1")))
+	harness.runnerState = "running"
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "dispatch_task",
+		ProjectID: "project-1",
+		TaskID:    "task-1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "in_progress", out.Kind)
+}
+
 func TestHandleCreateModuleReturnsErrorWhenProjectMissing(t *testing.T) {
 	harness := newHarness()
 	svc := harness.newService()
@@ -231,8 +248,11 @@ func TestTaskStatusUsesRequestedProjectBoard(t *testing.T) {
 	view, err := svc.TaskStatus(context.Background(), "project-2", out.TaskID)
 	require.NoError(t, err)
 	require.Equal(t, out.TaskID, view.TaskID)
+	require.Equal(t, "project-2", view.ProjectID)
 	require.Equal(t, "waiting_approval", view.State)
 	require.True(t, view.PendingApproval)
+	require.NotEmpty(t, view.ApprovalID)
+	require.Equal(t, "git push origin main requires approval", view.ApprovalReason)
 }
 
 func TestBoardSnapshotReturnsModuleAndTaskColumnsFromPersistedState(t *testing.T) {
@@ -259,6 +279,8 @@ func TestBoardSnapshotReturnsModuleAndTaskColumnsFromPersistedState(t *testing.T
 	status, err := svc.TaskStatus(context.Background(), "project-1", out.TaskID)
 	require.NoError(t, err)
 	require.Equal(t, "completed", status.State)
+	require.Equal(t, "run-1", status.RunID)
+	require.Equal(t, "completed", status.RunState)
 
 	view, err := svc.BoardSnapshot(context.Background(), "project-1")
 	require.NoError(t, err)
@@ -276,6 +298,7 @@ type serviceHarness struct {
 	runs           *fakeRunRepo
 	board          *fakeBoardQueryRepo
 	policyDecision domainpolicy.Decision
+	runnerState    string
 }
 
 func newHarness() *serviceHarness {
@@ -300,6 +323,8 @@ func (h *serviceHarness) newService() *Service {
 		Projects:      h.projects,
 		Modules:       h.modules,
 		Tasks:         h.tasks,
+		Runs:          h.runs,
+		Approvals:     h.approvals,
 		CreateProject: command.NewCreateProjectHandler(h.projects),
 		CreateModule:  command.NewCreateModuleHandler(h.projects, h.modules),
 		CreateTask:    command.NewCreateTaskHandler(h.modules, h.tasks),
@@ -307,7 +332,7 @@ func (h *serviceHarness) newService() *Service {
 			h.tasks,
 			&fakeLeaseRepo{},
 			fakePolicy{decision: h.policyDecision},
-			fakeRunner{},
+			fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
 			h.approvals,
 			h.runs,
 			&fakeArtifactRepo{},
@@ -466,23 +491,25 @@ func (f fakePolicy) Evaluate(action string) domainpolicy.Decision {
 	return f.decision
 }
 
-type fakeRunner struct{}
+type fakeRunner struct {
+	state string
+}
 
-func (fakeRunner) Dispatch(req ports.RunRequest) (ports.Run, error) {
+func (f fakeRunner) Dispatch(req ports.RunRequest) (ports.Run, error) {
 	return ports.Run{
 		ID:                   "run-1",
 		TaskID:               req.TaskID,
 		RunnerKind:           "codex",
-		State:                "completed",
+		State:                f.state,
 		AssistantSummaryPath: "artifacts/tasks/task-1/assistant_summary.txt",
 	}, nil
 }
 
-func (fakeRunner) Observe(runID string) (ports.Run, error) {
+func (f fakeRunner) Observe(runID string) (ports.Run, error) {
 	return ports.Run{}, nil
 }
 
-func (fakeRunner) Stop(runID string) error {
+func (f fakeRunner) Stop(runID string) error {
 	return nil
 }
 
@@ -497,6 +524,14 @@ func (f *fakeRunRepo) Save(run ports.Run) error {
 
 func (f *fakeRunRepo) Get(id string) (ports.Run, error) {
 	if f.saved.ID != id {
+		return ports.Run{}, sql.ErrNoRows
+	}
+
+	return f.saved, nil
+}
+
+func (f *fakeRunRepo) FindByTask(taskID string) (ports.Run, error) {
+	if f.saved.TaskID != taskID {
 		return ports.Run{}, sql.ErrNoRows
 	}
 

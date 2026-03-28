@@ -26,10 +26,15 @@ type Response struct {
 
 type TaskStatusView struct {
 	TaskID          string
+	ProjectID       string
 	ModuleID        string
 	Summary         string
 	State           string
 	Priority        int
+	RunID           string
+	RunState        string
+	ApprovalID      string
+	ApprovalReason  string
 	PendingApproval bool
 }
 
