@@ -24,34 +24,11 @@ type Service interface {
 	Handle(context.Context, manageragent.Request) (manageragent.Response, error)
 }
 
-type legacyCommandBus interface {
-	Dispatch(context.Context, manageragent.Command) (manageragent.Result, error)
-}
-
 type Handler struct {
 	service Service
 }
 
-func NewHandler(service any, _ ...any) *Handler {
-	switch svc := service.(type) {
-	case Service:
-		return &Handler{service: svc}
-	case legacyCommandBus:
-		return &Handler{service: legacyServiceAdapter{commandBus: svc}}
-	default:
-		panic("openclaw.NewHandler requires manager service or legacy command bus")
-	}
-}
-
-type legacyServiceAdapter struct {
-	commandBus legacyCommandBus
-}
-
-func (a legacyServiceAdapter) Handle(ctx context.Context, req manageragent.Request) (manageragent.Response, error) {
-	return a.commandBus.Dispatch(ctx, req)
-}
-
-func NewServiceHandler(service Service) *Handler {
+func NewHandler(service Service) *Handler {
 	return &Handler{
 		service: service,
 	}

@@ -4,16 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	stdhttp "net/http"
 	"os"
 	"time"
 
-	manageragent "github.com/sine-io/foreman/internal/adapters/gateway/manageragent"
 	"github.com/sine-io/foreman/internal/adapters/gateway/openclaw"
 	httpadapter "github.com/sine-io/foreman/internal/adapters/http"
 	"github.com/sine-io/foreman/internal/adapters/runner/codex"
 	"github.com/sine-io/foreman/internal/app/command"
+	appmanageragent "github.com/sine-io/foreman/internal/app/manageragent"
 	"github.com/sine-io/foreman/internal/app/query"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
@@ -48,6 +47,7 @@ type app struct {
 	approvals     *sqlite.ApprovalRepository
 	leases        *sqlite.LeaseRepository
 	board         *sqlite.BoardQueryRepository
+	manager       *appmanageragent.Service
 	createProject *command.CreateProjectHandler
 	createModule  *command.CreateModuleHandler
 	createTask    *command.CreateTaskHandler
@@ -112,7 +112,27 @@ func BuildApp(cfg Config) (App, error) {
 		runs,
 		artifacts,
 	)
-	instance.openclaw = openclaw.NewHandler(instance, nil)
+	instance.manager = appmanageragent.NewService(appmanageragent.Dependencies{
+		Projects:         projects,
+		Modules:          modules,
+		Tasks:            tasks,
+		Runs:             runs,
+		Approvals:        approvals,
+		CreateProject:    instance.createProject,
+		CreateModule:     instance.createModule,
+		CreateTask:       instance.createTask,
+		DispatchTask:     instance.dispatchTask,
+		QueryModuleBoard: query.NewModuleBoardQuery(board),
+		QueryTaskBoard:   query.NewTaskBoardQuery(board),
+		Defaults: appmanageragent.Defaults{
+			ProjectID: defaultProjectID,
+			ModuleID:  defaultModuleID,
+			RepoRoot:  repoRoot,
+			TaskType:  "write",
+			Priority:  10,
+		},
+	})
+	instance.openclaw = openclaw.NewHandler(instance.manager)
 	instance.router = httpadapter.NewRouter(instance)
 
 	return instance, nil
@@ -209,62 +229,14 @@ func (a *app) ReprioritizeTask(cmd command.ReprioritizeTaskCommand) (string, err
 }
 
 func (a *app) OpenClawCommand(ctx context.Context, env openclaw.Envelope) (openclaw.Response, error) {
-	return a.openclaw.Handle(ctx, env)
-}
-
-func (a *app) Dispatch(ctx context.Context, cmd manageragent.Command) (manageragent.Result, error) {
-	_ = ctx
-
 	if err := a.ensureDefaultProject(); err != nil {
-		return manageragent.Result{}, err
+		return openclaw.Response{}, err
 	}
 	if err := a.ensureDefaultModule(); err != nil {
-		return manageragent.Result{}, err
+		return openclaw.Response{}, err
 	}
 
-	switch cmd.Kind {
-	case "create_task":
-		taskDTO, err := a.createTask.Handle(command.CreateTaskCommand{
-			ModuleID:   defaultModuleID,
-			Title:      cmd.Summary,
-			TaskType:   "write",
-			WriteScope: "repo:" + defaultProjectID,
-			Acceptance: cmd.Summary,
-			Priority:   10,
-		})
-		if err != nil {
-			return manageragent.Result{}, err
-		}
-
-		result, err := a.dispatchTask.Handle(command.DispatchTaskCommand{
-			TaskID:          taskDTO.ID,
-			RequestedAction: cmd.Summary,
-		})
-		if err != nil {
-			return manageragent.Result{}, err
-		}
-
-		if result.TaskState == "waiting_approval" {
-			approvalRecord, err := a.approvals.Get(result.ApprovalID)
-			if err != nil {
-				return manageragent.Result{}, err
-			}
-
-			return manageragent.Result{
-				Kind:    "approval_needed",
-				TaskID:  taskDTO.ID,
-				Summary: approvalRecord.Reason,
-			}, nil
-		}
-
-		return manageragent.Result{
-			Kind:    "completion",
-			TaskID:  taskDTO.ID,
-			Summary: taskDTO.Summary,
-		}, nil
-	default:
-		return manageragent.Result{}, fmt.Errorf("unsupported openclaw action: %s", cmd.Kind)
-	}
+	return a.openclaw.Handle(ctx, env)
 }
 
 func (a *app) ensureDefaultProject() error {
