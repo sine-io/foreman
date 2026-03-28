@@ -1,11 +1,15 @@
 package ports
 
 import (
+	"errors"
+
 	"github.com/sine-io/foreman/internal/domain/approval"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	"github.com/sine-io/foreman/internal/domain/project"
 	"github.com/sine-io/foreman/internal/domain/task"
 )
+
+var ErrPendingApprovalConflict = errors.New("pending approval already exists")
 
 type ProjectRepository interface {
 	Save(project.Project) error

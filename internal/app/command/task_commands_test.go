@@ -285,7 +285,7 @@ func (f *fakeApprovalRepo) FindPendingByTask(taskID string) (approval.Approval, 
 	}
 
 	if value.Status != approval.StatusPending {
-		return approval.Approval{}, errors.New("approval is not pending")
+		return approval.Approval{}, sql.ErrNoRows
 	}
 
 	return value, nil

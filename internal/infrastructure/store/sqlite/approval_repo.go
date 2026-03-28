@@ -2,9 +2,12 @@ package sqlite
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
+	"github.com/sine-io/foreman/internal/ports"
 )
 
 type ApprovalRepository struct {
@@ -47,6 +50,9 @@ func (r *ApprovalRepository) Save(a approval.Approval) error {
 		a.Status,
 		createdAt,
 	)
+	if err != nil && isPendingApprovalConflict(err) {
+		return fmt.Errorf("%w: %v", ports.ErrPendingApprovalConflict, err)
+	}
 	return err
 }
 
@@ -83,4 +89,13 @@ func (r *ApprovalRepository) FindLatestByTask(taskID string) (approval.Approval,
 		taskID,
 	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.CreatedAt)
 	return a, err
+}
+
+func isPendingApprovalConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "approvals_pending_task_idx") ||
+		strings.Contains(msg, "UNIQUE constraint failed: approvals.task_id")
 }

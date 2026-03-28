@@ -2,8 +2,10 @@ package command
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 
+	"github.com/sine-io/foreman/internal/domain/approval"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
 	"github.com/sine-io/foreman/internal/domain/task"
 	"github.com/sine-io/foreman/internal/ports"
@@ -102,6 +104,36 @@ func TestDispatchReusesExistingPendingApprovalWhenRetried(t *testing.T) {
 
 	require.Equal(t, first.ApprovalID, second.ApprovalID)
 	require.Equal(t, 1, approvals.saveCount)
+}
+
+func TestDispatchDoesNotHideUnexpectedApprovalSaveErrors(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	require.NoError(t, tasks.Save(riskyTask))
+
+	approvals := &fakeApprovalRepo{
+		byTaskID: map[string]approval.Approval{},
+		saveErr:  errors.New("db down"),
+	}
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+			},
+		},
+		&fakeRunner{},
+		approvals,
+		tx.runs,
+		tx.artifacts,
+	)
+
+	_, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.EqualError(t, err, "db down")
 }
 
 func TestDispatchDoesNotLeaveDuplicatePendingApprovalsUnderRetry(t *testing.T) {

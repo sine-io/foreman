@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 
 	domainapproval "github.com/sine-io/foreman/internal/domain/approval"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
@@ -175,7 +174,7 @@ func (h *DispatchTaskHandler) handleApprovalDispatch(taskID string, decision dom
 
 			record = domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
 			if err := repos.Approvals.Save(record); err != nil {
-				if !isDuplicatePendingApprovalError(err) {
+				if !errors.Is(err, ports.ErrPendingApprovalConflict) {
 					return err
 				}
 				existing, findErr := repos.Approvals.FindPendingByTask(taskID)
@@ -222,13 +221,4 @@ func persistedRunResult(repoTask task.Task, run ports.Run) DispatchTaskResult {
 		TaskState: taskState,
 		RunState:  run.State,
 	}
-}
-
-func isDuplicatePendingApprovalError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "approvals_pending_task_idx") ||
-		strings.Contains(msg, "UNIQUE constraint failed: approvals.task_id")
 }

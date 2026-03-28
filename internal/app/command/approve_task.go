@@ -2,6 +2,8 @@ package command
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
 	"github.com/sine-io/foreman/internal/domain/task"
@@ -35,6 +37,9 @@ func (h *ApproveTaskHandler) Handle(cmd ApproveTaskCommand) error {
 	return h.Tx.WithinTransaction(context.Background(), func(_ context.Context, repos ports.TransactionRepositories) error {
 		record, err := repos.Approvals.FindPendingByTask(cmd.TaskID)
 		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 			latest, latestErr := repos.Approvals.FindLatestByTask(cmd.TaskID)
 			if latestErr != nil {
 				return err
