@@ -46,10 +46,11 @@ func (h *RejectApprovalHandler) Handle(cmd RejectApprovalCommand) (ApprovalActio
 	switch record.Status {
 	case approval.StatusRejected:
 		return ApprovalActionResult{
-			ApprovalID:     record.ID,
-			TaskID:         record.TaskID,
-			ApprovalStatus: string(record.Status),
-			TaskState:      string(repoTask.State),
+			ApprovalID:      record.ID,
+			TaskID:          record.TaskID,
+			ApprovalStatus:  string(record.Status),
+			RejectionReason: record.RejectionReason,
+			TaskState:       string(repoTask.State),
 		}, nil
 	case approval.StatusApproved:
 		return ApprovalActionResult{}, approvalConflict("approval %s is already approved", record.ID)
@@ -75,10 +76,11 @@ func (h *RejectApprovalHandler) Handle(cmd RejectApprovalCommand) (ApprovalActio
 	}
 
 	return ApprovalActionResult{
-		ApprovalID:     record.ID,
-		TaskID:         record.TaskID,
-		ApprovalStatus: string(approval.StatusRejected),
-		TaskState:      string(task.TaskStateReady),
+		ApprovalID:      record.ID,
+		TaskID:          record.TaskID,
+		ApprovalStatus:  string(approval.StatusRejected),
+		RejectionReason: cmd.Reason,
+		TaskState:       string(task.TaskStateReady),
 	}, nil
 }
 

@@ -411,12 +411,13 @@ func responseKind(result command.DispatchTaskResult) string {
 
 func approvalActionResponse(result command.ApprovalActionResult) ApprovalWorkbenchActionResponse {
 	return ApprovalWorkbenchActionResponse{
-		ApprovalID:    result.ApprovalID,
-		ApprovalState: result.ApprovalStatus,
-		TaskID:        result.TaskID,
-		TaskState:     result.TaskState,
-		RunID:         result.RunID,
-		RunState:      result.RunState,
+		ApprovalID:      result.ApprovalID,
+		ApprovalState:   result.ApprovalStatus,
+		RejectionReason: result.RejectionReason,
+		TaskID:          result.TaskID,
+		TaskState:       result.TaskState,
+		RunID:           result.RunID,
+		RunState:        result.RunState,
 	}
 }
 

@@ -126,6 +126,22 @@ func TestManagerApprovalDetailEndpointReturnsHistoricalApproval(t *testing.T) {
 	require.Equal(t, "/board/runs/run-2", resp.RunDetailURL)
 }
 
+func TestManagerApprovalDetailEndpointReturnsHistoricalRejectedApproval(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/approvals/approval-rejected", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	var resp managerApprovalDetailResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "approval-rejected", resp.ApprovalID)
+	require.Equal(t, "rejected", resp.ApprovalState)
+	require.Equal(t, "manager rejected the action", resp.RejectionReason)
+	require.Equal(t, "ready", resp.TaskState)
+}
+
 func TestManagerApprovalActionEndpointsReturnApprovalActionResponse(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -283,6 +299,17 @@ func (a *fakeManagerHTTPApp) ApprovalWorkbenchDetail(ctx context.Context, approv
 			RunState:                "completed",
 			RunDetailURL:            "/board/runs/run-2",
 			AssistantSummaryPreview: "approved run completed",
+		}, nil
+	case "approval-rejected":
+		return manageragent.ApprovalWorkbenchDetailView{
+			ApprovalID:              "approval-rejected",
+			TaskID:                  "task-1",
+			Summary:                 "Review push",
+			ApprovalState:           "rejected",
+			RiskLevel:               "high",
+			RejectionReason:         "manager rejected the action",
+			TaskState:               "ready",
+			AssistantSummaryPreview: "rejected by manager",
 		}, nil
 	default:
 		return manageragent.ApprovalWorkbenchDetailView{

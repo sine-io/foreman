@@ -15,12 +15,13 @@ var ErrApprovalActionConflict = errors.New("approval action conflict")
 var ErrApprovalActionNotFound = errors.New("approval action not found")
 
 type ApprovalActionResult struct {
-	ApprovalID     string
-	TaskID         string
-	ApprovalStatus string
-	TaskState      string
-	RunID          string
-	RunState       string
+	ApprovalID      string
+	TaskID          string
+	ApprovalStatus  string
+	RejectionReason string
+	TaskState       string
+	RunID           string
+	RunState        string
 }
 
 type ApproveApprovalCommand struct {
