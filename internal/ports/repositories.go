@@ -28,6 +28,7 @@ type Run struct {
 	RunnerKind           string
 	State                string
 	AssistantSummaryPath string
+	CreatedAt            string
 }
 
 type RunRepository interface {

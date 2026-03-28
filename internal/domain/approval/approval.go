@@ -9,10 +9,11 @@ const (
 )
 
 type Approval struct {
-	ID     string
-	TaskID string
-	Reason string
-	Status Status
+	ID        string
+	TaskID    string
+	Reason    string
+	Status    Status
+	CreatedAt string
 }
 
 func New(id, taskID, reason string) Approval {

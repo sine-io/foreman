@@ -16,6 +16,9 @@ var initSchema string
 //go:embed migrations/002_control_plane_hardening.sql
 var controlPlaneHardeningSchema string
 
+//go:embed migrations/003_created_at_backfill.sql
+var createdAtBackfillSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -24,6 +27,7 @@ type migration struct {
 var migrations = []migration{
 	{version: "001_init.sql", sql: initSchema},
 	{version: "002_control_plane_hardening.sql", sql: controlPlaneHardeningSchema},
+	{version: "003_created_at_backfill.sql", sql: createdAtBackfillSchema},
 }
 
 func Open(path string) (*sql.DB, error) {

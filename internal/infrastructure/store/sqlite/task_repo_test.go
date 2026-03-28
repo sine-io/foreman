@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"path/filepath"
 	"testing"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
@@ -36,44 +37,88 @@ func TestArtifactIndexRoundTrip(t *testing.T) {
 	require.Equal(t, "artifacts/tasks/task-1/assistant.txt", row.Path)
 }
 
-func TestRunRepositoryFindByTaskUsesInsertionOrder(t *testing.T) {
+func TestRunRepositoryFindByTaskUsesCreatedAtOrdering(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
 	repo := NewRunRepository(db)
 
-	require.NoError(t, repo.Save(ports.Run{
+	saveRunRow(t, db, ports.Run{
 		ID:         "run-9",
 		TaskID:     taskID,
 		RunnerKind: "codex",
-		State:      "running",
-	}))
-	require.NoError(t, repo.Save(ports.Run{
+		State:      "completed",
+	}, "2026-03-28T11:00:00Z")
+	saveRunRow(t, db, ports.Run{
 		ID:         "run-10",
 		TaskID:     taskID,
 		RunnerKind: "codex",
-		State:      "completed",
-	}))
+		State:      "running",
+	}, "2026-03-28T10:00:00Z")
 
 	row, err := repo.FindByTask(taskID)
 	require.NoError(t, err)
-	require.Equal(t, "run-10", row.ID)
+	require.Equal(t, "run-9", row.ID)
 	require.Equal(t, "completed", row.State)
 }
 
-func TestApprovalRepositoryFindLatestByTaskUsesInsertionOrder(t *testing.T) {
+func TestRunRepositoryFindByTaskUsesIDDescendingTieBreak(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewRunRepository(db)
+
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-b",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "running",
+	}, "2026-03-28T11:00:00Z")
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-a",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-28T11:00:00Z")
+
+	row, err := repo.FindByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "run-b", row.ID)
+	require.Equal(t, "running", row.State)
+}
+
+func TestApprovalRepositoryFindLatestByTaskUsesCreatedAtOrdering(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
 	repo := NewApprovalRepository(db)
 
-	require.NoError(t, repo.Save(approval.New("approval-9", taskID, "first")))
+	first := approval.New("approval-9", taskID, "first")
+	first.Status = approval.StatusApproved
+	saveApprovalRow(t, db, first, "2026-03-28T11:00:00Z")
 	second := approval.New("approval-10", taskID, "second")
-	second.Status = approval.StatusApproved
-	require.NoError(t, repo.Save(second))
+	second.Status = approval.StatusPending
+	saveApprovalRow(t, db, second, "2026-03-28T10:00:00Z")
 
 	row, err := repo.FindLatestByTask(taskID)
 	require.NoError(t, err)
-	require.Equal(t, "approval-10", row.ID)
+	require.Equal(t, "approval-9", row.ID)
 	require.Equal(t, approval.StatusApproved, row.Status)
+}
+
+func TestApprovalRepositoryFindLatestByTaskUsesIDDescendingTieBreak(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewApprovalRepository(db)
+
+	first := approval.New("approval-b", taskID, "first")
+	first.Status = approval.StatusRejected
+	saveApprovalRow(t, db, first, "2026-03-28T11:00:00Z")
+	second := approval.New("approval-a", taskID, "second")
+	second.Status = approval.StatusApproved
+	saveApprovalRow(t, db, second, "2026-03-28T11:00:00Z")
+
+	row, err := repo.FindLatestByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "approval-b", row.ID)
+	require.Equal(t, approval.StatusRejected, row.Status)
 }
 
 func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {
@@ -101,4 +146,77 @@ func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 
 	_, err := db.Exec(query, args...)
 	require.NoError(t, err)
+}
+
+func TestOpenBackfillsBlankCreatedAtForPreviouslyMigratedDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "backfill.db")
+
+	db, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`PRAGMA foreign_keys = ON`)
+	require.NoError(t, err)
+	_, err = db.Exec(initSchema)
+	require.NoError(t, err)
+
+	taskID := seedTaskGraph(t, db)
+	mustExec(t, db, `insert into runs (id, task_id, runner_kind, state) values (?, ?, ?, ?)`, "run-1", taskID, "codex", "running")
+	mustExec(t, db, `insert into approvals (id, task_id, reason, state) values (?, ?, ?, ?)`, "approval-1", taskID, "need approval", approval.StatusPending)
+	mustExec(t, db, `insert into artifacts (id, task_id, kind, path, summary) values (?, ?, ?, ?, '')`, "artifact-1", taskID, "assistant_summary", "artifacts/tasks/task-1/assistant.txt")
+
+	mustExec(t, db, `alter table runs add column created_at text not null default ''`)
+	mustExec(t, db, `alter table approvals add column created_at text not null default ''`)
+	mustExec(t, db, `alter table artifacts add column created_at text not null default ''`)
+	mustExec(t, db, `create table schema_migrations (version text primary key)`)
+	mustExec(t, db, `insert into schema_migrations(version) values (?)`, "001_init.sql")
+	mustExec(t, db, `insert into schema_migrations(version) values (?)`, "002_control_plane_hardening.sql")
+	require.NoError(t, db.Close())
+
+	db, err = Open(path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	require.Equal(t, "1970-01-01T00:00:00Z", readCreatedAt(t, db, "runs", "run-1"))
+	require.Equal(t, "1970-01-01T00:00:00Z", readCreatedAt(t, db, "approvals", "approval-1"))
+	require.Equal(t, "1970-01-01T00:00:00Z", readCreatedAt(t, db, "artifacts", "artifact-1"))
+}
+
+func saveRunRow(t *testing.T, db *sql.DB, run ports.Run, createdAt string) {
+	t.Helper()
+
+	mustExec(
+		t,
+		db,
+		`insert into runs (id, task_id, runner_kind, state, created_at) values (?, ?, ?, ?, ?)`,
+		run.ID,
+		run.TaskID,
+		run.RunnerKind,
+		run.State,
+		createdAt,
+	)
+}
+
+func saveApprovalRow(t *testing.T, db *sql.DB, record approval.Approval, createdAt string) {
+	t.Helper()
+
+	mustExec(
+		t,
+		db,
+		`insert into approvals (id, task_id, reason, state, created_at) values (?, ?, ?, ?, ?)`,
+		record.ID,
+		record.TaskID,
+		record.Reason,
+		record.Status,
+		createdAt,
+	)
+}
+
+func readCreatedAt(t *testing.T, db *sql.DB, table, id string) string {
+	t.Helper()
+
+	var createdAt string
+	err := db.QueryRow(`select created_at from `+table+` where id = ?`, id).Scan(&createdAt)
+	require.NoError(t, err)
+
+	return createdAt
 }

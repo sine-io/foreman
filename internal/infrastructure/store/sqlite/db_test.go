@@ -36,7 +36,7 @@ func TestOpenIsIdempotentAcrossRepeatedBoots(t *testing.T) {
 
 	db, err = Open(path)
 	require.NoError(t, err)
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql")
 	require.NoError(t, db.Close())
 }
 
@@ -59,7 +59,7 @@ func TestOpenUpgradesLegacyDatabaseAndRecordsMigrations(t *testing.T) {
 	requireColumn(t, db, "runs", "created_at")
 	requireColumn(t, db, "approvals", "created_at")
 	requireColumn(t, db, "artifacts", "created_at")
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql")
 }
 
 func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
@@ -93,7 +93,7 @@ func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
 	db, err := Open(path)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql")
 }
 
 func TestOpenDoesNotNeedWriteLockWhenDatabaseIsAlreadyMigrated(t *testing.T) {
