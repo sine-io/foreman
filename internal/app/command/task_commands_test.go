@@ -185,6 +185,7 @@ type fakeTaskRepo struct {
 	byID             map[string]task.Task
 	failSaveForState task.TaskState
 	failSaveCount    int
+	afterGet         func(task.Task)
 }
 
 func newFakeTaskRepo() *fakeTaskRepo {
@@ -206,6 +207,10 @@ func (f *fakeTaskRepo) Get(id string) (task.Task, error) {
 	value, ok := f.byID[id]
 	if !ok {
 		return task.Task{}, sql.ErrNoRows
+	}
+
+	if f.afterGet != nil {
+		f.afterGet(value)
 	}
 
 	return value, nil

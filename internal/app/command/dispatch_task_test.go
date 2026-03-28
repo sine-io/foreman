@@ -106,6 +106,57 @@ func TestDispatchReusesExistingPendingApprovalWhenRetried(t *testing.T) {
 	require.Equal(t, 1, approvals.saveCount)
 }
 
+func TestDispatchRunsApprovedTaskEvenWhenInitialTaskReadIsStale(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	riskyTask.State = task.TaskStateWaitingApproval
+	require.NoError(t, tasks.Save(riskyTask))
+
+	approvals := &fakeApprovalRepo{
+		byTaskID: map[string]approval.Approval{
+			"task-1": {
+				ID:     "approval-1",
+				TaskID: "task-1",
+				Reason: "git push origin main requires approval",
+				Status: approval.StatusApproved,
+			},
+		},
+	}
+	tasks.afterGet = func(value task.Task) {
+		if value.ID != "task-1" || value.State != task.TaskStateWaitingApproval {
+			return
+		}
+		updated := value
+		updated.State = task.TaskStateLeased
+		require.NoError(t, tasks.Save(updated))
+		tasks.afterGet = nil
+	}
+
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	runner := &fakeRunner{}
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+			},
+		},
+		runner,
+		approvals,
+		tx.runs,
+		tx.artifacts,
+	)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.RunState)
+	require.Equal(t, 1, runner.dispatchCount)
+	require.Equal(t, 0, approvals.saveCount)
+}
+
 func TestDispatchDoesNotHideUnexpectedApprovalSaveErrors(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
