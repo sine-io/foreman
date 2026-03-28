@@ -88,12 +88,15 @@ type RunDetailRecord struct {
 }
 
 type ApprovalQueueRow struct {
-	ApprovalID string
-	TaskID     string
-	ModuleID   string
-	Summary    string
-	Reason     string
-	State      string
+	ApprovalID      string
+	TaskID          string
+	ModuleID        string
+	Summary         string
+	Reason          string
+	State           string
+	RiskLevel       string
+	PolicyRule      string
+	RejectionReason string
 }
 
 type BoardQueryRepository interface {

@@ -193,6 +193,32 @@ func TestApprovalRepositorySaveNormalizesCallerProvidedTimestamp(t *testing.T) {
 	require.Equal(t, "2026-03-28T10:00:00.900000000Z", row.CreatedAt)
 }
 
+func TestApprovalRepositoryPersistsMetadataFields(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewApprovalRepository(db)
+
+	record := approval.New("approval-1", taskID, "policy blocked dispatch")
+	record.Status = approval.StatusRejected
+	record.RiskLevel = approval.RiskHigh
+	record.PolicyRule = "strict.git_push"
+	record.RejectionReason = "manual reviewer rejected the action"
+
+	require.NoError(t, repo.Save(record))
+
+	row, err := repo.Get("approval-1")
+	require.NoError(t, err)
+	require.Equal(t, approval.RiskHigh, row.RiskLevel)
+	require.Equal(t, "strict.git_push", row.PolicyRule)
+	require.Equal(t, "manual reviewer rejected the action", row.RejectionReason)
+
+	latest, err := repo.FindLatestByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, approval.RiskHigh, latest.RiskLevel)
+	require.Equal(t, "strict.git_push", latest.PolicyRule)
+	require.Equal(t, "manual reviewer rejected the action", latest.RejectionReason)
+}
+
 func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
@@ -274,11 +300,14 @@ func saveApprovalRow(t *testing.T, db *sql.DB, record approval.Approval, created
 	mustExec(
 		t,
 		db,
-		`insert into approvals (id, task_id, reason, state, created_at) values (?, ?, ?, ?, ?)`,
+		`insert into approvals (id, task_id, reason, state, risk_level, policy_rule, rejection_reason, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.ID,
 		record.TaskID,
 		record.Reason,
 		record.Status,
+		record.RiskLevel,
+		record.PolicyRule,
+		record.RejectionReason,
 		createdAt,
 	)
 }

@@ -17,3 +17,17 @@ func TestTaskAllowsReadyToRunningPathThroughLease(t *testing.T) {
 
 	require.True(t, task.CanTransition(TaskStateLeased))
 }
+
+func TestTaskAllowsApprovedPendingDispatchToRunningAndCompleted(t *testing.T) {
+	task := NewTask(
+		"task-1",
+		"module-1",
+		TaskTypeWrite,
+		"Resume approved dispatch",
+		"repo:project-1",
+	)
+	task.State = TaskStateApprovedPendingDispatch
+
+	require.True(t, task.CanTransition(TaskStateRunning))
+	require.True(t, task.CanTransition(TaskStateCompleted))
+}

@@ -180,6 +180,8 @@ func (h *DispatchTaskHandler) handleApprovalDispatch(taskID string, decision dom
 			}
 
 			record = domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
+			record.RiskLevel = decision.RiskLevel
+			record.PolicyRule = decision.PolicyRule
 			if err := repos.Approvals.Save(record); err != nil {
 				if !errors.Is(err, ports.ErrPendingApprovalConflict) {
 					return err

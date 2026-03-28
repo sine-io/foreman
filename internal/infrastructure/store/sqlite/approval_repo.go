@@ -35,11 +35,14 @@ func (r *ApprovalRepository) Save(a approval.Approval) error {
 	}
 
 	_, err := r.db.Exec(
-		`insert into approvals (id, task_id, reason, state, created_at) values (?, ?, ?, ?, ?)
+		`insert into approvals (id, task_id, reason, state, risk_level, policy_rule, rejection_reason, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)
 		 on conflict(id) do update set
 		   task_id = excluded.task_id,
 		   reason = excluded.reason,
 		   state = excluded.state,
+		   risk_level = excluded.risk_level,
+		   policy_rule = excluded.policy_rule,
+		   rejection_reason = excluded.rejection_reason,
 		   created_at = case
 		     when approvals.created_at = '' then excluded.created_at
 		     else approvals.created_at
@@ -48,6 +51,9 @@ func (r *ApprovalRepository) Save(a approval.Approval) error {
 		a.TaskID,
 		a.Reason,
 		a.Status,
+		a.RiskLevel,
+		a.PolicyRule,
+		a.RejectionReason,
 		createdAt,
 	)
 	if err != nil && isPendingApprovalConflict(err) {
@@ -59,35 +65,35 @@ func (r *ApprovalRepository) Save(a approval.Approval) error {
 func (r *ApprovalRepository) Get(id string) (approval.Approval, error) {
 	var a approval.Approval
 	err := r.db.QueryRow(
-		`select id, task_id, reason, state, created_at from approvals where id = ?`,
+		`select id, task_id, reason, state, risk_level, policy_rule, rejection_reason, created_at from approvals where id = ?`,
 		id,
-	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.CreatedAt)
+	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.RiskLevel, &a.PolicyRule, &a.RejectionReason, &a.CreatedAt)
 	return a, err
 }
 
 func (r *ApprovalRepository) FindPendingByTask(taskID string) (approval.Approval, error) {
 	var a approval.Approval
 	err := r.db.QueryRow(
-		`select id, task_id, reason, state, created_at
+		`select id, task_id, reason, state, risk_level, policy_rule, rejection_reason, created_at
 		 from approvals
 		 where task_id = ? and state = ?
 		 limit 1`,
 		taskID,
 		approval.StatusPending,
-	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.CreatedAt)
+	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.RiskLevel, &a.PolicyRule, &a.RejectionReason, &a.CreatedAt)
 	return a, err
 }
 
 func (r *ApprovalRepository) FindLatestByTask(taskID string) (approval.Approval, error) {
 	var a approval.Approval
 	err := r.db.QueryRow(
-		`select id, task_id, reason, state, created_at
+		`select id, task_id, reason, state, risk_level, policy_rule, rejection_reason, created_at
 		 from approvals
 		 where task_id = ?
 		 order by created_at desc, id desc
 		 limit 1`,
 		taskID,
-	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.CreatedAt)
+	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status, &a.RiskLevel, &a.PolicyRule, &a.RejectionReason, &a.CreatedAt)
 	return a, err
 }
 
