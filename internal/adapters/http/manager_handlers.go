@@ -2,7 +2,10 @@ package http
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	nethttp "net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sine-io/foreman/internal/app/manageragent"
@@ -45,7 +48,7 @@ func (h *ManagerHandlers) ManagerCommand(c *gin.Context) {
 		Priority:    req.Priority,
 	})
 	if err != nil {
-		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondManagerError(c, err)
 		return
 	}
 
@@ -61,7 +64,7 @@ func (h *ManagerHandlers) ManagerCommand(c *gin.Context) {
 func (h *ManagerHandlers) ManagerTaskStatus(c *gin.Context) {
 	view, err := h.app.TaskStatus(c.Request.Context(), c.Query("project_id"), c.Param("id"))
 	if err != nil {
-		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondManagerError(c, err)
 		return
 	}
 
@@ -84,7 +87,7 @@ func (h *ManagerHandlers) ManagerTaskStatus(c *gin.Context) {
 func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
 	view, err := h.app.BoardSnapshot(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondManagerError(c, err)
 		return
 	}
 
@@ -120,4 +123,26 @@ func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
 	}
 
 	c.JSON(nethttp.StatusOK, resp)
+}
+
+func respondManagerError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
+	case isManagerClientError(err):
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
+	default:
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func isManagerClientError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := err.Error()
+	return strings.Contains(msg, "required") ||
+		strings.Contains(msg, "unsupported") ||
+		strings.Contains(msg, "does not belong")
 }
