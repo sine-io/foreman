@@ -372,6 +372,13 @@ func newHarness() *serviceHarness {
 }
 
 func (h *serviceHarness) newService() *Service {
+	artifacts := &fakeArtifactRepo{}
+	tx := managerAgentTransactor{
+		tasks:     h.tasks,
+		runs:      h.runs,
+		approvals: h.approvals,
+		artifacts: artifacts,
+	}
 	return NewService(Dependencies{
 		Projects:      h.projects,
 		Modules:       h.modules,
@@ -382,13 +389,14 @@ func (h *serviceHarness) newService() *Service {
 		CreateModule:  command.NewCreateModuleHandler(h.projects, h.modules),
 		CreateTask:    command.NewCreateTaskHandler(h.modules, h.tasks),
 		DispatchTask: command.NewDispatchTaskHandler(
+			tx,
 			h.tasks,
 			&fakeLeaseRepo{},
 			fakePolicy{decision: h.policyDecision},
-			fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
+			&fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
 			h.approvals,
 			h.runs,
-			&fakeArtifactRepo{},
+			artifacts,
 		),
 		QueryTaskStatus:  query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
 		QueryModuleBoard: query.NewModuleBoardQuery(h.board),
@@ -397,6 +405,22 @@ func (h *serviceHarness) newService() *Service {
 			ProjectID: "project-1",
 			ModuleID:  "module-1",
 		},
+	})
+}
+
+type managerAgentTransactor struct {
+	tasks     ports.TaskRepository
+	runs      ports.RunRepository
+	approvals ports.ApprovalRepository
+	artifacts ports.ArtifactRepository
+}
+
+func (t managerAgentTransactor) WithinTransaction(ctx context.Context, fn func(context.Context, ports.TransactionRepositories) error) error {
+	return fn(ctx, ports.TransactionRepositories{
+		Tasks:     t.tasks,
+		Runs:      t.runs,
+		Approvals: t.approvals,
+		Artifacts: t.artifacts,
 	})
 }
 

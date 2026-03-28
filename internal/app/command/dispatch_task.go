@@ -1,7 +1,10 @@
 package command
 
 import (
+	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 
 	domainapproval "github.com/sine-io/foreman/internal/domain/approval"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
@@ -27,6 +30,7 @@ type DispatchTaskResult struct {
 }
 
 type DispatchTaskHandler struct {
+	Tx        ports.Transactor
 	Tasks     ports.TaskRepository
 	Leases    ports.LeaseRepository
 	Policy    dispatchPolicy
@@ -37,6 +41,7 @@ type DispatchTaskHandler struct {
 }
 
 func NewDispatchTaskHandler(
+	tx ports.Transactor,
 	tasks ports.TaskRepository,
 	leases ports.LeaseRepository,
 	policy dispatchPolicy,
@@ -46,6 +51,7 @@ func NewDispatchTaskHandler(
 	artifacts ports.ArtifactRepository,
 ) *DispatchTaskHandler {
 	return &DispatchTaskHandler{
+		Tx:        tx,
 		Tasks:     tasks,
 		Leases:    leases,
 		Policy:    policy,
@@ -69,49 +75,13 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 
 	decision := h.Policy.Evaluate(requestedAction)
 	if decision.RequiresApproval {
-		existing, err := h.Approvals.FindPendingByTask(repoTask.ID)
-		if err == nil {
-			repoTask.State = task.TaskStateWaitingApproval
-			if saveErr := h.Tasks.Save(repoTask); saveErr != nil {
-				return DispatchTaskResult{}, saveErr
-			}
-			return DispatchTaskResult{
-				TaskState:      string(repoTask.State),
-				ApprovalID:     existing.ID,
-				ApprovalReason: existing.Reason,
-			}, nil
-		}
-		if err != sql.ErrNoRows {
-			return DispatchTaskResult{}, err
-		}
+		return h.handleApprovalDispatch(cmd.TaskID, decision)
+	}
 
-		record := domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
-		if err := h.Approvals.Save(record); err != nil {
-			existing, findErr := h.Approvals.FindPendingByTask(repoTask.ID)
-			if findErr == nil {
-				repoTask.State = task.TaskStateWaitingApproval
-				if saveErr := h.Tasks.Save(repoTask); saveErr != nil {
-					return DispatchTaskResult{}, saveErr
-				}
-				return DispatchTaskResult{
-					TaskState:      string(repoTask.State),
-					ApprovalID:     existing.ID,
-					ApprovalReason: existing.Reason,
-				}, nil
-			}
-			return DispatchTaskResult{}, err
-		}
-
-		repoTask.State = task.TaskStateWaitingApproval
-		if err := h.Tasks.Save(repoTask); err != nil {
-			return DispatchTaskResult{}, err
-		}
-
-		return DispatchTaskResult{
-			TaskState:      string(repoTask.State),
-			ApprovalID:     record.ID,
-			ApprovalReason: record.Reason,
-		}, nil
+	if persistedRun, err := h.Runs.FindByTask(repoTask.ID); err == nil && isAuthoritativeRun(persistedRun) {
+		return persistedRunResult(repoTask, persistedRun), nil
+	} else if err != nil && err != sql.ErrNoRows {
+		return DispatchTaskResult{}, err
 	}
 
 	if err := h.Leases.Acquire(repoTask.ID, repoTask.WriteScope); err != nil {
@@ -124,24 +94,45 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 		WriteScope: repoTask.WriteScope,
 	})
 	if err != nil {
+		releaseErr := h.Leases.Release(repoTask.WriteScope)
+		if releaseErr != nil {
+			return DispatchTaskResult{}, errors.Join(err, releaseErr)
+		}
 		return DispatchTaskResult{}, err
 	}
 
-	if err := h.Runs.Save(run); err != nil {
-		return DispatchTaskResult{}, err
-	}
+	var out DispatchTaskResult
+	if err := h.Tx.WithinTransaction(context.Background(), func(_ context.Context, repos ports.TransactionRepositories) error {
+		if err := repos.Runs.Save(run); err != nil {
+			return err
+		}
 
-	repoTask.State = task.TaskStateRunning
-	if run.State == "completed" {
-		repoTask.State = task.TaskStateCompleted
-	}
-	if err := h.Tasks.Save(repoTask); err != nil {
-		return DispatchTaskResult{}, err
-	}
+		repoTask.State = task.TaskStateRunning
+		if run.State == "completed" {
+			repoTask.State = task.TaskStateCompleted
+		}
+		if err := repos.Tasks.Save(repoTask); err != nil {
+			return err
+		}
 
-	artifactID, err := h.Artifacts.Create(repoTask.ID, "assistant_summary", run.AssistantSummaryPath)
-	if err != nil {
-		return DispatchTaskResult{}, err
+		artifactID, err := repos.Artifacts.Create(repoTask.ID, "assistant_summary", run.AssistantSummaryPath)
+		if err != nil {
+			return err
+		}
+
+		out = DispatchTaskResult{
+			TaskState:   string(repoTask.State),
+			RunState:    run.State,
+			ArtifactIDs: []string{artifactID},
+		}
+		return nil
+	}); err != nil {
+		persistErr := fmt.Errorf("persist dispatch result: %w", err)
+		releaseErr := h.Leases.Release(repoTask.WriteScope)
+		if releaseErr != nil {
+			return DispatchTaskResult{}, errors.Join(persistErr, releaseErr)
+		}
+		return DispatchTaskResult{}, persistErr
 	}
 
 	if run.State == "completed" {
@@ -150,9 +141,68 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 		}
 	}
 
+	return out, nil
+}
+
+func (h *DispatchTaskHandler) handleApprovalDispatch(taskID string, decision domainpolicy.Decision) (DispatchTaskResult, error) {
+	var out DispatchTaskResult
+
+	err := h.Tx.WithinTransaction(context.Background(), func(_ context.Context, repos ports.TransactionRepositories) error {
+		repoTask, err := repos.Tasks.Get(taskID)
+		if err != nil {
+			return err
+		}
+
+		record, err := repos.Approvals.FindPendingByTask(taskID)
+		if err != nil {
+			if err != sql.ErrNoRows {
+				return err
+			}
+
+			record = domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
+			if err := repos.Approvals.Save(record); err != nil {
+				existing, findErr := repos.Approvals.FindPendingByTask(taskID)
+				if findErr != nil {
+					return err
+				}
+				record = existing
+			}
+		}
+
+		repoTask.State = task.TaskStateWaitingApproval
+		if err := repos.Tasks.Save(repoTask); err != nil {
+			return err
+		}
+
+		out = DispatchTaskResult{
+			TaskState:      string(repoTask.State),
+			ApprovalID:     record.ID,
+			ApprovalReason: record.Reason,
+		}
+		return nil
+	})
+	if err != nil {
+		return DispatchTaskResult{}, err
+	}
+
+	return out, nil
+}
+
+func isAuthoritativeRun(run ports.Run) bool {
+	return run.State == "running" || run.State == "completed"
+}
+
+func persistedRunResult(repoTask task.Task, run ports.Run) DispatchTaskResult {
+	taskState := string(repoTask.State)
+	switch run.State {
+	case "running":
+		taskState = string(task.TaskStateRunning)
+	case "completed":
+		taskState = string(task.TaskStateCompleted)
+	}
+
 	return DispatchTaskResult{
-		TaskState:   string(repoTask.State),
-		RunState:    run.State,
-		ArtifactIDs: []string{artifactID},
-	}, nil
+		TaskState: taskState,
+		RunState:  run.State,
+	}
 }

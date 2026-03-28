@@ -7,10 +7,14 @@ import (
 )
 
 type ProjectRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewProjectRepository(db *sql.DB) *ProjectRepository {
+	return newProjectRepository(db)
+}
+
+func newProjectRepository(db dbtx) *ProjectRepository {
 	return &ProjectRepository{db: db}
 }
 

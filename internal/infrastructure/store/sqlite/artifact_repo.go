@@ -9,10 +9,14 @@ import (
 )
 
 type ArtifactRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewArtifactRepository(db *sql.DB) *ArtifactRepository {
+	return newArtifactRepository(db)
+}
+
+func newArtifactRepository(db dbtx) *ArtifactRepository {
 	return &ArtifactRepository{db: db}
 }
 

@@ -8,10 +8,14 @@ import (
 )
 
 type RunRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewRunRepository(db *sql.DB) *RunRepository {
+	return newRunRepository(db)
+}
+
+func newRunRepository(db dbtx) *RunRepository {
 	return &RunRepository{db: db}
 }
 

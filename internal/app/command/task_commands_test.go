@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/sine-io/foreman/internal/domain/approval"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	"github.com/sine-io/foreman/internal/domain/task"
+	"github.com/sine-io/foreman/internal/ports"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,7 +59,8 @@ func TestApproveTaskMarksApprovalResolved(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	require.NoError(t, tasks.Save(task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")))
 
-	handler := NewApproveTaskHandler(approvals, tasks)
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewApproveTaskHandler(tx, approvals, tasks)
 	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
 	require.NoError(t, err)
 
@@ -68,6 +71,33 @@ func TestApproveTaskMarksApprovalResolved(t *testing.T) {
 	savedTask, err := tasks.Get("task-1")
 	require.NoError(t, err)
 	require.Equal(t, task.TaskStateLeased, savedTask.State)
+}
+
+func TestApproveTaskTransitionsWithinSingleTransaction(t *testing.T) {
+	approvals := &fakeApprovalRepo{
+		byTaskID: map[string]approval.Approval{
+			"task-1": approval.New("approval-1", "task-1", "git push origin main"),
+		},
+	}
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")
+	require.NoError(t, tasks.Save(repoTask))
+	tasks.failSaveForState = task.TaskStateLeased
+	tasks.failSaveCount = 1
+
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewApproveTaskHandler(tx, approvals, tasks)
+
+	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
+	require.Error(t, err)
+
+	pending, err := approvals.FindPendingByTask("task-1")
+	require.NoError(t, err)
+	require.Equal(t, approval.StatusPending, pending.Status)
+
+	savedTask, err := tasks.Get("task-1")
+	require.NoError(t, err)
+	require.Equal(t, task.TaskStateReady, savedTask.State)
 }
 
 func TestRetryTaskMovesFailedTaskToReady(t *testing.T) {
@@ -113,7 +143,9 @@ func TestReprioritizeTaskUpdatesPriority(t *testing.T) {
 }
 
 type fakeTaskRepo struct {
-	byID map[string]task.Task
+	byID             map[string]task.Task
+	failSaveForState task.TaskState
+	failSaveCount    int
 }
 
 func newFakeTaskRepo() *fakeTaskRepo {
@@ -123,6 +155,10 @@ func newFakeTaskRepo() *fakeTaskRepo {
 }
 
 func (f *fakeTaskRepo) Save(value task.Task) error {
+	if f.failSaveCount > 0 && value.State == f.failSaveForState {
+		f.failSaveCount--
+		return errors.New("save failed")
+	}
 	f.byID[value.ID] = value
 	return nil
 }
@@ -134,6 +170,31 @@ func (f *fakeTaskRepo) Get(id string) (task.Task, error) {
 	}
 
 	return value, nil
+}
+
+func (f *fakeTaskRepo) snapshot() fakeTaskRepoSnapshot {
+	copyByID := make(map[string]task.Task, len(f.byID))
+	for id, value := range f.byID {
+		copyByID[id] = value
+	}
+
+	return fakeTaskRepoSnapshot{
+		byID:             copyByID,
+		failSaveForState: f.failSaveForState,
+		failSaveCount:    f.failSaveCount,
+	}
+}
+
+func (f *fakeTaskRepo) restore(snapshot fakeTaskRepoSnapshot) {
+	f.byID = snapshot.byID
+	f.failSaveForState = snapshot.failSaveForState
+	f.failSaveCount = snapshot.failSaveCount
+}
+
+type fakeTaskRepoSnapshot struct {
+	byID             map[string]task.Task
+	failSaveForState task.TaskState
+	failSaveCount    int
 }
 
 type fakeModuleRepo struct {
@@ -203,6 +264,41 @@ func (f *fakeApprovalRepo) FindPendingByTask(taskID string) (approval.Approval, 
 	return value, nil
 }
 
+func (f *fakeApprovalRepo) pendingCount() int {
+	count := 0
+	for _, value := range f.byTaskID {
+		if value.Status == approval.StatusPending {
+			count++
+		}
+	}
+	return count
+}
+
+func (f *fakeApprovalRepo) snapshot() fakeApprovalRepoSnapshot {
+	copyByTaskID := make(map[string]approval.Approval, len(f.byTaskID))
+	for taskID, value := range f.byTaskID {
+		copyByTaskID[taskID] = value
+	}
+
+	return fakeApprovalRepoSnapshot{
+		byTaskID:  copyByTaskID,
+		saved:     f.saved,
+		saveCount: f.saveCount,
+	}
+}
+
+func (f *fakeApprovalRepo) restore(snapshot fakeApprovalRepoSnapshot) {
+	f.byTaskID = snapshot.byTaskID
+	f.saved = snapshot.saved
+	f.saveCount = snapshot.saveCount
+}
+
+type fakeApprovalRepoSnapshot struct {
+	byTaskID  map[string]approval.Approval
+	saved     approval.Approval
+	saveCount int
+}
+
 func (f *fakeApprovalRepo) FindLatestByTask(taskID string) (approval.Approval, error) {
 	value, ok := f.byTaskID[taskID]
 	if !ok {
@@ -210,4 +306,52 @@ func (f *fakeApprovalRepo) FindLatestByTask(taskID string) (approval.Approval, e
 	}
 
 	return value, nil
+}
+
+type fakeTransactor struct {
+	tasks           *fakeTaskRepo
+	approvals       *fakeApprovalRepo
+	runs            *fakeRunRepo
+	artifacts       *fakeArtifactRepo
+	failCommitCount int
+}
+
+func newFakeTransactor(tasks *fakeTaskRepo, approvals *fakeApprovalRepo, runs *fakeRunRepo, artifacts *fakeArtifactRepo) *fakeTransactor {
+	return &fakeTransactor{
+		tasks:     tasks,
+		approvals: approvals,
+		runs:      runs,
+		artifacts: artifacts,
+	}
+}
+
+func (f *fakeTransactor) WithinTransaction(ctx context.Context, fn func(context.Context, ports.TransactionRepositories) error) error {
+	tasksSnapshot := f.tasks.snapshot()
+	approvalsSnapshot := f.approvals.snapshot()
+	runsSnapshot := f.runs.snapshot()
+	artifactsSnapshot := f.artifacts.snapshot()
+
+	err := fn(ctx, ports.TransactionRepositories{
+		Tasks:     f.tasks,
+		Runs:      f.runs,
+		Approvals: f.approvals,
+		Artifacts: f.artifacts,
+	})
+	if err != nil {
+		f.tasks.restore(tasksSnapshot)
+		f.approvals.restore(approvalsSnapshot)
+		f.runs.restore(runsSnapshot)
+		f.artifacts.restore(artifactsSnapshot)
+		return err
+	}
+	if f.failCommitCount > 0 {
+		f.failCommitCount--
+		f.tasks.restore(tasksSnapshot)
+		f.approvals.restore(approvalsSnapshot)
+		f.runs.restore(runsSnapshot)
+		f.artifacts.restore(artifactsSnapshot)
+		return errors.New("commit failed")
+	}
+
+	return nil
 }

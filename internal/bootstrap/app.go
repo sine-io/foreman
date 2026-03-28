@@ -82,6 +82,7 @@ func BuildApp(cfg Config) (App, error) {
 	approvals := sqlite.NewApprovalRepository(db)
 	leases := sqlite.NewLeaseRepository(db)
 	board := sqlite.NewBoardQueryRepository(db)
+	transactor := sqlite.NewTransactor(db)
 
 	instance := &app{
 		Config:        cfg,
@@ -98,12 +99,13 @@ func BuildApp(cfg Config) (App, error) {
 		createProject: command.NewCreateProjectHandler(projects),
 		createModule:  command.NewCreateModuleHandler(projects, modules),
 		createTask:    command.NewCreateTaskHandler(modules, tasks),
-		approveTask:   command.NewApproveTaskHandler(approvals, tasks),
+		approveTask:   command.NewApproveTaskHandler(transactor, approvals, tasks),
 		retryTask:     command.NewRetryTaskHandler(tasks),
 		cancelTask:    command.NewCancelTaskHandler(tasks),
 		reprioritize:  command.NewReprioritizeTaskHandler(tasks),
 	}
 	instance.dispatchTask = command.NewDispatchTaskHandler(
+		transactor,
 		tasks,
 		leases,
 		strictPolicy{},

@@ -8,10 +8,14 @@ import (
 )
 
 type ApprovalRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewApprovalRepository(db *sql.DB) *ApprovalRepository {
+	return newApprovalRepository(db)
+}
+
+func newApprovalRepository(db dbtx) *ApprovalRepository {
 	return &ApprovalRepository{db: db}
 }
 

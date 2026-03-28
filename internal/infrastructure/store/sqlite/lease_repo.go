@@ -7,10 +7,14 @@ import (
 )
 
 type LeaseRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewLeaseRepository(db *sql.DB) *LeaseRepository {
+	return newLeaseRepository(db)
+}
+
+func newLeaseRepository(db dbtx) *LeaseRepository {
 	return &LeaseRepository{db: db}
 }
 
