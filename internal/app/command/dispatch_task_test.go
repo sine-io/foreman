@@ -309,6 +309,42 @@ func TestDispatchDoesNotReinvokeRunnerWhenTaskAlreadyHasPersistedRun(t *testing.
 	require.Zero(t, leases.acquireCount)
 }
 
+func TestDispatchDoesNotReleaseAnotherTasksActiveLeaseOnCompletedRunRetry(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	completedTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
+	completedTask.State = task.TaskStateCompleted
+	require.NoError(t, tasks.Save(completedTask))
+
+	runs := &fakeRunRepo{
+		saved: ports.Run{
+			ID:     "run-1",
+			TaskID: "task-1",
+			State:  "completed",
+		},
+	}
+	leases := &fakeLeaseRepo{
+		activeByScope: map[string]string{
+			"repo:project-1": "task-2",
+		},
+	}
+	tx := newFakeTransactor(tasks, &fakeApprovalRepo{}, runs, &fakeArtifactRepo{})
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		leases,
+		fakePolicy{decision: domainpolicy.Decision{}},
+		&fakeRunner{},
+		tx.approvals,
+		runs,
+		tx.artifacts,
+	)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.RunState)
+	require.Equal(t, "task-2", leases.activeByScope["repo:project-1"])
+}
+
 func TestDispatchReturnsApprovalLookupErrorAfterPendingConflict(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
@@ -337,6 +373,44 @@ func TestDispatchReturnsApprovalLookupErrorAfterPendingConflict(t *testing.T) {
 
 	_, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
 	require.EqualError(t, err, "lookup failed")
+}
+
+func TestDispatchPreservesConcurrentTaskMetadataUpdates(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
+	repoTask.Priority = 10
+	require.NoError(t, tasks.Save(repoTask))
+
+	runner := &fakeRunner{
+		onDispatch: func() {
+			current, err := tasks.Get("task-1")
+			require.NoError(t, err)
+			current.Summary = "Updated summary"
+			current.Priority = 42
+			require.NoError(t, tasks.Save(current))
+		},
+	}
+	tx := newFakeTransactor(tasks, &fakeApprovalRepo{}, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{decision: domainpolicy.Decision{}},
+		runner,
+		tx.approvals,
+		tx.runs,
+		tx.artifacts,
+	)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.RunState)
+
+	savedTask, err := tasks.Get("task-1")
+	require.NoError(t, err)
+	require.Equal(t, "Updated summary", savedTask.Summary)
+	require.Equal(t, 42, savedTask.Priority)
+	require.Equal(t, task.TaskStateCompleted, savedTask.State)
 }
 
 func TestDispatchDoesNotReinvokeRunnerWhenRunAppearsAfterLeaseAcquire(t *testing.T) {
@@ -383,21 +457,32 @@ type fakeLeaseRepo struct {
 	releaseCount     int
 	onAcquire        func()
 	releaseErrs      []error
+	activeByScope    map[string]string
 }
 
 func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
 	f.taskID = taskID
 	f.scopeKey = scopeKey
 	f.acquireCount++
+	if f.activeByScope == nil {
+		f.activeByScope = map[string]string{}
+	}
+	f.activeByScope[scopeKey] = taskID
 	if f.onAcquire != nil {
 		f.onAcquire()
 	}
 	return nil
 }
 
-func (f *fakeLeaseRepo) Release(scopeKey string) error {
+func (f *fakeLeaseRepo) Release(taskID, scopeKey string) error {
 	f.releasedScopeKey = scopeKey
 	f.releaseCount++
+	if f.activeByScope != nil {
+		activeTaskID, ok := f.activeByScope[scopeKey]
+		if ok && activeTaskID == taskID {
+			delete(f.activeByScope, scopeKey)
+		}
+	}
 	if len(f.releaseErrs) > 0 {
 		err := f.releaseErrs[0]
 		f.releaseErrs = f.releaseErrs[1:]
@@ -417,10 +502,14 @@ func (f fakePolicy) Evaluate(action string) domainpolicy.Decision {
 type fakeRunner struct {
 	state         string
 	dispatchCount int
+	onDispatch    func()
 }
 
 func (f *fakeRunner) Dispatch(req ports.RunRequest) (ports.Run, error) {
 	f.dispatchCount++
+	if f.onDispatch != nil {
+		f.onDispatch()
+	}
 	state := f.state
 	if state == "" {
 		state = "completed"

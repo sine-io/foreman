@@ -63,7 +63,7 @@ type ApprovalRepository interface {
 
 type LeaseRepository interface {
 	Acquire(taskID, scopeKey string) error
-	Release(scopeKey string) error
+	Release(taskID, scopeKey string) error
 }
 
 type ModuleBoardRow struct {

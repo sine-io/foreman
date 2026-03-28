@@ -28,9 +28,10 @@ func (r *LeaseRepository) Acquire(taskID, scopeKey string) error {
 	return err
 }
 
-func (r *LeaseRepository) Release(scopeKey string) error {
+func (r *LeaseRepository) Release(taskID, scopeKey string) error {
 	_, err := r.db.Exec(
-		`update leases set state = 'released' where scope_key = ? and state = 'active'`,
+		`update leases set state = 'released' where task_id = ? and scope_key = ? and state = 'active'`,
+		taskID,
 		scopeKey,
 	)
 	return err
