@@ -29,6 +29,13 @@ func NewRouter(app App) *gin.Engine {
 	router.POST("/board/tasks/:id/reprioritize", handlers.ReprioritizeTask)
 	router.POST("/gateways/openclaw/command", handlers.OpenClawCommand)
 
+	if managerApp, ok := app.(ManagerApp); ok {
+		managerHandlers := NewManagerHandlers(managerApp)
+		router.POST("/api/manager/commands", managerHandlers.ManagerCommand)
+		router.GET("/api/manager/tasks/:id", managerHandlers.ManagerTaskStatus)
+		router.GET("/api/manager/projects/:id/board", managerHandlers.ManagerBoardSnapshot)
+	}
+
 	return router
 }
 
