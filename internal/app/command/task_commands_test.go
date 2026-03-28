@@ -185,7 +185,16 @@ func TestApproveTaskReturnsLatestApprovalLookupError(t *testing.T) {
 	require.NoError(t, tasks.Save(repoTask))
 
 	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
-	handler := NewApproveTaskHandler(tx, approvals, tasks)
+	handler := NewApproveTaskHandler(tx, approvals, tasks, NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{decision: domainpolicy.Decision{}},
+		&fakeRunner{},
+		approvals,
+		tx.runs,
+		tx.artifacts,
+	))
 
 	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
 	require.EqualError(t, err, "latest lookup failed")
