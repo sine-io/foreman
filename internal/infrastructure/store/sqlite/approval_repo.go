@@ -48,7 +48,7 @@ func (r *ApprovalRepository) FindPendingByTask(taskID string) (approval.Approval
 func (r *ApprovalRepository) FindLatestByTask(taskID string) (approval.Approval, error) {
 	var a approval.Approval
 	err := r.db.QueryRow(
-		`select id, task_id, reason, state from approvals where task_id = ? order by id desc limit 1`,
+		`select id, task_id, reason, state from approvals where task_id = ? order by rowid desc limit 1`,
 		taskID,
 	).Scan(&a.ID, &a.TaskID, &a.Reason, &a.Status)
 	return a, err

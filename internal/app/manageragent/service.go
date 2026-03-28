@@ -66,7 +66,9 @@ func NewService(deps Dependencies) *Service {
 }
 
 func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
-	_ = ctx
+	if err := ctxErr(ctx); err != nil {
+		return Response{}, err
+	}
 
 	switch req.Kind {
 	case "create_project":
@@ -76,6 +78,9 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 			RepoRoot: firstNonEmpty(req.RepoRoot, s.Defaults.RepoRoot),
 		})
 		if err != nil {
+			return Response{}, err
+		}
+		if err := ctxErr(ctx); err != nil {
 			return Response{}, err
 		}
 
@@ -97,6 +102,9 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 			Description: req.Description,
 		})
 		if err != nil {
+			return Response{}, err
+		}
+		if err := ctxErr(ctx); err != nil {
 			return Response{}, err
 		}
 
@@ -127,6 +135,9 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
+		if err := ctxErr(ctx); err != nil {
+			return Response{}, err
+		}
 
 		return s.dispatchResponse(taskDTO.ID, projectID, moduleID)
 	case "dispatch_task":
@@ -155,7 +166,9 @@ func (s *Service) Handle(ctx context.Context, req Request) (Response, error) {
 }
 
 func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (TaskStatusView, error) {
-	_ = ctx
+	if err := ctxErr(ctx); err != nil {
+		return TaskStatusView{}, err
+	}
 
 	resolvedProjectID, err := s.resolveProjectID(projectID)
 	if err != nil {
@@ -208,7 +221,9 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 }
 
 func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSnapshotView, error) {
-	_ = ctx
+	if err := ctxErr(ctx); err != nil {
+		return BoardSnapshotView{}, err
+	}
 
 	resolvedProjectID, err := s.resolveProjectID(projectID)
 	if err != nil {
@@ -357,4 +372,11 @@ func responseKind(result command.DispatchTaskResult) string {
 		return "completion"
 	}
 	return "in_progress"
+}
+
+func ctxErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
 }

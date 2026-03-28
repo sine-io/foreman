@@ -38,7 +38,7 @@ func (r *RunRepository) Get(id string) (ports.Run, error) {
 func (r *RunRepository) FindByTask(taskID string) (ports.Run, error) {
 	var run ports.Run
 	err := r.db.QueryRow(
-		`select id, task_id, runner_kind, state from runs where task_id = ? order by id desc limit 1`,
+		`select id, task_id, runner_kind, state from runs where task_id = ? order by rowid desc limit 1`,
 		taskID,
 	).Scan(&run.ID, &run.TaskID, &run.RunnerKind, &run.State)
 	return run, err

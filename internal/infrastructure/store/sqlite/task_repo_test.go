@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/sine-io/foreman/internal/domain/approval"
+	"github.com/sine-io/foreman/internal/ports"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +34,46 @@ func TestArtifactIndexRoundTrip(t *testing.T) {
 	require.Equal(t, "assistant_summary", row.Kind)
 	require.Equal(t, taskID, row.TaskID)
 	require.Equal(t, "artifacts/tasks/task-1/assistant.txt", row.Path)
+}
+
+func TestRunRepositoryFindByTaskUsesInsertionOrder(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewRunRepository(db)
+
+	require.NoError(t, repo.Save(ports.Run{
+		ID:         "run-9",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "running",
+	}))
+	require.NoError(t, repo.Save(ports.Run{
+		ID:         "run-10",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}))
+
+	row, err := repo.FindByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "run-10", row.ID)
+	require.Equal(t, "completed", row.State)
+}
+
+func TestApprovalRepositoryFindLatestByTaskUsesInsertionOrder(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewApprovalRepository(db)
+
+	require.NoError(t, repo.Save(approval.New("approval-9", taskID, "first")))
+	second := approval.New("approval-10", taskID, "second")
+	second.Status = approval.StatusApproved
+	require.NoError(t, repo.Save(second))
+
+	row, err := repo.FindLatestByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "approval-10", row.ID)
+	require.Equal(t, approval.StatusApproved, row.Status)
 }
 
 func seedTaskGraph(t *testing.T, db *sql.DB) string {
