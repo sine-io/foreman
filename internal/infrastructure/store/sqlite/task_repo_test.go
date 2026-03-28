@@ -76,6 +76,16 @@ func TestApprovalRepositoryFindLatestByTaskUsesInsertionOrder(t *testing.T) {
 	require.Equal(t, approval.StatusApproved, row.Status)
 }
 
+func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewApprovalRepository(db)
+
+	require.NoError(t, repo.Save(approval.New("approval-1", taskID, "first")))
+	err := repo.Save(approval.New("approval-2", taskID, "second"))
+	require.Error(t, err)
+}
+
 func seedTaskGraph(t *testing.T, db *sql.DB) string {
 	t.Helper()
 

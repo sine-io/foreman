@@ -36,6 +36,8 @@ create table if not exists approvals (
   state text not null
 );
 
+create unique index if not exists approvals_pending_task_idx on approvals(task_id) where state = 'pending';
+
 create table if not exists artifacts (
   id text primary key,
   task_id text not null references tasks(id),

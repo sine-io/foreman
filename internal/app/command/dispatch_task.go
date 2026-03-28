@@ -87,6 +87,18 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 
 		record := domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
 		if err := h.Approvals.Save(record); err != nil {
+			existing, findErr := h.Approvals.FindPendingByTask(repoTask.ID)
+			if findErr == nil {
+				repoTask.State = task.TaskStateWaitingApproval
+				if saveErr := h.Tasks.Save(repoTask); saveErr != nil {
+					return DispatchTaskResult{}, saveErr
+				}
+				return DispatchTaskResult{
+					TaskState:      string(repoTask.State),
+					ApprovalID:     existing.ID,
+					ApprovalReason: existing.Reason,
+				}, nil
+			}
 			return DispatchTaskResult{}, err
 		}
 
