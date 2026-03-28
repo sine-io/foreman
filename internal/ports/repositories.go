@@ -88,12 +88,42 @@ type RunDetailRecord struct {
 }
 
 type ApprovalQueueRow struct {
+	ApprovalID      string
+	TaskID          string
+	ModuleID        string
+	Summary         string
+	Reason          string
+	State           string
+	RiskLevel       string
+	PolicyRule      string
+	RejectionReason string
+}
+
+type ApprovalWorkbenchQueueRow struct {
 	ApprovalID string
 	TaskID     string
-	ModuleID   string
 	Summary    string
-	Reason     string
-	State      string
+	RiskLevel  string
+	Priority   int
+	CreatedAt  string
+}
+
+type ApprovalWorkbenchDetailRow struct {
+	ApprovalID       string
+	TaskID           string
+	Summary          string
+	Reason           string
+	ApprovalState    string
+	RiskLevel        string
+	PolicyRule       string
+	RejectionReason  string
+	Priority         int
+	CreatedAt        string
+	TaskState        string
+	RunID            string
+	RunState         string
+	AssistantSummary string
+	Artifacts        []ArtifactRecord
 }
 
 type BoardQueryRepository interface {
@@ -101,4 +131,6 @@ type BoardQueryRepository interface {
 	ListTasks(projectID string) ([]TaskBoardRow, error)
 	GetRunDetail(runID string) (RunDetailRecord, error)
 	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
+	ListApprovalWorkbenchQueue(projectID string) ([]ApprovalWorkbenchQueueRow, error)
+	GetApprovalWorkbenchDetail(approvalID string) (ApprovalWorkbenchDetailRow, error)
 }

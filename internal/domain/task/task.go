@@ -19,6 +19,7 @@ const (
 	TaskStateLeased          TaskState = "leased"
 	TaskStateRunning         TaskState = "running"
 	TaskStateWaitingApproval TaskState = "waiting_approval"
+	TaskStateApprovedPendingDispatch TaskState = "approved_pending_dispatch"
 	TaskStateCompleted       TaskState = "completed"
 	TaskStateFailed          TaskState = "failed"
 	TaskStateCanceled        TaskState = "canceled"
@@ -55,7 +56,9 @@ func (t Task) CanTransition(next TaskState) bool {
 	case TaskStateRunning:
 		return next == TaskStateWaitingApproval || next == TaskStateCompleted || next == TaskStateFailed || next == TaskStateCanceled
 	case TaskStateWaitingApproval:
-		return next == TaskStateLeased || next == TaskStateCanceled
+		return next == TaskStateLeased || next == TaskStateApprovedPendingDispatch || next == TaskStateCanceled
+	case TaskStateApprovedPendingDispatch:
+		return next == TaskStateRunning || next == TaskStateCompleted || next == TaskStateFailed || next == TaskStateCanceled
 	default:
 		return false
 	}

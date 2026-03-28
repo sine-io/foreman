@@ -24,6 +24,10 @@ func TestOpenAppliesAllMigrationsInOrder(t *testing.T) {
 
 	requireColumn(t, db, "runs", "created_at")
 	requireColumn(t, db, "approvals", "created_at")
+	requireColumn(t, db, "approvals", "risk_level")
+	requireColumnDefault(t, db, "approvals", "risk_level", "'medium'")
+	requireColumn(t, db, "approvals", "policy_rule")
+	requireColumn(t, db, "approvals", "rejection_reason")
 	requireColumn(t, db, "artifacts", "created_at")
 }
 
@@ -36,7 +40,7 @@ func TestOpenIsIdempotentAcrossRepeatedBoots(t *testing.T) {
 
 	db, err = Open(path)
 	require.NoError(t, err)
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql")
 	require.NoError(t, db.Close())
 }
 
@@ -58,8 +62,11 @@ func TestOpenUpgradesLegacyDatabaseAndRecordsMigrations(t *testing.T) {
 
 	requireColumn(t, db, "runs", "created_at")
 	requireColumn(t, db, "approvals", "created_at")
+	requireColumn(t, db, "approvals", "risk_level")
+	requireColumn(t, db, "approvals", "policy_rule")
+	requireColumn(t, db, "approvals", "rejection_reason")
 	requireColumn(t, db, "artifacts", "created_at")
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql")
 }
 
 func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
@@ -93,7 +100,7 @@ func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
 	db, err := Open(path)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql")
 }
 
 func TestOpenDoesNotNeedWriteLockWhenDatabaseIsAlreadyMigrated(t *testing.T) {
@@ -166,6 +173,37 @@ func requireColumn(t *testing.T, db *sql.DB, table, column string) {
 		require.NoError(t, err)
 		if name == column {
 			require.NoError(t, rows.Err())
+			return
+		}
+	}
+
+	require.NoError(t, rows.Err())
+	t.Fatalf("column %q not found in table %q", column, table)
+}
+
+func requireColumnDefault(t *testing.T, db *sql.DB, table, column, expected string) {
+	t.Helper()
+
+	rows, err := db.Query(`pragma table_info(` + table + `)`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var (
+		cid        int
+		name       string
+		dataType   string
+		notNull    int
+		defaultVal sql.NullString
+		pk         int
+	)
+
+	for rows.Next() {
+		err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &pk)
+		require.NoError(t, err)
+		if name == column {
+			require.NoError(t, rows.Err())
+			require.True(t, defaultVal.Valid)
+			require.Equal(t, expected, defaultVal.String)
 			return
 		}
 	}

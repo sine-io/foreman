@@ -1,12 +1,9 @@
 package command
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 
-	"github.com/sine-io/foreman/internal/domain/approval"
-	"github.com/sine-io/foreman/internal/domain/task"
 	"github.com/sine-io/foreman/internal/ports"
 )
 
@@ -20,51 +17,43 @@ type CreateApprovalHandler struct {
 }
 
 type ApproveTaskHandler struct {
-	Tx        ports.Transactor
 	Approvals ports.ApprovalRepository
-	Tasks     ports.TaskRepository
+	Delegate  *ApproveApprovalHandler
 }
 
-func NewApproveTaskHandler(tx ports.Transactor, approvals ports.ApprovalRepository, tasks ports.TaskRepository) *ApproveTaskHandler {
-	return &ApproveTaskHandler{
-		Tx:        tx,
+func NewApproveTaskHandler(
+	tx ports.Transactor,
+	approvals ports.ApprovalRepository,
+	tasks ports.TaskRepository,
+	dispatch ...*DispatchTaskHandler,
+) *ApproveTaskHandler {
+	handler := &ApproveTaskHandler{
 		Approvals: approvals,
-		Tasks:     tasks,
 	}
+	if len(dispatch) > 0 && dispatch[0] != nil {
+		handler.Delegate = NewApproveApprovalHandler(tx, approvals, tasks, dispatch[0])
+	}
+	return handler
 }
 
 func (h *ApproveTaskHandler) Handle(cmd ApproveTaskCommand) error {
-	return h.Tx.WithinTransaction(context.Background(), func(_ context.Context, repos ports.TransactionRepositories) error {
-		record, err := repos.Approvals.FindPendingByTask(cmd.TaskID)
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			latest, latestErr := repos.Approvals.FindLatestByTask(cmd.TaskID)
-			if latestErr != nil {
-				return latestErr
-			}
-			repoTask, taskErr := repos.Tasks.Get(cmd.TaskID)
-			if taskErr != nil {
-				return taskErr
-			}
-			if latest.Status == approval.StatusApproved && repoTask.State != task.TaskStateWaitingApproval {
-				return nil
-			}
+	if h.Delegate == nil {
+		return errors.New("approve task handler requires approval delegate")
+	}
+
+	record, err := h.Approvals.FindPendingByTask(cmd.TaskID)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-
-		record.Status = approval.StatusApproved
-		if err := repos.Approvals.Save(record); err != nil {
-			return err
+		latest, latestErr := h.Approvals.FindLatestByTask(cmd.TaskID)
+		if latestErr != nil {
+			return latestErr
 		}
+		_, actionErr := h.Delegate.Handle(ApproveApprovalCommand{ApprovalID: latest.ID})
+		return actionErr
+	}
 
-		repoTask, err := repos.Tasks.Get(cmd.TaskID)
-		if err != nil {
-			return err
-		}
-
-		repoTask.State = task.TaskStateLeased
-		return repos.Tasks.Save(repoTask)
-	})
+	_, err = h.Delegate.Handle(ApproveApprovalCommand{ApprovalID: record.ID})
+	return err
 }

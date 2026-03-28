@@ -75,3 +75,11 @@ func (f fakeBoardReadRepo) GetRunDetail(runID string) (ports.RunDetailRecord, er
 func (f fakeBoardReadRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return f.approvals, nil
 }
+
+func (f fakeBoardReadRepo) ListApprovalWorkbenchQueue(projectID string) ([]ports.ApprovalWorkbenchQueueRow, error) {
+	return nil, nil
+}
+
+func (f fakeBoardReadRepo) GetApprovalWorkbenchDetail(approvalID string) (ports.ApprovalWorkbenchDetailRow, error) {
+	return ports.ApprovalWorkbenchDetailRow{}, nil
+}

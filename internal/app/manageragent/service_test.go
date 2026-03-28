@@ -404,6 +404,7 @@ func newHarness() *serviceHarness {
 		modules:   harness.modules,
 		tasks:     harness.tasks,
 		approvals: harness.approvals,
+		runs:      harness.runs,
 	}
 
 	return harness
@@ -418,11 +419,36 @@ func (h *serviceHarness) newService() *Service {
 		artifacts: artifacts,
 	}
 	return NewService(Dependencies{
-		Projects:      h.projects,
-		Modules:       h.modules,
-		Tasks:         h.tasks,
-		Runs:          h.runs,
-		Approvals:     h.approvals,
+		Projects:  h.projects,
+		Modules:   h.modules,
+		Tasks:     h.tasks,
+		Runs:      h.runs,
+		Approvals: h.approvals,
+		ApproveApprovalHandler: command.NewApproveApprovalHandler(tx, h.approvals, h.tasks, command.NewDispatchTaskHandler(
+			tx,
+			h.tasks,
+			&fakeLeaseRepo{},
+			fakePolicy{decision: h.policyDecision},
+			&fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
+			h.approvals,
+			h.runs,
+			artifacts,
+		)),
+		RejectApprovalHandler: command.NewRejectApprovalHandler(tx, h.approvals, h.tasks),
+		RetryApprovalHandler: command.NewRetryApprovalDispatchHandler(
+			h.approvals,
+			h.tasks,
+			command.NewDispatchTaskHandler(
+				tx,
+				h.tasks,
+				&fakeLeaseRepo{},
+				fakePolicy{decision: h.policyDecision},
+				&fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
+				h.approvals,
+				h.runs,
+				artifacts,
+			),
+		),
 		CreateProject: command.NewCreateProjectHandler(h.projects),
 		CreateModule:  command.NewCreateModuleHandler(h.projects, h.modules),
 		CreateTask:    command.NewCreateTaskHandler(h.modules, h.tasks),
@@ -436,9 +462,11 @@ func (h *serviceHarness) newService() *Service {
 			h.runs,
 			artifacts,
 		),
-		QueryTaskStatus:  query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
-		QueryModuleBoard: query.NewModuleBoardQuery(h.board),
-		QueryTaskBoard:   query.NewTaskBoardQuery(h.board),
+		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
+		QueryModuleBoard:             query.NewModuleBoardQuery(h.board),
+		QueryTaskBoard:               query.NewTaskBoardQuery(h.board),
+		QueryApprovalWorkbenchQueue:  query.NewApprovalWorkbenchQueueQuery(h.board),
+		QueryApprovalWorkbenchDetail: query.NewApprovalWorkbenchDetailQuery(h.board),
 		Defaults: Defaults{
 			ProjectID: "project-1",
 			ModuleID:  "module-1",
@@ -681,6 +709,7 @@ type fakeBoardQueryRepo struct {
 	modules   *fakeModuleRepo
 	tasks     *fakeTaskRepo
 	approvals *fakeApprovalRepo
+	runs      *fakeRunRepo
 }
 
 func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -728,4 +757,63 @@ func (f *fakeBoardQueryRepo) GetRunDetail(runID string) (ports.RunDetailRecord, 
 
 func (f *fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return nil, nil
+}
+
+func (f *fakeBoardQueryRepo) ListApprovalWorkbenchQueue(projectID string) ([]ports.ApprovalWorkbenchQueueRow, error) {
+	rows := make([]ports.ApprovalWorkbenchQueueRow, 0, len(f.approvals.byTaskID))
+	for _, value := range f.approvals.byTaskID {
+		if value.Status != approval.StatusPending {
+			continue
+		}
+
+		taskValue, err := f.tasks.Get(value.TaskID)
+		if err != nil {
+			continue
+		}
+		module, err := f.modules.Get(taskValue.ModuleID)
+		if err != nil || module.ProjectID != projectID {
+			continue
+		}
+
+		rows = append(rows, ports.ApprovalWorkbenchQueueRow{
+			ApprovalID: value.ID,
+			TaskID:     value.TaskID,
+			Summary:    taskValue.Summary,
+			RiskLevel:  string(value.RiskLevel),
+			Priority:   taskValue.Priority,
+			CreatedAt:  value.CreatedAt,
+		})
+	}
+
+	return rows, nil
+}
+
+func (f *fakeBoardQueryRepo) GetApprovalWorkbenchDetail(approvalID string) (ports.ApprovalWorkbenchDetailRow, error) {
+	for _, approvalValue := range f.approvals.byTaskID {
+		if approvalValue.ID != approvalID {
+			continue
+		}
+		taskValue, err := f.tasks.Get(approvalValue.TaskID)
+		if err != nil {
+			return ports.ApprovalWorkbenchDetailRow{}, err
+		}
+		runValue, _ := f.runs.FindByTask(approvalValue.TaskID)
+		return ports.ApprovalWorkbenchDetailRow{
+			ApprovalID:      approvalValue.ID,
+			TaskID:          approvalValue.TaskID,
+			Summary:         taskValue.Summary,
+			Reason:          approvalValue.Reason,
+			ApprovalState:   string(approvalValue.Status),
+			RiskLevel:       string(approvalValue.RiskLevel),
+			PolicyRule:      approvalValue.PolicyRule,
+			RejectionReason: approvalValue.RejectionReason,
+			Priority:        taskValue.Priority,
+			CreatedAt:       approvalValue.CreatedAt,
+			TaskState:       string(taskValue.State),
+			RunID:           runValue.ID,
+			RunState:        runValue.State,
+		}, nil
+	}
+
+	return ports.ApprovalWorkbenchDetailRow{}, sql.ErrNoRows
 }

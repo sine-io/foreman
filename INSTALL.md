@@ -44,6 +44,63 @@ curl http://localhost:8080/api/manager/projects/demo/board
 
 These routes expose the normalized manager-agent contract directly from Foreman without ACP or channel/gateway concerns.
 
+## Approval Workbench API Smoke
+
+With `foreman serve` running, verify the approval workbench queue, detail, action, and recovery routes:
+
+1. Create a risky task and confirm the response kind is `approval_needed`.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"create_task","summary":"git push origin main"}'
+```
+
+2. List the approval workbench queue and copy the `approval_id`.
+
+```bash
+curl http://localhost:8080/api/manager/projects/demo/approvals
+```
+
+3. Read the approval detail and confirm the approval is pending before action.
+
+```bash
+curl http://localhost:8080/api/manager/approvals/<approval-id>
+```
+
+4. Approve the request.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/approvals/<approval-id>/approve \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+5. For the rejection path, create another risky task, list the queue again, and reject the new `approval_id` with a reason.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/approvals/<approval-id>/reject \
+  -H 'Content-Type: application/json' \
+  -d '{"rejection_reason":"missing rollback plan"}'
+```
+
+6. If the detail or action response shows `approval_state: "approved"` with `task_state: "approved_pending_dispatch"`, use retry-dispatch recovery instead of creating a new approval.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/approvals/<approval-id>/retry-dispatch \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Expected outcomes:
+
+- `curl http://localhost:8080/api/manager/projects/demo/approvals` returns the approval workbench queue for project `demo`
+- `curl http://localhost:8080/api/manager/approvals/<approval-id>` remains the source of truth for approval detail before and after actions
+- `POST /approve` returns an approved approval state together with the persisted task/run state
+- `POST /reject` persists and returns the rejection reason
+- `approved_pending_dispatch` means approval already succeeded and only dispatch recovery remains
+- `POST /retry-dispatch` is the recovery route for the `approved_pending_dispatch` state
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:
@@ -110,3 +167,5 @@ It intentionally excludes the previous shell-runtime and skill-packaging line. I
 
 - Spec: [docs/superpowers/specs/2026-03-27-foreman-go-design.md](/root/link/repo/docs/superpowers/specs/2026-03-27-foreman-go-design.md)
 - Plan: [docs/superpowers/plans/2026-03-27-foreman-go-phase-1.md](/root/link/repo/docs/superpowers/plans/2026-03-27-foreman-go-phase-1.md)
+- Approval workbench spec: [docs/superpowers/specs/2026-03-28-foreman-approval-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-28-foreman-approval-workbench-design.md)
+- Approval workbench plan: [docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md)

@@ -125,6 +125,169 @@ func TestServeExposesManagerCommandAPI(t *testing.T) {
 	require.NoError(t, <-errCh)
 }
 
+func TestServeExposesManagerApprovalWorkbenchAPI(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	createResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/commands",
+		"application/json",
+		strings.NewReader(`{"kind":"create_task","summary":"git push origin main"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = createResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, createResp.StatusCode)
+
+	var created map[string]any
+	require.NoError(t, json.NewDecoder(createResp.Body).Decode(&created))
+	require.Equal(t, "approval_needed", created["kind"])
+
+	queueResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/projects/demo/approvals")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = queueResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, queueResp.StatusCode)
+
+	var queuePayload struct {
+		Items []struct {
+			ApprovalID string `json:"approval_id"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.NewDecoder(queueResp.Body).Decode(&queuePayload))
+	require.Len(t, queuePayload.Items, 1)
+	require.NotEmpty(t, queuePayload.Items[0].ApprovalID)
+
+	detailResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/approvals/" + queuePayload.Items[0].ApprovalID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = detailResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, detailResp.StatusCode)
+
+	var detailPayload map[string]any
+	require.NoError(t, json.NewDecoder(detailResp.Body).Decode(&detailPayload))
+	require.Equal(t, "pending", detailPayload["approval_state"])
+
+	approveResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/approvals/"+queuePayload.Items[0].ApprovalID+"/approve",
+		"application/json",
+		strings.NewReader(`{}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = approveResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, approveResp.StatusCode)
+
+	var actionPayload map[string]any
+	require.NoError(t, json.NewDecoder(approveResp.Body).Decode(&actionPayload))
+	require.Equal(t, "approved", actionPayload["approval_state"])
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
+func TestServeKeepsRejectedApprovalDirectlyViewableAfterProcessing(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	createResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/commands",
+		"application/json",
+		strings.NewReader(`{"kind":"create_task","summary":"git push origin main"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = createResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, createResp.StatusCode)
+
+	queueResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/projects/demo/approvals")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = queueResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, queueResp.StatusCode)
+
+	var queuePayload struct {
+		Items []struct {
+			ApprovalID string `json:"approval_id"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.NewDecoder(queueResp.Body).Decode(&queuePayload))
+	require.Len(t, queuePayload.Items, 1)
+	approvalID := queuePayload.Items[0].ApprovalID
+
+	rejectResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/approvals/"+approvalID+"/reject",
+		"application/json",
+		strings.NewReader(`{"rejection_reason":"missing rollback plan"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = rejectResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, rejectResp.StatusCode)
+
+	var rejectPayload map[string]any
+	require.NoError(t, json.NewDecoder(rejectResp.Body).Decode(&rejectPayload))
+	require.Equal(t, "rejected", rejectPayload["approval_state"])
+	require.Equal(t, "missing rollback plan", rejectPayload["rejection_reason"])
+
+	queueResp, err = stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/projects/demo/approvals")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = queueResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, queueResp.StatusCode)
+	queuePayload.Items = nil
+	require.NoError(t, json.NewDecoder(queueResp.Body).Decode(&queuePayload))
+	require.Empty(t, queuePayload.Items)
+
+	detailResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/approvals/" + approvalID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = detailResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, detailResp.StatusCode)
+
+	var detailPayload map[string]any
+	require.NoError(t, json.NewDecoder(detailResp.Body).Decode(&detailPayload))
+	require.Equal(t, "rejected", detailPayload["approval_state"])
+	require.Equal(t, "missing rollback plan", detailPayload["rejection_reason"])
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
+func TestServeReturns404ForMissingApprovalWorkbenchDetail(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	resp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/approvals/missing-approval")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Equal(t, stdhttp.StatusNotFound, resp.StatusCode)
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 

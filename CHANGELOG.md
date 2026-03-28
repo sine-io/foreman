@@ -43,6 +43,14 @@
 
 ## 2026-03-28
 
+### Phase 2 Approval Workbench
+
+- Added approval workbench queue and detail guidance for manager review of risky tasks
+- Added approval workbench smoke coverage for `GET /api/manager/projects/:id/approvals` and `GET /api/manager/approvals/:id`
+- Documented `POST /approve`, `POST /reject`, and `POST /retry-dispatch` manager actions
+- Recorded `approved_pending_dispatch` as the approval workbench recovery state for approved work that still needs dispatch recovery
+- Linked the approval workbench spec and execution plan from the main docs
+
 ### Phase 2 Control-Plane Hardening
 
 - Replaced ad-hoc SQLite bootstrap with ordered, idempotent migrations

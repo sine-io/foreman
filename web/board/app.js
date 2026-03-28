@@ -4,8 +4,17 @@ const approvalsRoot = document.getElementById("approvals-root");
 const projectInput = document.getElementById("project-id");
 const refreshButton = document.getElementById("refresh-board");
 const statusNode = document.getElementById("board-status");
+const approvalWorkbenchLink = document.getElementById("approval-workbench-link");
 
 if (modulesRoot && tasksRoot && approvalsRoot && projectInput && refreshButton && statusNode) {
+  const updateWorkbenchLink = (projectId) => {
+    if (!approvalWorkbenchLink) {
+      return;
+    }
+
+    approvalWorkbenchLink.href = `/board/approvals/workbench?project_id=${encodeURIComponent(projectId)}`;
+  };
+
   const renderColumns = (root, columns) => {
     const entries = Object.entries(columns || {});
     if (!entries.length) {
@@ -60,6 +69,7 @@ if (modulesRoot && tasksRoot && approvalsRoot && projectInput && refreshButton &
 
   const loadBoard = async () => {
     const projectId = projectInput.value.trim() || "demo";
+    updateWorkbenchLink(projectId);
     statusNode.textContent = `Loading ${projectId}...`;
 
     try {
@@ -86,5 +96,7 @@ if (modulesRoot && tasksRoot && approvalsRoot && projectInput && refreshButton &
   };
 
   refreshButton.addEventListener("click", loadBoard);
+  projectInput.addEventListener("input", () => updateWorkbenchLink(projectInput.value.trim() || "demo"));
+  updateWorkbenchLink(projectInput.value.trim() || "demo");
   loadBoard();
 }
