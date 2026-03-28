@@ -1,11 +1,15 @@
 package ports
 
 import (
+	"errors"
+
 	"github.com/sine-io/foreman/internal/domain/approval"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	"github.com/sine-io/foreman/internal/domain/project"
 	"github.com/sine-io/foreman/internal/domain/task"
 )
+
+var ErrPendingApprovalConflict = errors.New("pending approval already exists")
 
 type ProjectRepository interface {
 	Save(project.Project) error
@@ -28,6 +32,7 @@ type Run struct {
 	RunnerKind           string
 	State                string
 	AssistantSummaryPath string
+	CreatedAt            string
 }
 
 type RunRepository interface {
@@ -58,7 +63,7 @@ type ApprovalRepository interface {
 
 type LeaseRepository interface {
 	Acquire(taskID, scopeKey string) error
-	Release(scopeKey string) error
+	Release(taskID, scopeKey string) error
 }
 
 type ModuleBoardRow struct {

@@ -27,12 +27,14 @@ The currently implemented slice now includes:
 - HTTP board router, dynamic board assets, and endpoint tests
 - runtime wiring for `serve` with SQLite-backed board and gateway flow
 - CLI project/module/task commands wired to real handlers
+- a Foreman-native manager-agent API for upstream integrations
+- deterministic manager-facing task status reconstruction from persisted task/run/approval state
+- retry-safe dispatch and approval handling with tx-bound SQLite persistence
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
 Work beyond Phase 1 is now concentrated in:
 
-- a Foreman-native manager-agent API for upstream integrations
 - richer board controls and polish
 - additional runner and gateway adapters
 
@@ -99,6 +101,22 @@ To inspect persisted manager-facing task state:
 curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
 curl http://localhost:8080/api/manager/projects/demo/board
 ```
+
+To re-dispatch an existing task without creating duplicate runs or approvals:
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"dispatch_task","project_id":"demo","task_id":"<task-id>"}'
+```
+
+## Control-Plane Guarantees
+
+- Manager task status is reconstructed from persisted task, run, and approval records instead of ad-hoc board columns.
+- Latest run and approval lookups use explicit ordering metadata, so repeated reads do not depend on SQLite `rowid`.
+- Re-dispatch is retry-safe: if an authoritative run already exists, Foreman returns the persisted state instead of re-invoking the runner.
+- Approval creation and approval resolution are atomic. Repeated risky dispatches reuse the existing pending approval instead of creating duplicates.
+- Completed-run retries also retry lease cleanup, so a transient release failure does not leave the write scope stranded permanently.
 
 ## Status Notes
 

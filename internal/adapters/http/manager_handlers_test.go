@@ -46,8 +46,10 @@ func TestManagerTaskStatusEndpointReturnsTaskSnapshot(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "task-1", resp.TaskID)
 	require.Equal(t, "project-1", resp.ProjectID)
+	require.Equal(t, 1, resp.Priority)
 	require.Equal(t, "run-1", resp.RunID)
 	require.Equal(t, "completed", resp.RunState)
+	require.False(t, resp.PendingApproval)
 }
 
 func TestManagerBoardSnapshotEndpointReturnsBoardShape(t *testing.T) {
@@ -117,14 +119,15 @@ func (a *fakeHTTPApp) TaskStatus(ctx context.Context, projectID, taskID string) 
 	task := a.tasks[taskID]
 
 	return manageragent.TaskStatusView{
-		TaskID:    task.ID,
-		ProjectID: "project-1",
-		ModuleID:  "module-1",
-		Summary:   task.Summary,
-		State:     task.State,
-		Priority:  task.Priority,
-		RunID:     "run-1",
-		RunState:  "completed",
+		TaskID:          task.ID,
+		ProjectID:       "project-1",
+		ModuleID:        "module-1",
+		Summary:         task.Summary,
+		State:           task.State,
+		Priority:        task.Priority,
+		RunID:           "run-1",
+		RunState:        "completed",
+		PendingApproval: false,
 	}, nil
 }
 

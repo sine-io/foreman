@@ -7,10 +7,14 @@ import (
 )
 
 type TaskRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewTaskRepository(db *sql.DB) *TaskRepository {
+	return newTaskRepository(db)
+}
+
+func newTaskRepository(db dbtx) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 

@@ -7,10 +7,14 @@ import (
 )
 
 type ModuleRepository struct {
-	db *sql.DB
+	db dbtx
 }
 
 func NewModuleRepository(db *sql.DB) *ModuleRepository {
+	return newModuleRepository(db)
+}
+
+func newModuleRepository(db dbtx) *ModuleRepository {
 	return &ModuleRepository{db: db}
 }
 

@@ -165,6 +165,44 @@ func TestHandleDispatchTaskReturnsApprovalNeededForStoredRiskyTask(t *testing.T)
 	require.Equal(t, "git push origin main requires approval", out.Summary)
 }
 
+func TestHandleDispatchTaskRunsRiskyTaskAfterApproval(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
+	}
+
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	riskyTask.State = task.TaskStateLeased
+	require.NoError(t, harness.tasks.Save(riskyTask))
+
+	approved := approval.New("approval-1", "task-1", "git push origin main requires approval")
+	approved.Status = approval.StatusApproved
+	require.NoError(t, harness.approvals.Save(approved))
+
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "dispatch_task",
+		ProjectID: "project-1",
+		TaskID:    "task-1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "completion", out.Kind)
+
+	run, err := harness.runs.FindByTask("task-1")
+	require.NoError(t, err)
+	require.Equal(t, "completed", run.State)
+
+	view, err := svc.TaskStatus(context.Background(), "project-1", "task-1")
+	require.NoError(t, err)
+	require.Equal(t, "completed", view.State)
+	require.Equal(t, "approved", view.ApprovalState)
+	require.False(t, view.PendingApproval)
+}
+
 func TestHandleDispatchTaskReturnsInProgressWhenRunHasNotCompleted(t *testing.T) {
 	harness := newHarness()
 	harness.mustCreateProject(t, "project-1")
@@ -372,6 +410,13 @@ func newHarness() *serviceHarness {
 }
 
 func (h *serviceHarness) newService() *Service {
+	artifacts := &fakeArtifactRepo{}
+	tx := managerAgentTransactor{
+		tasks:     h.tasks,
+		runs:      h.runs,
+		approvals: h.approvals,
+		artifacts: artifacts,
+	}
 	return NewService(Dependencies{
 		Projects:      h.projects,
 		Modules:       h.modules,
@@ -382,20 +427,38 @@ func (h *serviceHarness) newService() *Service {
 		CreateModule:  command.NewCreateModuleHandler(h.projects, h.modules),
 		CreateTask:    command.NewCreateTaskHandler(h.modules, h.tasks),
 		DispatchTask: command.NewDispatchTaskHandler(
+			tx,
 			h.tasks,
 			&fakeLeaseRepo{},
 			fakePolicy{decision: h.policyDecision},
-			fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
+			&fakeRunner{state: firstNonEmpty(h.runnerState, "completed")},
 			h.approvals,
 			h.runs,
-			&fakeArtifactRepo{},
+			artifacts,
 		),
+		QueryTaskStatus:  query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
 		QueryModuleBoard: query.NewModuleBoardQuery(h.board),
 		QueryTaskBoard:   query.NewTaskBoardQuery(h.board),
 		Defaults: Defaults{
 			ProjectID: "project-1",
 			ModuleID:  "module-1",
 		},
+	})
+}
+
+type managerAgentTransactor struct {
+	tasks     ports.TaskRepository
+	runs      ports.RunRepository
+	approvals ports.ApprovalRepository
+	artifacts ports.ArtifactRepository
+}
+
+func (t managerAgentTransactor) WithinTransaction(ctx context.Context, fn func(context.Context, ports.TransactionRepositories) error) error {
+	return fn(ctx, ports.TransactionRepositories{
+		Tasks:     t.tasks,
+		Runs:      t.runs,
+		Approvals: t.approvals,
+		Artifacts: t.artifacts,
 	})
 }
 
@@ -541,7 +604,7 @@ func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
 	return nil
 }
 
-func (f *fakeLeaseRepo) Release(scopeKey string) error {
+func (f *fakeLeaseRepo) Release(taskID, scopeKey string) error {
 	return nil
 }
 
