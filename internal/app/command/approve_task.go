@@ -42,7 +42,7 @@ func (h *ApproveTaskHandler) Handle(cmd ApproveTaskCommand) error {
 			}
 			latest, latestErr := repos.Approvals.FindLatestByTask(cmd.TaskID)
 			if latestErr != nil {
-				return err
+				return latestErr
 			}
 			repoTask, taskErr := repos.Tasks.Get(cmd.TaskID)
 			if taskErr != nil {

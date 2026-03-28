@@ -79,7 +79,7 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 	}
 
 	if persistedRun, err := h.Runs.FindByTask(repoTask.ID); err == nil && isAuthoritativeRun(persistedRun) {
-		return persistedRunResult(repoTask, persistedRun), nil
+		return h.authoritativeRunResult(repoTask, persistedRun)
 	} else if err != nil && err != sql.ErrNoRows {
 		return DispatchTaskResult{}, err
 	}
@@ -88,11 +88,7 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 		return DispatchTaskResult{}, err
 	}
 	if persistedRun, err := h.Runs.FindByTask(repoTask.ID); err == nil && isAuthoritativeRun(persistedRun) {
-		releaseErr := h.Leases.Release(repoTask.WriteScope)
-		if releaseErr != nil {
-			return DispatchTaskResult{}, releaseErr
-		}
-		return persistedRunResult(repoTask, persistedRun), nil
+		return h.authoritativeRunResult(repoTask, persistedRun)
 	} else if err != nil && err != sql.ErrNoRows {
 		releaseErr := h.Leases.Release(repoTask.WriteScope)
 		if releaseErr != nil {
@@ -179,7 +175,7 @@ func (h *DispatchTaskHandler) handleApprovalDispatch(taskID string, decision dom
 				}
 				existing, findErr := repos.Approvals.FindPendingByTask(taskID)
 				if findErr != nil {
-					return err
+					return findErr
 				}
 				record = existing
 			}
@@ -206,6 +202,15 @@ func (h *DispatchTaskHandler) handleApprovalDispatch(taskID string, decision dom
 
 func isAuthoritativeRun(run ports.Run) bool {
 	return run.State == "running" || run.State == "completed"
+}
+
+func (h *DispatchTaskHandler) authoritativeRunResult(repoTask task.Task, run ports.Run) (DispatchTaskResult, error) {
+	if run.State == "completed" {
+		if err := h.Leases.Release(repoTask.WriteScope); err != nil {
+			return DispatchTaskResult{}, err
+		}
+	}
+	return persistedRunResult(repoTask, run), nil
 }
 
 func persistedRunResult(repoTask task.Task, run ports.Run) DispatchTaskResult {

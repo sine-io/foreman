@@ -233,6 +233,43 @@ func TestDispatchReleasesLeaseIfPersistenceFailsAfterRunnerReturns(t *testing.T)
 	require.Equal(t, task.TaskStateReady, savedTask.State)
 }
 
+func TestDispatchRetriesLeaseReleaseAfterCompletedRunWasPersisted(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
+	require.NoError(t, tasks.Save(repoTask))
+
+	leases := &fakeLeaseRepo{
+		releaseErrs: []error{errors.New("release failed")},
+	}
+	runner := &fakeRunner{}
+	runs := &fakeRunRepo{}
+	artifacts := &fakeArtifactRepo{}
+	tx := newFakeTransactor(tasks, &fakeApprovalRepo{}, runs, artifacts)
+
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		leases,
+		fakePolicy{decision: domainpolicy.Decision{}},
+		runner,
+		tx.approvals,
+		runs,
+		artifacts,
+	)
+
+	_, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.EqualError(t, err, "release failed")
+	require.Equal(t, 1, runner.dispatchCount)
+	require.Equal(t, 1, leases.releaseCount)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.RunState)
+	require.Equal(t, 1, runner.dispatchCount)
+	require.Equal(t, 2, leases.releaseCount)
+	require.Equal(t, "repo:project-1", leases.releasedScopeKey)
+}
+
 func TestDispatchDoesNotReinvokeRunnerWhenTaskAlreadyHasPersistedRun(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
@@ -270,6 +307,36 @@ func TestDispatchDoesNotReinvokeRunnerWhenTaskAlreadyHasPersistedRun(t *testing.
 	require.Equal(t, "completed", out.RunState)
 	require.Equal(t, 0, runner.dispatchCount)
 	require.Zero(t, leases.acquireCount)
+}
+
+func TestDispatchReturnsApprovalLookupErrorAfterPendingConflict(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	require.NoError(t, tasks.Save(riskyTask))
+
+	approvals := &fakeApprovalRepo{
+		saveErr:         ports.ErrPendingApprovalConflict,
+		findPendingErrs: []error{sql.ErrNoRows, errors.New("lookup failed")},
+	}
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+			},
+		},
+		&fakeRunner{},
+		approvals,
+		tx.runs,
+		tx.artifacts,
+	)
+
+	_, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.EqualError(t, err, "lookup failed")
 }
 
 func TestDispatchDoesNotReinvokeRunnerWhenRunAppearsAfterLeaseAcquire(t *testing.T) {
@@ -315,6 +382,7 @@ type fakeLeaseRepo struct {
 	acquireCount     int
 	releaseCount     int
 	onAcquire        func()
+	releaseErrs      []error
 }
 
 func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
@@ -330,6 +398,11 @@ func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
 func (f *fakeLeaseRepo) Release(scopeKey string) error {
 	f.releasedScopeKey = scopeKey
 	f.releaseCount++
+	if len(f.releaseErrs) > 0 {
+		err := f.releaseErrs[0]
+		f.releaseErrs = f.releaseErrs[1:]
+		return err
+	}
 	return nil
 }
 

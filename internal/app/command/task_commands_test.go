@@ -123,6 +123,22 @@ func TestApproveTaskIsIdempotentAfterApprovalAlreadyResolved(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestApproveTaskReturnsLatestApprovalLookupError(t *testing.T) {
+	approvals := &fakeApprovalRepo{
+		findLatestErr: errors.New("latest lookup failed"),
+	}
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")
+	repoTask.State = task.TaskStateWaitingApproval
+	require.NoError(t, tasks.Save(repoTask))
+
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewApproveTaskHandler(tx, approvals, tasks)
+
+	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
+	require.EqualError(t, err, "latest lookup failed")
+}
+
 func TestRetryTaskMovesFailedTaskToReady(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	failedTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Retry me", "repo:project-1")
@@ -245,10 +261,12 @@ func (f *fakeModuleRepo) Get(id string) (modulepkg.Module, error) {
 }
 
 type fakeApprovalRepo struct {
-	byTaskID  map[string]approval.Approval
-	saved     approval.Approval
-	saveCount int
-	saveErr   error
+	byTaskID        map[string]approval.Approval
+	saved           approval.Approval
+	saveCount       int
+	saveErr         error
+	findLatestErr   error
+	findPendingErrs []error
 }
 
 func (f *fakeApprovalRepo) Save(value approval.Approval) error {
@@ -279,6 +297,12 @@ func (f *fakeApprovalRepo) Get(id string) (approval.Approval, error) {
 }
 
 func (f *fakeApprovalRepo) FindPendingByTask(taskID string) (approval.Approval, error) {
+	if len(f.findPendingErrs) > 0 {
+		err := f.findPendingErrs[0]
+		f.findPendingErrs = f.findPendingErrs[1:]
+		return approval.Approval{}, err
+	}
+
 	value, ok := f.byTaskID[taskID]
 	if !ok {
 		return approval.Approval{}, sql.ErrNoRows
@@ -306,11 +330,15 @@ func (f *fakeApprovalRepo) snapshot() fakeApprovalRepoSnapshot {
 	for taskID, value := range f.byTaskID {
 		copyByTaskID[taskID] = value
 	}
+	findPendingErrs := make([]error, len(f.findPendingErrs))
+	copy(findPendingErrs, f.findPendingErrs)
 
 	return fakeApprovalRepoSnapshot{
-		byTaskID:  copyByTaskID,
-		saved:     f.saved,
-		saveCount: f.saveCount,
+		byTaskID:        copyByTaskID,
+		saved:           f.saved,
+		saveCount:       f.saveCount,
+		findLatestErr:   f.findLatestErr,
+		findPendingErrs: findPendingErrs,
 	}
 }
 
@@ -318,15 +346,23 @@ func (f *fakeApprovalRepo) restore(snapshot fakeApprovalRepoSnapshot) {
 	f.byTaskID = snapshot.byTaskID
 	f.saved = snapshot.saved
 	f.saveCount = snapshot.saveCount
+	f.findLatestErr = snapshot.findLatestErr
+	f.findPendingErrs = snapshot.findPendingErrs
 }
 
 type fakeApprovalRepoSnapshot struct {
-	byTaskID  map[string]approval.Approval
-	saved     approval.Approval
-	saveCount int
+	byTaskID        map[string]approval.Approval
+	saved           approval.Approval
+	saveCount       int
+	findLatestErr   error
+	findPendingErrs []error
 }
 
 func (f *fakeApprovalRepo) FindLatestByTask(taskID string) (approval.Approval, error) {
+	if f.findLatestErr != nil {
+		return approval.Approval{}, f.findLatestErr
+	}
+
 	value, ok := f.byTaskID[taskID]
 	if !ok {
 		return approval.Approval{}, sql.ErrNoRows
