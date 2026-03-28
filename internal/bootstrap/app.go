@@ -218,6 +218,9 @@ func (a *app) RunDetail(runID string) (query.RunDetailView, error) {
 }
 
 func (a *app) ApproveTask(cmd command.ApproveTaskCommand) (string, error) {
+	if a.approveTask == nil {
+		return "", errors.New("approve task handler not configured")
+	}
 	if err := a.approveTask.Handle(cmd); err != nil {
 		return "", err
 	}

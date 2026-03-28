@@ -200,6 +200,39 @@ func TestApproveTaskReturnsLatestApprovalLookupError(t *testing.T) {
 	require.EqualError(t, err, "latest lookup failed")
 }
 
+func TestApproveTaskReturnsConflictForLatestRejectedApproval(t *testing.T) {
+	approvals := &fakeApprovalRepo{
+		byTaskID: map[string]approval.Approval{
+			"task-1": {
+				ID:              "approval-1",
+				TaskID:          "task-1",
+				Reason:          "git push origin main",
+				Status:          approval.StatusRejected,
+				RejectionReason: "manual rejection",
+			},
+		},
+	}
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")
+	repoTask.State = task.TaskStateReady
+	require.NoError(t, tasks.Save(repoTask))
+
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewApproveTaskHandler(tx, approvals, tasks, NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{decision: domainpolicy.Decision{}},
+		&fakeRunner{},
+		approvals,
+		tx.runs,
+		tx.artifacts,
+	))
+
+	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
+	require.ErrorIs(t, err, ErrApprovalActionConflict)
+}
+
 func TestRetryTaskMovesFailedTaskToReady(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	failedTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Retry me", "repo:project-1")

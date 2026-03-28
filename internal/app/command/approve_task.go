@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/sine-io/foreman/internal/domain/approval"
 	"github.com/sine-io/foreman/internal/ports"
 )
 
@@ -51,13 +50,8 @@ func (h *ApproveTaskHandler) Handle(cmd ApproveTaskCommand) error {
 		if latestErr != nil {
 			return latestErr
 		}
-		if latest.Status == approval.StatusApproved {
-			_, actionErr := h.Delegate.Handle(ApproveApprovalCommand{ApprovalID: latest.ID})
-			return actionErr
-		}
-		if err != nil {
-			return err
-		}
+		_, actionErr := h.Delegate.Handle(ApproveApprovalCommand{ApprovalID: latest.ID})
+		return actionErr
 	}
 
 	_, err = h.Delegate.Handle(ApproveApprovalCommand{ApprovalID: record.ID})
