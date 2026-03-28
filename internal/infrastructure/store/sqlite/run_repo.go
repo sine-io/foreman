@@ -18,7 +18,7 @@ func NewRunRepository(db *sql.DB) *RunRepository {
 func (r *RunRepository) Save(run ports.Run) error {
 	createdAt := run.CreatedAt
 	if createdAt == "" {
-		createdAt = time.Now().UTC().Format(time.RFC3339Nano)
+		createdAt = sortableTimestamp(time.Now())
 	}
 
 	_, err := r.db.Exec(

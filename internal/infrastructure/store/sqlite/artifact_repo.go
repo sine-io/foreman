@@ -18,7 +18,7 @@ func NewArtifactRepository(db *sql.DB) *ArtifactRepository {
 
 func (r *ArtifactRepository) Create(taskID, kind, path string) (string, error) {
 	id := fmt.Sprintf("artifact-%d", time.Now().UnixNano())
-	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
+	createdAt := sortableTimestamp(time.Now())
 
 	_, err := r.db.Exec(
 		`insert into artifacts (id, task_id, kind, path, summary, created_at) values (?, ?, ?, ?, '', ?)`,

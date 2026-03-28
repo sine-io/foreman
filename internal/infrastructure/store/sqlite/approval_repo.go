@@ -18,7 +18,7 @@ func NewApprovalRepository(db *sql.DB) *ApprovalRepository {
 func (r *ApprovalRepository) Save(a approval.Approval) error {
 	createdAt := a.CreatedAt
 	if createdAt == "" {
-		createdAt = time.Now().UTC().Format(time.RFC3339Nano)
+		createdAt = sortableTimestamp(time.Now())
 	}
 
 	_, err := r.db.Exec(

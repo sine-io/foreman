@@ -47,13 +47,13 @@ func TestRunRepositoryFindByTaskUsesCreatedAtOrdering(t *testing.T) {
 		TaskID:     taskID,
 		RunnerKind: "codex",
 		State:      "completed",
-	}, "2026-03-28T11:00:00Z")
+	}, "2026-03-28T11:00:00.000000000Z")
 	saveRunRow(t, db, ports.Run{
 		ID:         "run-10",
 		TaskID:     taskID,
 		RunnerKind: "codex",
 		State:      "running",
-	}, "2026-03-28T10:00:00Z")
+	}, "2026-03-28T10:00:00.000000000Z")
 
 	row, err := repo.FindByTask(taskID)
 	require.NoError(t, err)
@@ -71,18 +71,41 @@ func TestRunRepositoryFindByTaskUsesIDDescendingTieBreak(t *testing.T) {
 		TaskID:     taskID,
 		RunnerKind: "codex",
 		State:      "running",
-	}, "2026-03-28T11:00:00Z")
+	}, "2026-03-28T11:00:00.000000000Z")
 	saveRunRow(t, db, ports.Run{
 		ID:         "run-a",
 		TaskID:     taskID,
 		RunnerKind: "codex",
 		State:      "completed",
-	}, "2026-03-28T11:00:00Z")
+	}, "2026-03-28T11:00:00.000000000Z")
 
 	row, err := repo.FindByTask(taskID)
 	require.NoError(t, err)
 	require.Equal(t, "run-b", row.ID)
 	require.Equal(t, "running", row.State)
+}
+
+func TestRunRepositoryFindByTaskUsesMixedPrecisionTimestampsCorrectly(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewRunRepository(db)
+
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-early",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "running",
+	}, "2026-03-28T10:00:00.000000000Z")
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-late",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-28T10:00:00.900000000Z")
+
+	row, err := repo.FindByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "run-late", row.ID)
 }
 
 func TestApprovalRepositoryFindLatestByTaskUsesCreatedAtOrdering(t *testing.T) {
@@ -92,10 +115,10 @@ func TestApprovalRepositoryFindLatestByTaskUsesCreatedAtOrdering(t *testing.T) {
 
 	first := approval.New("approval-9", taskID, "first")
 	first.Status = approval.StatusApproved
-	saveApprovalRow(t, db, first, "2026-03-28T11:00:00Z")
+	saveApprovalRow(t, db, first, "2026-03-28T11:00:00.000000000Z")
 	second := approval.New("approval-10", taskID, "second")
 	second.Status = approval.StatusPending
-	saveApprovalRow(t, db, second, "2026-03-28T10:00:00Z")
+	saveApprovalRow(t, db, second, "2026-03-28T10:00:00.000000000Z")
 
 	row, err := repo.FindLatestByTask(taskID)
 	require.NoError(t, err)
@@ -110,15 +133,32 @@ func TestApprovalRepositoryFindLatestByTaskUsesIDDescendingTieBreak(t *testing.T
 
 	first := approval.New("approval-b", taskID, "first")
 	first.Status = approval.StatusRejected
-	saveApprovalRow(t, db, first, "2026-03-28T11:00:00Z")
+	saveApprovalRow(t, db, first, "2026-03-28T11:00:00.000000000Z")
 	second := approval.New("approval-a", taskID, "second")
 	second.Status = approval.StatusApproved
-	saveApprovalRow(t, db, second, "2026-03-28T11:00:00Z")
+	saveApprovalRow(t, db, second, "2026-03-28T11:00:00.000000000Z")
 
 	row, err := repo.FindLatestByTask(taskID)
 	require.NoError(t, err)
 	require.Equal(t, "approval-b", row.ID)
 	require.Equal(t, approval.StatusRejected, row.Status)
+}
+
+func TestApprovalRepositoryFindLatestByTaskUsesMixedPrecisionTimestampsCorrectly(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewApprovalRepository(db)
+
+	first := approval.New("approval-early", taskID, "first")
+	first.Status = approval.StatusRejected
+	saveApprovalRow(t, db, first, "2026-03-28T10:00:00.000000000Z")
+	second := approval.New("approval-late", taskID, "second")
+	second.Status = approval.StatusApproved
+	saveApprovalRow(t, db, second, "2026-03-28T10:00:00.900000000Z")
+
+	row, err := repo.FindLatestByTask(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "approval-late", row.ID)
 }
 
 func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {
@@ -176,9 +216,9 @@ func TestOpenBackfillsBlankCreatedAtForPreviouslyMigratedDatabase(t *testing.T) 
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
 
-	require.Equal(t, "1970-01-01T00:00:00Z", readCreatedAt(t, db, "runs", "run-1"))
-	require.Equal(t, "1970-01-01T00:00:00Z", readCreatedAt(t, db, "approvals", "approval-1"))
-	require.Equal(t, "1970-01-01T00:00:00Z", readCreatedAt(t, db, "artifacts", "artifact-1"))
+	require.Equal(t, "1970-01-01T00:00:00.000000000Z", readCreatedAt(t, db, "runs", "run-1"))
+	require.Equal(t, "1970-01-01T00:00:00.000000000Z", readCreatedAt(t, db, "approvals", "approval-1"))
+	require.Equal(t, "1970-01-01T00:00:00.000000000Z", readCreatedAt(t, db, "artifacts", "artifact-1"))
 }
 
 func saveRunRow(t *testing.T, db *sql.DB, run ports.Run, createdAt string) {
