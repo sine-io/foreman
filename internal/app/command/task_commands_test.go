@@ -8,6 +8,7 @@ import (
 
 	"github.com/sine-io/foreman/internal/domain/approval"
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
+	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
 	"github.com/sine-io/foreman/internal/domain/task"
 	"github.com/sine-io/foreman/internal/ports"
 	"github.com/stretchr/testify/require"
@@ -50,17 +51,36 @@ func TestCreateTaskReturnsErrorWhenModuleMissing(t *testing.T) {
 	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
-func TestApproveTaskMarksApprovalResolved(t *testing.T) {
+func TestApproveTaskApprovesPendingApprovalAndDispatchesByTaskID(t *testing.T) {
 	approvals := &fakeApprovalRepo{
 		byTaskID: map[string]approval.Approval{
 			"task-1": approval.New("approval-1", "task-1", "git push origin main"),
 		},
 	}
 	tasks := newFakeTaskRepo()
-	require.NoError(t, tasks.Save(task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")))
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	repoTask.State = task.TaskStateWaitingApproval
+	require.NoError(t, tasks.Save(repoTask))
 
-	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
-	handler := NewApproveTaskHandler(tx, approvals, tasks)
+	runs := &fakeRunRepo{}
+	artifacts := &fakeArtifactRepo{}
+	tx := newFakeTransactor(tasks, approvals, runs, artifacts)
+	dispatch := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+			},
+		},
+		&fakeRunner{},
+		approvals,
+		runs,
+		artifacts,
+	)
+	handler := NewApproveTaskHandler(tx, approvals, tasks, dispatch)
 	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
 	require.NoError(t, err)
 
@@ -70,10 +90,10 @@ func TestApproveTaskMarksApprovalResolved(t *testing.T) {
 
 	savedTask, err := tasks.Get("task-1")
 	require.NoError(t, err)
-	require.Equal(t, task.TaskStateLeased, savedTask.State)
+	require.Equal(t, task.TaskStateCompleted, savedTask.State)
 }
 
-func TestApproveTaskTransitionsWithinSingleTransaction(t *testing.T) {
+func TestApproveTaskMarksApprovedPendingDispatchWhenDelegatedDispatchFails(t *testing.T) {
 	approvals := &fakeApprovalRepo{
 		byTaskID: map[string]approval.Approval{
 			"task-1": approval.New("approval-1", "task-1", "git push origin main"),
@@ -81,23 +101,39 @@ func TestApproveTaskTransitionsWithinSingleTransaction(t *testing.T) {
 	}
 	tasks := newFakeTaskRepo()
 	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")
+	repoTask.State = task.TaskStateWaitingApproval
 	require.NoError(t, tasks.Save(repoTask))
-	tasks.failSaveForState = task.TaskStateLeased
-	tasks.failSaveCount = 1
 
-	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
-	handler := NewApproveTaskHandler(tx, approvals, tasks)
+	runs := &fakeRunRepo{}
+	artifacts := &fakeArtifactRepo{}
+	tx := newFakeTransactor(tasks, approvals, runs, artifacts)
+	dispatch := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+			},
+		},
+		&fakeRunner{dispatchErr: errors.New("runner unavailable")},
+		approvals,
+		runs,
+		artifacts,
+	)
+	handler := NewApproveTaskHandler(tx, approvals, tasks, dispatch)
 
 	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
-	require.Error(t, err)
+	require.EqualError(t, err, "runner unavailable")
 
-	pending, err := approvals.FindPendingByTask("task-1")
+	latest, err := approvals.FindLatestByTask("task-1")
 	require.NoError(t, err)
-	require.Equal(t, approval.StatusPending, pending.Status)
+	require.Equal(t, approval.StatusApproved, latest.Status)
 
 	savedTask, err := tasks.Get("task-1")
 	require.NoError(t, err)
-	require.Equal(t, task.TaskStateReady, savedTask.State)
+	require.Equal(t, task.TaskStateApprovedPendingDispatch, savedTask.State)
 }
 
 func TestApproveTaskIsIdempotentAfterApprovalAlreadyResolved(t *testing.T) {
@@ -113,11 +149,27 @@ func TestApproveTaskIsIdempotentAfterApprovalAlreadyResolved(t *testing.T) {
 	}
 	tasks := newFakeTaskRepo()
 	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")
-	repoTask.State = task.TaskStateLeased
+	repoTask.State = task.TaskStateCompleted
 	require.NoError(t, tasks.Save(repoTask))
 
-	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
-	handler := NewApproveTaskHandler(tx, approvals, tasks)
+	runs := &fakeRunRepo{
+		saved: ports.Run{
+			ID:     "run-1",
+			TaskID: "task-1",
+			State:  "completed",
+		},
+	}
+	tx := newFakeTransactor(tasks, approvals, runs, &fakeArtifactRepo{})
+	handler := NewApproveTaskHandler(tx, approvals, tasks, NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{decision: domainpolicy.Decision{}},
+		&fakeRunner{},
+		approvals,
+		runs,
+		&fakeArtifactRepo{},
+	))
 
 	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
 	require.NoError(t, err)

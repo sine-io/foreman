@@ -585,6 +585,7 @@ func (f fakePolicy) Evaluate(action string) domainpolicy.Decision {
 type fakeRunner struct {
 	state         string
 	dispatchCount int
+	dispatchErr   error
 	onDispatch    func()
 }
 
@@ -592,6 +593,9 @@ func (f *fakeRunner) Dispatch(req ports.RunRequest) (ports.Run, error) {
 	f.dispatchCount++
 	if f.onDispatch != nil {
 		f.onDispatch()
+	}
+	if f.dispatchErr != nil {
+		return ports.Run{}, f.dispatchErr
 	}
 	state := f.state
 	if state == "" {

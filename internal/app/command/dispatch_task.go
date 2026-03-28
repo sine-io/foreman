@@ -238,6 +238,10 @@ func (h *DispatchTaskHandler) hasApprovedDispatch(taskID string) (bool, error) {
 	return latest.Status == domainapproval.StatusApproved, nil
 }
 
+func (h *DispatchTaskHandler) currentAuthoritativeRunState(taskID string) (string, error) {
+	return currentRunState(h.Runs, taskID)
+}
+
 func persistedRunResult(repoTask task.Task, run ports.Run) DispatchTaskResult {
 	taskState := string(repoTask.State)
 	switch run.State {
