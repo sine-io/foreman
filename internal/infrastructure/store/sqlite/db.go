@@ -11,6 +11,19 @@ import (
 //go:embed migrations/001_init.sql
 var initSchema string
 
+//go:embed migrations/002_control_plane_hardening.sql
+var controlPlaneHardeningSchema string
+
+type migration struct {
+	version string
+	sql     string
+}
+
+var migrations = []migration{
+	{version: "001_init.sql", sql: initSchema},
+	{version: "002_control_plane_hardening.sql", sql: controlPlaneHardeningSchema},
+}
+
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -22,10 +35,53 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
-	if _, err := db.Exec(initSchema); err != nil {
+	if err := applyMigrations(db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
+		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 
 	return db, nil
+}
+
+func applyMigrations(db *sql.DB) error {
+	if _, err := db.Exec(`
+create table if not exists schema_migrations (
+  version text primary key
+)`); err != nil {
+		return fmt.Errorf("ensure schema migrations table: %w", err)
+	}
+
+	for _, migration := range migrations {
+		applied, err := migrationApplied(db, migration.version)
+		if err != nil {
+			return fmt.Errorf("check migration %s: %w", migration.version, err)
+		}
+		if applied {
+			continue
+		}
+
+		if _, err := db.Exec(migration.sql); err != nil {
+			return fmt.Errorf("apply migration %s: %w", migration.version, err)
+		}
+
+		if _, err := db.Exec(
+			`insert into schema_migrations(version) values (?)`,
+			migration.version,
+		); err != nil {
+			return fmt.Errorf("record migration %s: %w", migration.version, err)
+		}
+	}
+
+	return nil
+}
+
+func migrationApplied(db *sql.DB, version string) (bool, error) {
+	var count int
+	if err := db.QueryRow(
+		`select count(1) from schema_migrations where version = ?`,
+		version,
+	).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
