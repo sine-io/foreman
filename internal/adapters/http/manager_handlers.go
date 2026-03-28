@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sine-io/foreman/internal/app/command"
 	"github.com/sine-io/foreman/internal/app/manageragent"
 )
 
@@ -15,6 +16,11 @@ type ManagerApp interface {
 	Handle(context.Context, manageragent.Request) (manageragent.Response, error)
 	TaskStatus(context.Context, string, string) (manageragent.TaskStatusView, error)
 	BoardSnapshot(context.Context, string) (manageragent.BoardSnapshotView, error)
+	ApprovalWorkbenchQueue(context.Context, string) (manageragent.ApprovalWorkbenchQueueView, error)
+	ApprovalWorkbenchDetail(context.Context, string) (manageragent.ApprovalWorkbenchDetailView, error)
+	ApproveApproval(context.Context, string) (manageragent.ApprovalWorkbenchActionResponse, error)
+	RejectApproval(context.Context, string, string) (manageragent.ApprovalWorkbenchActionResponse, error)
+	RetryApprovalDispatch(context.Context, string) (manageragent.ApprovalWorkbenchActionResponse, error)
 }
 
 type ManagerHandlers struct {
@@ -125,8 +131,107 @@ func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
 	c.JSON(nethttp.StatusOK, resp)
 }
 
+func (h *ManagerHandlers) ManagerApprovalWorkbenchQueue(c *gin.Context) {
+	view, err := h.app.ApprovalWorkbenchQueue(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+
+	resp := managerApprovalQueueResponse{
+		Items: make([]managerApprovalWorkbenchItemResponse, 0, len(view.Items)),
+	}
+	for _, item := range view.Items {
+		resp.Items = append(resp.Items, managerApprovalWorkbenchItemResponse{
+			ApprovalID: item.ApprovalID,
+			TaskID:     item.TaskID,
+			Summary:    item.Summary,
+			RiskLevel:  item.RiskLevel,
+			Priority:   item.Priority,
+		})
+	}
+
+	c.JSON(nethttp.StatusOK, resp)
+}
+
+func (h *ManagerHandlers) ManagerApprovalWorkbenchDetail(c *gin.Context) {
+	view, err := h.app.ApprovalWorkbenchDetail(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+
+	resp := managerApprovalDetailResponse{
+		ApprovalID:              view.ApprovalID,
+		TaskID:                  view.TaskID,
+		Summary:                 view.Summary,
+		Reason:                  view.Reason,
+		ApprovalState:           view.ApprovalState,
+		RiskLevel:               view.RiskLevel,
+		PolicyRule:              view.PolicyRule,
+		RejectionReason:         view.RejectionReason,
+		Priority:                view.Priority,
+		CreatedAt:               view.CreatedAt,
+		TaskState:               view.TaskState,
+		RunID:                   view.RunID,
+		RunState:                view.RunState,
+		RunDetailURL:            view.RunDetailURL,
+		AssistantSummaryPreview: view.AssistantSummaryPreview,
+		Artifacts:               make([]managerApprovalWorkbenchArtifactResponse, 0, len(view.Artifacts)),
+	}
+	for _, artifact := range view.Artifacts {
+		resp.Artifacts = append(resp.Artifacts, managerApprovalWorkbenchArtifactResponse{
+			ID:      artifact.ID,
+			Kind:    artifact.Kind,
+			Path:    artifact.Path,
+			Summary: artifact.Summary,
+		})
+	}
+
+	c.JSON(nethttp.StatusOK, resp)
+}
+
+func (h *ManagerHandlers) ApproveApproval(c *gin.Context) {
+	resp, err := h.app.ApproveApproval(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	c.JSON(nethttp.StatusOK, approvalActionResponseDTO(resp))
+}
+
+func (h *ManagerHandlers) RejectApproval(c *gin.Context) {
+	var req managerRejectApprovalRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.app.RejectApproval(c.Request.Context(), c.Param("id"), req.RejectionReason)
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	dto := approvalActionResponseDTO(resp)
+	dto.RejectionReason = req.RejectionReason
+	c.JSON(nethttp.StatusOK, dto)
+}
+
+func (h *ManagerHandlers) RetryApprovalDispatch(c *gin.Context) {
+	resp, err := h.app.RetryApprovalDispatch(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	c.JSON(nethttp.StatusOK, approvalActionResponseDTO(resp))
+}
+
 func respondManagerError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, command.ErrApprovalActionNotFound):
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, command.ErrApprovalActionConflict):
+		c.JSON(nethttp.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, sql.ErrNoRows):
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case isManagerClientError(err):
@@ -145,4 +250,16 @@ func isManagerClientError(err error) bool {
 	return strings.Contains(msg, "required") ||
 		strings.Contains(msg, "unsupported") ||
 		strings.Contains(msg, "does not belong")
+}
+
+func approvalActionResponseDTO(resp manageragent.ApprovalWorkbenchActionResponse) managerApprovalWorkbenchActionResponse {
+	return managerApprovalWorkbenchActionResponse{
+		ApprovalID:      resp.ApprovalID,
+		ApprovalState:   resp.ApprovalState,
+		RejectionReason: resp.RejectionReason,
+		TaskID:          resp.TaskID,
+		TaskState:       resp.TaskState,
+		RunID:           resp.RunID,
+		RunState:        resp.RunState,
+	}
 }

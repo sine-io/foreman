@@ -89,12 +89,12 @@ func loadApprovalTaskPair(
 ) (approval.Approval, task.Task, error) {
 	record, err := approvals.Get(approvalID)
 	if err != nil {
-		return approval.Approval{}, task.Task{}, err
+		return approval.Approval{}, task.Task{}, approvalLookupError(err)
 	}
 
 	repoTask, err := tasks.Get(record.TaskID)
 	if err != nil {
-		return approval.Approval{}, task.Task{}, err
+		return approval.Approval{}, task.Task{}, approvalLookupError(err)
 	}
 
 	return record, repoTask, nil

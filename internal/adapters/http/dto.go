@@ -47,6 +47,58 @@ type managerTaskStatusResponse struct {
 	PendingApproval bool   `json:"pending_approval"`
 }
 
+type managerRejectApprovalRequest struct {
+	RejectionReason string `json:"rejection_reason"`
+}
+
+type managerApprovalQueueResponse struct {
+	Items []managerApprovalWorkbenchItemResponse `json:"items"`
+}
+
+type managerApprovalWorkbenchItemResponse struct {
+	ApprovalID string `json:"approval_id"`
+	TaskID     string `json:"task_id"`
+	Summary    string `json:"summary"`
+	RiskLevel  string `json:"risk_level"`
+	Priority   int    `json:"priority"`
+}
+
+type managerApprovalDetailResponse struct {
+	ApprovalID              string                                     `json:"approval_id"`
+	TaskID                  string                                     `json:"task_id"`
+	Summary                 string                                     `json:"summary"`
+	Reason                  string                                     `json:"reason"`
+	ApprovalState           string                                     `json:"approval_state"`
+	RiskLevel               string                                     `json:"risk_level"`
+	PolicyRule              string                                     `json:"policy_rule"`
+	RejectionReason         string                                     `json:"rejection_reason,omitempty"`
+	Priority                int                                        `json:"priority"`
+	CreatedAt               string                                     `json:"created_at"`
+	TaskState               string                                     `json:"task_state"`
+	RunID                   string                                     `json:"run_id,omitempty"`
+	RunState                string                                     `json:"run_state,omitempty"`
+	RunDetailURL            string                                     `json:"run_detail_url,omitempty"`
+	AssistantSummaryPreview string                                     `json:"assistant_summary_preview"`
+	Artifacts               []managerApprovalWorkbenchArtifactResponse `json:"artifacts"`
+}
+
+type managerApprovalWorkbenchArtifactResponse struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Path    string `json:"path"`
+	Summary string `json:"summary"`
+}
+
+type managerApprovalWorkbenchActionResponse struct {
+	ApprovalID      string `json:"approval_id"`
+	ApprovalState   string `json:"approval_state"`
+	RejectionReason string `json:"rejection_reason,omitempty"`
+	TaskID          string `json:"task_id"`
+	TaskState       string `json:"task_state"`
+	RunID           string `json:"run_id,omitempty"`
+	RunState        string `json:"run_state,omitempty"`
+}
+
 type managerBoardSnapshotResponse struct {
 	ProjectID string                                     `json:"project_id"`
 	Modules   map[string][]managerModuleSnapshotResponse `json:"modules"`

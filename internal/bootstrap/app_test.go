@@ -125,6 +125,73 @@ func TestServeExposesManagerCommandAPI(t *testing.T) {
 	require.NoError(t, <-errCh)
 }
 
+func TestServeExposesManagerApprovalWorkbenchAPI(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	createResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/commands",
+		"application/json",
+		strings.NewReader(`{"kind":"create_task","summary":"git push origin main"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = createResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, createResp.StatusCode)
+
+	var created map[string]any
+	require.NoError(t, json.NewDecoder(createResp.Body).Decode(&created))
+	require.Equal(t, "approval_needed", created["kind"])
+
+	queueResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/projects/demo/approvals")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = queueResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, queueResp.StatusCode)
+
+	var queuePayload struct {
+		Items []struct {
+			ApprovalID string `json:"approval_id"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.NewDecoder(queueResp.Body).Decode(&queuePayload))
+	require.Len(t, queuePayload.Items, 1)
+	require.NotEmpty(t, queuePayload.Items[0].ApprovalID)
+
+	detailResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/approvals/" + queuePayload.Items[0].ApprovalID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = detailResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, detailResp.StatusCode)
+
+	var detailPayload map[string]any
+	require.NoError(t, json.NewDecoder(detailResp.Body).Decode(&detailPayload))
+	require.Equal(t, "pending", detailPayload["approval_state"])
+
+	approveResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/approvals/"+queuePayload.Items[0].ApprovalID+"/approve",
+		"application/json",
+		strings.NewReader(`{}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = approveResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, approveResp.StatusCode)
+
+	var actionPayload map[string]any
+	require.NoError(t, json.NewDecoder(approveResp.Body).Decode(&actionPayload))
+	require.Equal(t, "approved", actionPayload["approval_state"])
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 

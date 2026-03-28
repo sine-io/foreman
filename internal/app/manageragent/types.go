@@ -27,6 +27,20 @@ type Response struct {
 }
 
 type TaskStatusView = query.TaskStatusView
+type ApprovalWorkbenchQueueView = query.ApprovalWorkbenchQueueView
+type ApprovalWorkbenchItem = query.ApprovalWorkbenchItem
+type ApprovalWorkbenchDetailView = query.ApprovalWorkbenchDetailView
+type ApprovalWorkbenchArtifact = query.ApprovalWorkbenchArtifact
+
+type ApprovalWorkbenchActionResponse struct {
+	ApprovalID      string
+	ApprovalState   string
+	RejectionReason string
+	TaskID          string
+	TaskState       string
+	RunID           string
+	RunState        string
+}
 
 type ModuleSnapshot struct {
 	ModuleID string

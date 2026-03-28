@@ -12,12 +12,14 @@ import (
 )
 
 var ErrApprovalActionConflict = errors.New("approval action conflict")
+var ErrApprovalActionNotFound = errors.New("approval action not found")
 
 type ApprovalActionResult struct {
 	ApprovalID     string
 	TaskID         string
 	ApprovalStatus string
 	TaskState      string
+	RunID          string
 	RunState       string
 }
 
@@ -99,12 +101,12 @@ func (h *ApproveApprovalHandler) Handle(cmd ApproveApprovalCommand) (ApprovalAct
 func (h *ApproveApprovalHandler) loadApprovalAndTask(approvalID string) (approval.Approval, task.Task, error) {
 	record, err := h.Approvals.Get(approvalID)
 	if err != nil {
-		return approval.Approval{}, task.Task{}, err
+		return approval.Approval{}, task.Task{}, approvalLookupError(err)
 	}
 
 	repoTask, err := h.Tasks.Get(record.TaskID)
 	if err != nil {
-		return approval.Approval{}, task.Task{}, err
+		return approval.Approval{}, task.Task{}, approvalLookupError(err)
 	}
 
 	return record, repoTask, nil
@@ -155,6 +157,13 @@ func (h *ApproveApprovalHandler) markApprovedPendingDispatch(taskID string) erro
 
 func approvalConflict(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrApprovalActionConflict, fmt.Sprintf(format, args...))
+}
+
+func approvalLookupError(err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: %v", ErrApprovalActionNotFound, err)
+	}
+	return err
 }
 
 func currentRunState(runs ports.RunRepository, taskID string) (string, error) {

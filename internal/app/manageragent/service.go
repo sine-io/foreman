@@ -2,6 +2,7 @@ package manageragent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/sine-io/foreman/internal/app/command"
@@ -18,52 +19,67 @@ type Defaults struct {
 }
 
 type Dependencies struct {
-	Projects         ports.ProjectRepository
-	Modules          ports.ModuleRepository
-	Tasks            ports.TaskRepository
-	Runs             ports.RunRepository
-	Approvals        ports.ApprovalRepository
-	CreateProject    *command.CreateProjectHandler
-	CreateModule     *command.CreateModuleHandler
-	CreateTask       *command.CreateTaskHandler
-	DispatchTask     *command.DispatchTaskHandler
-	QueryTaskStatus  *query.TaskStatusQuery
-	QueryModuleBoard *query.ModuleBoardQuery
-	QueryTaskBoard   *query.TaskBoardQuery
-	Defaults         Defaults
+	Projects                     ports.ProjectRepository
+	Modules                      ports.ModuleRepository
+	Tasks                        ports.TaskRepository
+	Runs                         ports.RunRepository
+	Approvals                    ports.ApprovalRepository
+	ApproveApprovalHandler       *command.ApproveApprovalHandler
+	RejectApprovalHandler        *command.RejectApprovalHandler
+	RetryApprovalHandler         *command.RetryApprovalDispatchHandler
+	CreateProject                *command.CreateProjectHandler
+	CreateModule                 *command.CreateModuleHandler
+	CreateTask                   *command.CreateTaskHandler
+	DispatchTask                 *command.DispatchTaskHandler
+	QueryTaskStatus              *query.TaskStatusQuery
+	QueryModuleBoard             *query.ModuleBoardQuery
+	QueryTaskBoard               *query.TaskBoardQuery
+	QueryApprovalWorkbenchQueue  *query.ApprovalWorkbenchQueueQuery
+	QueryApprovalWorkbenchDetail *query.ApprovalWorkbenchDetailQuery
+	Defaults                     Defaults
 }
 
 type Service struct {
-	Projects         ports.ProjectRepository
-	Modules          ports.ModuleRepository
-	Tasks            ports.TaskRepository
-	Runs             ports.RunRepository
-	Approvals        ports.ApprovalRepository
-	CreateProject    *command.CreateProjectHandler
-	CreateModule     *command.CreateModuleHandler
-	CreateTask       *command.CreateTaskHandler
-	DispatchTask     *command.DispatchTaskHandler
-	QueryTaskStatus  *query.TaskStatusQuery
-	QueryModuleBoard *query.ModuleBoardQuery
-	QueryTaskBoard   *query.TaskBoardQuery
-	Defaults         Defaults
+	Projects                     ports.ProjectRepository
+	Modules                      ports.ModuleRepository
+	Tasks                        ports.TaskRepository
+	Runs                         ports.RunRepository
+	Approvals                    ports.ApprovalRepository
+	ApproveApprovalHandler       *command.ApproveApprovalHandler
+	RejectApprovalHandler        *command.RejectApprovalHandler
+	RetryApprovalHandler         *command.RetryApprovalDispatchHandler
+	CreateProject                *command.CreateProjectHandler
+	CreateModule                 *command.CreateModuleHandler
+	CreateTask                   *command.CreateTaskHandler
+	DispatchTask                 *command.DispatchTaskHandler
+	QueryTaskStatus              *query.TaskStatusQuery
+	QueryModuleBoard             *query.ModuleBoardQuery
+	QueryTaskBoard               *query.TaskBoardQuery
+	QueryApprovalWorkbenchQueue  *query.ApprovalWorkbenchQueueQuery
+	QueryApprovalWorkbenchDetail *query.ApprovalWorkbenchDetailQuery
+	Defaults                     Defaults
 }
 
 func NewService(deps Dependencies) *Service {
 	return &Service{
-		Projects:         deps.Projects,
-		Modules:          deps.Modules,
-		Tasks:            deps.Tasks,
-		Runs:             deps.Runs,
-		Approvals:        deps.Approvals,
-		CreateProject:    deps.CreateProject,
-		CreateModule:     deps.CreateModule,
-		CreateTask:       deps.CreateTask,
-		DispatchTask:     deps.DispatchTask,
-		QueryTaskStatus:  deps.QueryTaskStatus,
-		QueryModuleBoard: deps.QueryModuleBoard,
-		QueryTaskBoard:   deps.QueryTaskBoard,
-		Defaults:         deps.Defaults,
+		Projects:                     deps.Projects,
+		Modules:                      deps.Modules,
+		Tasks:                        deps.Tasks,
+		Runs:                         deps.Runs,
+		Approvals:                    deps.Approvals,
+		ApproveApprovalHandler:       deps.ApproveApprovalHandler,
+		RejectApprovalHandler:        deps.RejectApprovalHandler,
+		RetryApprovalHandler:         deps.RetryApprovalHandler,
+		CreateProject:                deps.CreateProject,
+		CreateModule:                 deps.CreateModule,
+		CreateTask:                   deps.CreateTask,
+		DispatchTask:                 deps.DispatchTask,
+		QueryTaskStatus:              deps.QueryTaskStatus,
+		QueryModuleBoard:             deps.QueryModuleBoard,
+		QueryTaskBoard:               deps.QueryTaskBoard,
+		QueryApprovalWorkbenchQueue:  deps.QueryApprovalWorkbenchQueue,
+		QueryApprovalWorkbenchDetail: deps.QueryApprovalWorkbenchDetail,
+		Defaults:                     deps.Defaults,
 	}
 }
 
@@ -223,6 +239,74 @@ func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSna
 	return view, nil
 }
 
+func (s *Service) ApprovalWorkbenchQueue(ctx context.Context, projectID string) (ApprovalWorkbenchQueueView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ApprovalWorkbenchQueueView{}, err
+	}
+
+	resolvedProjectID, err := s.resolveProjectID(projectID)
+	if err != nil {
+		return ApprovalWorkbenchQueueView{}, err
+	}
+
+	return s.QueryApprovalWorkbenchQueue.Execute(resolvedProjectID)
+}
+
+func (s *Service) ApprovalWorkbenchDetail(ctx context.Context, approvalID string) (ApprovalWorkbenchDetailView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ApprovalWorkbenchDetailView{}, err
+	}
+
+	view, err := s.QueryApprovalWorkbenchDetail.Execute(approvalID)
+	if err != nil {
+		return ApprovalWorkbenchDetailView{}, normalizeApprovalActionError(err)
+	}
+
+	return view, nil
+}
+
+func (s *Service) ApproveApproval(ctx context.Context, approvalID string) (ApprovalWorkbenchActionResponse, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ApprovalWorkbenchActionResponse{}, err
+	}
+
+	result, err := s.ApproveApprovalHandler.Handle(command.ApproveApprovalCommand{ApprovalID: approvalID})
+	if err != nil {
+		return ApprovalWorkbenchActionResponse{}, normalizeApprovalActionError(err)
+	}
+
+	return approvalActionResponse(result), nil
+}
+
+func (s *Service) RejectApproval(ctx context.Context, approvalID, rejectionReason string) (ApprovalWorkbenchActionResponse, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ApprovalWorkbenchActionResponse{}, err
+	}
+
+	result, err := s.RejectApprovalHandler.Handle(command.RejectApprovalCommand{
+		ApprovalID: approvalID,
+		Reason:     rejectionReason,
+	})
+	if err != nil {
+		return ApprovalWorkbenchActionResponse{}, normalizeApprovalActionError(err)
+	}
+
+	return approvalActionResponse(result), nil
+}
+
+func (s *Service) RetryApprovalDispatch(ctx context.Context, approvalID string) (ApprovalWorkbenchActionResponse, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ApprovalWorkbenchActionResponse{}, err
+	}
+
+	result, err := s.RetryApprovalHandler.Handle(command.RetryApprovalDispatchCommand{ApprovalID: approvalID})
+	if err != nil {
+		return ApprovalWorkbenchActionResponse{}, normalizeApprovalActionError(err)
+	}
+
+	return approvalActionResponse(result), nil
+}
+
 func (s *Service) dispatchResponse(taskID, projectID, moduleID string) (Response, error) {
 	taskRecord, err := s.Tasks.Get(taskID)
 	if err != nil {
@@ -323,6 +407,28 @@ func responseKind(result command.DispatchTaskResult) string {
 		return "completion"
 	}
 	return "in_progress"
+}
+
+func approvalActionResponse(result command.ApprovalActionResult) ApprovalWorkbenchActionResponse {
+	return ApprovalWorkbenchActionResponse{
+		ApprovalID:    result.ApprovalID,
+		ApprovalState: result.ApprovalStatus,
+		TaskID:        result.TaskID,
+		TaskState:     result.TaskState,
+		RunID:         result.RunID,
+		RunState:      result.RunState,
+	}
+}
+
+func normalizeApprovalActionError(err error) error {
+	switch {
+	case errors.Is(err, command.ErrApprovalActionNotFound):
+		return err
+	case errors.Is(err, command.ErrApprovalActionConflict):
+		return err
+	default:
+		return err
+	}
 }
 
 func ctxErr(ctx context.Context) error {

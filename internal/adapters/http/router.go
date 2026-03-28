@@ -34,6 +34,11 @@ func NewRouter(app App) *gin.Engine {
 		router.POST("/api/manager/commands", managerHandlers.ManagerCommand)
 		router.GET("/api/manager/tasks/:id", managerHandlers.ManagerTaskStatus)
 		router.GET("/api/manager/projects/:id/board", managerHandlers.ManagerBoardSnapshot)
+		router.GET("/api/manager/projects/:id/approvals", managerHandlers.ManagerApprovalWorkbenchQueue)
+		router.GET("/api/manager/approvals/:id", managerHandlers.ManagerApprovalWorkbenchDetail)
+		router.POST("/api/manager/approvals/:id/approve", managerHandlers.ApproveApproval)
+		router.POST("/api/manager/approvals/:id/reject", managerHandlers.RejectApproval)
+		router.POST("/api/manager/approvals/:id/retry-dispatch", managerHandlers.RetryApprovalDispatch)
 	}
 
 	return router

@@ -35,27 +35,30 @@ type App interface {
 type app struct {
 	Config Config
 
-	db            *sql.DB
-	repoRoot      string
-	router        stdhttp.Handler
-	openclaw      *openclaw.Handler
-	projects      *sqlite.ProjectRepository
-	modules       *sqlite.ModuleRepository
-	tasks         *sqlite.TaskRepository
-	runs          *sqlite.RunRepository
-	artifacts     *sqlite.ArtifactRepository
-	approvals     *sqlite.ApprovalRepository
-	leases        *sqlite.LeaseRepository
-	board         *sqlite.BoardQueryRepository
-	manager       *appmanageragent.Service
-	createProject *command.CreateProjectHandler
-	createModule  *command.CreateModuleHandler
-	createTask    *command.CreateTaskHandler
-	approveTask   *command.ApproveTaskHandler
-	retryTask     *command.RetryTaskHandler
-	cancelTask    *command.CancelTaskHandler
-	reprioritize  *command.ReprioritizeTaskHandler
-	dispatchTask  *command.DispatchTaskHandler
+	db              *sql.DB
+	repoRoot        string
+	router          stdhttp.Handler
+	openclaw        *openclaw.Handler
+	projects        *sqlite.ProjectRepository
+	modules         *sqlite.ModuleRepository
+	tasks           *sqlite.TaskRepository
+	runs            *sqlite.RunRepository
+	artifacts       *sqlite.ArtifactRepository
+	approvals       *sqlite.ApprovalRepository
+	leases          *sqlite.LeaseRepository
+	board           *sqlite.BoardQueryRepository
+	manager         *appmanageragent.Service
+	approveApproval *command.ApproveApprovalHandler
+	rejectApproval  *command.RejectApprovalHandler
+	retryApproval   *command.RetryApprovalDispatchHandler
+	createProject   *command.CreateProjectHandler
+	createModule    *command.CreateModuleHandler
+	createTask      *command.CreateTaskHandler
+	approveTask     *command.ApproveTaskHandler
+	retryTask       *command.RetryTaskHandler
+	cancelTask      *command.CancelTaskHandler
+	reprioritize    *command.ReprioritizeTaskHandler
+	dispatchTask    *command.DispatchTaskHandler
 }
 
 func BuildApp(cfg Config) (App, error) {
@@ -113,19 +116,29 @@ func BuildApp(cfg Config) (App, error) {
 		runs,
 		artifacts,
 	)
+	instance.approveApproval = command.NewApproveApprovalHandler(transactor, approvals, tasks, instance.dispatchTask)
+	instance.rejectApproval = command.NewRejectApprovalHandler(transactor, approvals, tasks)
+	instance.retryApproval = command.NewRetryApprovalDispatchHandler(approvals, tasks, instance.dispatchTask)
+	approvalWorkbenchQueue := query.NewApprovalWorkbenchQueueQuery(board)
+	approvalWorkbenchDetail := query.NewApprovalWorkbenchDetailQuery(board)
 	instance.manager = appmanageragent.NewService(appmanageragent.Dependencies{
-		Projects:         projects,
-		Modules:          modules,
-		Tasks:            tasks,
-		Runs:             runs,
-		Approvals:        approvals,
-		CreateProject:    instance.createProject,
-		CreateModule:     instance.createModule,
-		CreateTask:       instance.createTask,
-		DispatchTask:     instance.dispatchTask,
-		QueryTaskStatus:  query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
-		QueryModuleBoard: query.NewModuleBoardQuery(board),
-		QueryTaskBoard:   query.NewTaskBoardQuery(board),
+		Projects:                     projects,
+		Modules:                      modules,
+		Tasks:                        tasks,
+		Runs:                         runs,
+		Approvals:                    approvals,
+		ApproveApprovalHandler:       instance.approveApproval,
+		RejectApprovalHandler:        instance.rejectApproval,
+		RetryApprovalHandler:         instance.retryApproval,
+		CreateProject:                instance.createProject,
+		CreateModule:                 instance.createModule,
+		CreateTask:                   instance.createTask,
+		DispatchTask:                 instance.dispatchTask,
+		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
+		QueryModuleBoard:             query.NewModuleBoardQuery(board),
+		QueryTaskBoard:               query.NewTaskBoardQuery(board),
+		QueryApprovalWorkbenchQueue:  approvalWorkbenchQueue,
+		QueryApprovalWorkbenchDetail: approvalWorkbenchDetail,
 		Defaults: appmanageragent.Defaults{
 			ProjectID: defaultProjectID,
 			ModuleID:  defaultModuleID,
@@ -207,6 +220,26 @@ func (a *app) TaskStatus(ctx context.Context, projectID, taskID string) (appmana
 
 func (a *app) BoardSnapshot(ctx context.Context, projectID string) (appmanageragent.BoardSnapshotView, error) {
 	return a.manager.BoardSnapshot(ctx, projectID)
+}
+
+func (a *app) ApprovalWorkbenchQueue(ctx context.Context, projectID string) (appmanageragent.ApprovalWorkbenchQueueView, error) {
+	return a.manager.ApprovalWorkbenchQueue(ctx, projectID)
+}
+
+func (a *app) ApprovalWorkbenchDetail(ctx context.Context, approvalID string) (appmanageragent.ApprovalWorkbenchDetailView, error) {
+	return a.manager.ApprovalWorkbenchDetail(ctx, approvalID)
+}
+
+func (a *app) ApproveApproval(ctx context.Context, approvalID string) (appmanageragent.ApprovalWorkbenchActionResponse, error) {
+	return a.manager.ApproveApproval(ctx, approvalID)
+}
+
+func (a *app) RejectApproval(ctx context.Context, approvalID, rejectionReason string) (appmanageragent.ApprovalWorkbenchActionResponse, error) {
+	return a.manager.RejectApproval(ctx, approvalID, rejectionReason)
+}
+
+func (a *app) RetryApprovalDispatch(ctx context.Context, approvalID string) (appmanageragent.ApprovalWorkbenchActionResponse, error) {
+	return a.manager.RetryApprovalDispatch(ctx, approvalID)
 }
 
 func (a *app) ApprovalQueue(projectID string) (query.ApprovalQueueView, error) {
