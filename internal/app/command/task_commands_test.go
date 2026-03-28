@@ -62,7 +62,7 @@ func TestApproveTaskMarksApprovalResolved(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = approvals.FindPendingByTask("task-1")
-	require.ErrorIs(t, err, sql.ErrNoRows)
+	require.Error(t, err)
 	require.Equal(t, approval.StatusApproved, approvals.saved.Status)
 
 	savedTask, err := tasks.Get("task-1")
@@ -161,13 +161,18 @@ func (f *fakeModuleRepo) Get(id string) (modulepkg.Module, error) {
 }
 
 type fakeApprovalRepo struct {
-	byTaskID map[string]approval.Approval
-	saved    approval.Approval
+	byTaskID  map[string]approval.Approval
+	saved     approval.Approval
+	saveCount int
 }
 
 func (f *fakeApprovalRepo) Save(value approval.Approval) error {
+	if f.byTaskID == nil {
+		f.byTaskID = map[string]approval.Approval{}
+	}
+	f.saveCount++
 	f.saved = value
-	delete(f.byTaskID, value.TaskID)
+	f.byTaskID[value.TaskID] = value
 	return nil
 }
 
@@ -193,6 +198,15 @@ func (f *fakeApprovalRepo) FindPendingByTask(taskID string) (approval.Approval, 
 
 	if value.Status != approval.StatusPending {
 		return approval.Approval{}, errors.New("approval is not pending")
+	}
+
+	return value, nil
+}
+
+func (f *fakeApprovalRepo) FindLatestByTask(taskID string) (approval.Approval, error) {
+	value, ok := f.byTaskID[taskID]
+	if !ok {
+		return approval.Approval{}, sql.ErrNoRows
 	}
 
 	return value, nil

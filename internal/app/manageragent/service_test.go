@@ -253,6 +253,7 @@ func TestTaskStatusUsesRequestedProjectBoard(t *testing.T) {
 	require.True(t, view.PendingApproval)
 	require.NotEmpty(t, view.ApprovalID)
 	require.Equal(t, "git push origin main requires approval", view.ApprovalReason)
+	require.Equal(t, "pending", view.ApprovalState)
 }
 
 func TestBoardSnapshotReturnsModuleAndTaskColumnsFromPersistedState(t *testing.T) {
@@ -288,6 +289,39 @@ func TestBoardSnapshotReturnsModuleAndTaskColumnsFromPersistedState(t *testing.T
 	require.Len(t, view.Modules["Implementing"], 1)
 	require.Len(t, view.Tasks["Done"], 1)
 	require.Equal(t, out.TaskID, view.Tasks["Done"][0].TaskID)
+}
+
+func TestTaskStatusKeepsLatestApprovalAfterApprovalDecision(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
+	}
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-2",
+		ProjectID: "project-1",
+		ModuleID:  "module-1",
+		Summary:   "git push origin main",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approval_needed", out.Kind)
+
+	approvalRecord, err := harness.approvals.FindPendingByTask(out.TaskID)
+	require.NoError(t, err)
+	approvalRecord.Status = approval.StatusApproved
+	require.NoError(t, harness.approvals.Save(approvalRecord))
+
+	view, err := svc.TaskStatus(context.Background(), "project-1", out.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, approvalRecord.ID, view.ApprovalID)
+	require.Equal(t, "git push origin main requires approval", view.ApprovalReason)
+	require.Equal(t, "approved", view.ApprovalState)
+	require.False(t, view.PendingApproval)
 }
 
 type serviceHarness struct {
@@ -467,6 +501,15 @@ func (f *fakeApprovalRepo) FindPendingByTask(taskID string) (approval.Approval, 
 	}
 
 	if value.Status != approval.StatusPending {
+		return approval.Approval{}, sql.ErrNoRows
+	}
+
+	return value, nil
+}
+
+func (f *fakeApprovalRepo) FindLatestByTask(taskID string) (approval.Approval, error) {
+	value, ok := f.byTaskID[taskID]
+	if !ok {
 		return approval.Approval{}, sql.ErrNoRows
 	}
 

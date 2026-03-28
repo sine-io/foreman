@@ -65,6 +65,37 @@ func TestDispatchCreatesApprovalWhenRiskyActionDetected(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "waiting_approval", out.TaskState)
 	require.Equal(t, "git push origin main requires approval", approvals.saved.Reason)
+	require.Equal(t, 1, approvals.saveCount)
+}
+
+func TestDispatchReusesExistingPendingApprovalWhenRetried(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	require.NoError(t, tasks.Save(riskyTask))
+
+	approvals := &fakeApprovalRepo{}
+	handler := NewDispatchTaskHandler(
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+			},
+		},
+		fakeRunner{},
+		approvals,
+		&fakeRunRepo{},
+		&fakeArtifactRepo{},
+	)
+
+	first, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	second, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+
+	require.Equal(t, first.ApprovalID, second.ApprovalID)
+	require.Equal(t, 1, approvals.saveCount)
 }
 
 func TestDispatchIndexesAssistantSummaryArtifact(t *testing.T) {

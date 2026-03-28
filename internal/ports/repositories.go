@@ -53,6 +53,7 @@ type ApprovalRepository interface {
 	Save(approval.Approval) error
 	Get(id string) (approval.Approval, error)
 	FindPendingByTask(taskID string) (approval.Approval, error)
+	FindLatestByTask(taskID string) (approval.Approval, error)
 }
 
 type LeaseRepository interface {

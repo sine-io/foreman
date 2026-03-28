@@ -35,6 +35,7 @@ type TaskStatusView struct {
 	RunState        string
 	ApprovalID      string
 	ApprovalReason  string
+	ApprovalState   string
 	PendingApproval bool
 }
 

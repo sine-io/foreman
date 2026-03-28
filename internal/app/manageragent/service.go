@@ -192,10 +192,14 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 	}
 
 	approvalRecord, err := s.Approvals.FindPendingByTask(taskID)
+	if err == sql.ErrNoRows {
+		approvalRecord, err = s.Approvals.FindLatestByTask(taskID)
+	}
 	if err == nil {
 		view.ApprovalID = approvalRecord.ID
 		view.ApprovalReason = approvalRecord.Reason
-		view.PendingApproval = true
+		view.ApprovalState = string(approvalRecord.Status)
+		view.PendingApproval = approvalRecord.Status == "pending"
 	} else if err != nil && err != sql.ErrNoRows {
 		return TaskStatusView{}, err
 	}

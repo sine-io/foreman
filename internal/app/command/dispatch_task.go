@@ -1,6 +1,8 @@
 package command
 
 import (
+	"database/sql"
+
 	domainapproval "github.com/sine-io/foreman/internal/domain/approval"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
 	"github.com/sine-io/foreman/internal/domain/task"
@@ -67,6 +69,22 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 
 	decision := h.Policy.Evaluate(requestedAction)
 	if decision.RequiresApproval {
+		existing, err := h.Approvals.FindPendingByTask(repoTask.ID)
+		if err == nil {
+			repoTask.State = task.TaskStateWaitingApproval
+			if saveErr := h.Tasks.Save(repoTask); saveErr != nil {
+				return DispatchTaskResult{}, saveErr
+			}
+			return DispatchTaskResult{
+				TaskState:      string(repoTask.State),
+				ApprovalID:     existing.ID,
+				ApprovalReason: existing.Reason,
+			}, nil
+		}
+		if err != sql.ErrNoRows {
+			return DispatchTaskResult{}, err
+		}
+
 		record := domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
 		if err := h.Approvals.Save(record); err != nil {
 			return DispatchTaskResult{}, err
