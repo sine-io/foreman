@@ -60,15 +60,23 @@ create table if not exists schema_migrations (
 			continue
 		}
 
-		if _, err := db.Exec(migration.sql); err != nil {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration %s: %w", migration.version, err)
+		}
+		if _, err := tx.Exec(migration.sql); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %s: %w", migration.version, err)
 		}
-
-		if _, err := db.Exec(
+		if _, err := tx.Exec(
 			`insert into schema_migrations(version) values (?)`,
 			migration.version,
 		); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("record migration %s: %w", migration.version, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", migration.version, err)
 		}
 	}
 

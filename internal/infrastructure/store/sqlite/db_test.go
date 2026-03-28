@@ -35,7 +35,30 @@ func TestOpenIsIdempotentAcrossRepeatedBoots(t *testing.T) {
 
 	db, err = Open(path)
 	require.NoError(t, err)
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
 	require.NoError(t, db.Close())
+}
+
+func TestOpenUpgradesLegacyDatabaseAndRecordsMigrations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+
+	db, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`PRAGMA foreign_keys = ON`)
+	require.NoError(t, err)
+	_, err = db.Exec(initSchema)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	db, err = Open(path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+
+	requireColumn(t, db, "runs", "created_at")
+	requireColumn(t, db, "approvals", "created_at")
+	requireColumn(t, db, "artifacts", "created_at")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
 }
 
 func OpenTestDB(t *testing.T) *sql.DB {
@@ -90,4 +113,21 @@ func requireColumn(t *testing.T, db *sql.DB, table, column string) {
 
 	require.NoError(t, rows.Err())
 	t.Fatalf("column %q not found in table %q", column, table)
+}
+
+func requireMigrationVersions(t *testing.T, db *sql.DB, versions ...string) {
+	t.Helper()
+
+	rows, err := db.Query(`select version from schema_migrations order by version`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var found []string
+	for rows.Next() {
+		var version string
+		require.NoError(t, rows.Scan(&version))
+		found = append(found, version)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, versions, found)
 }
