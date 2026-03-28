@@ -32,6 +32,7 @@ Phase 1 is now validated end-to-end, including a live smoke run against the real
 
 Work beyond Phase 1 is now concentrated in:
 
+- a Foreman-native manager-agent API for upstream integrations
 - richer board controls and polish
 - additional runner and gateway adapters
 
@@ -83,10 +84,26 @@ To run the local control plane:
 go run ./cmd/foreman serve
 ```
 
+To call the normalized manager-agent API directly:
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"create_task","summary":"Summarize current project status"}'
+```
+
+To inspect persisted manager-facing task state:
+
+```bash
+curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
+curl http://localhost:8080/api/manager/projects/demo/board
+```
+
 ## Status Notes
 
 - This repo no longer contains the legacy shell-runtime, hook, or skill-packaging line.
 - Foreman should call native downstream CLIs through dedicated Go adapters instead of inheriting the old repository wrapper scripts.
+- OpenClaw now routes through the same application-level manager-agent service used by the new Foreman-native manager API.
 
 ## See Also
 

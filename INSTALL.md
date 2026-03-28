@@ -23,10 +23,26 @@ Current verification and adapter-level checks:
 ```bash
 go test ./...
 go test ./internal/adapters/cli ./internal/adapters/http ./test
+go test ./internal/adapters/http -run Manager
 go test ./internal/bootstrap -run Serve
 ```
 
 The `serve` command now wires the SQLite-backed board and OpenClaw gateway flow, the CLI command surface can create projects/modules/tasks plus run task actions, and the board UI reads real module/task/approval data from the HTTP endpoints. This Phase 1 slice has also been smoke-tested against a live `codex` CLI, with completed runs, released leases, and persisted assistant-summary artifacts.
+
+## Manager API Smoke
+
+With `foreman serve` running:
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"create_task","summary":"Bootstrap board"}'
+
+curl http://localhost:8080/api/manager/tasks/<task-id>?project_id=demo
+curl http://localhost:8080/api/manager/projects/demo/board
+```
+
+These routes expose the normalized manager-agent contract directly from Foreman without ACP or channel/gateway concerns.
 
 ## Repository Purpose
 
