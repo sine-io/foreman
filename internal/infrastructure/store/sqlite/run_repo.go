@@ -19,6 +19,12 @@ func (r *RunRepository) Save(run ports.Run) error {
 	createdAt := run.CreatedAt
 	if createdAt == "" {
 		createdAt = sortableTimestamp(time.Now())
+	} else {
+		var err error
+		createdAt, err = normalizeSortableTimestamp(createdAt)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err := r.db.Exec(

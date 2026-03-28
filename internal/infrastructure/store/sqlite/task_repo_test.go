@@ -108,6 +108,24 @@ func TestRunRepositoryFindByTaskUsesMixedPrecisionTimestampsCorrectly(t *testing
 	require.Equal(t, "run-late", row.ID)
 }
 
+func TestRunRepositorySaveNormalizesCallerProvidedTimestamp(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewRunRepository(db)
+
+	require.NoError(t, repo.Save(ports.Run{
+		ID:         "run-1",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+		CreatedAt:  "2026-03-28T10:00:00.9Z",
+	}))
+
+	row, err := repo.Get("run-1")
+	require.NoError(t, err)
+	require.Equal(t, "2026-03-28T10:00:00.900000000Z", row.CreatedAt)
+}
+
 func TestApprovalRepositoryFindLatestByTaskUsesCreatedAtOrdering(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
@@ -159,6 +177,20 @@ func TestApprovalRepositoryFindLatestByTaskUsesMixedPrecisionTimestampsCorrectly
 	row, err := repo.FindLatestByTask(taskID)
 	require.NoError(t, err)
 	require.Equal(t, "approval-late", row.ID)
+}
+
+func TestApprovalRepositorySaveNormalizesCallerProvidedTimestamp(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewApprovalRepository(db)
+
+	record := approval.New("approval-1", taskID, "first")
+	record.CreatedAt = "2026-03-28T10:00:00.9Z"
+	require.NoError(t, repo.Save(record))
+
+	row, err := repo.Get("approval-1")
+	require.NoError(t, err)
+	require.Equal(t, "2026-03-28T10:00:00.900000000Z", row.CreatedAt)
 }
 
 func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {

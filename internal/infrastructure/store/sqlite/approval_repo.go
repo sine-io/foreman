@@ -19,6 +19,12 @@ func (r *ApprovalRepository) Save(a approval.Approval) error {
 	createdAt := a.CreatedAt
 	if createdAt == "" {
 		createdAt = sortableTimestamp(time.Now())
+	} else {
+		var err error
+		createdAt, err = normalizeSortableTimestamp(createdAt)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err := r.db.Exec(
