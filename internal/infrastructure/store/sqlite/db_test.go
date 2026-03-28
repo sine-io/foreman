@@ -25,6 +25,7 @@ func TestOpenAppliesAllMigrationsInOrder(t *testing.T) {
 	requireColumn(t, db, "runs", "created_at")
 	requireColumn(t, db, "approvals", "created_at")
 	requireColumn(t, db, "approvals", "risk_level")
+	requireColumnDefault(t, db, "approvals", "risk_level", "'medium'")
 	requireColumn(t, db, "approvals", "policy_rule")
 	requireColumn(t, db, "approvals", "rejection_reason")
 	requireColumn(t, db, "artifacts", "created_at")
@@ -172,6 +173,37 @@ func requireColumn(t *testing.T, db *sql.DB, table, column string) {
 		require.NoError(t, err)
 		if name == column {
 			require.NoError(t, rows.Err())
+			return
+		}
+	}
+
+	require.NoError(t, rows.Err())
+	t.Fatalf("column %q not found in table %q", column, table)
+}
+
+func requireColumnDefault(t *testing.T, db *sql.DB, table, column, expected string) {
+	t.Helper()
+
+	rows, err := db.Query(`pragma table_info(` + table + `)`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var (
+		cid        int
+		name       string
+		dataType   string
+		notNull    int
+		defaultVal sql.NullString
+		pk         int
+	)
+
+	for rows.Next() {
+		err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &pk)
+		require.NoError(t, err)
+		if name == column {
+			require.NoError(t, rows.Err())
+			require.True(t, defaultVal.Valid)
+			require.Equal(t, expected, defaultVal.String)
 			return
 		}
 	}
