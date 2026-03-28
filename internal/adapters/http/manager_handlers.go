@@ -212,9 +212,7 @@ func (h *ManagerHandlers) RejectApproval(c *gin.Context) {
 		respondManagerError(c, err)
 		return
 	}
-	dto := approvalActionResponseDTO(resp)
-	dto.RejectionReason = req.RejectionReason
-	c.JSON(nethttp.StatusOK, dto)
+	c.JSON(nethttp.StatusOK, approvalActionResponseDTO(resp))
 }
 
 func (h *ManagerHandlers) RetryApprovalDispatch(c *gin.Context) {

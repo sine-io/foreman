@@ -193,6 +193,25 @@ func TestManagerApprovalActionEndpointsReturnApprovalActionResponse(t *testing.T
 	}
 }
 
+func TestManagerRejectApprovalEndpointPreservesStoredRejectionReasonOnRepeatReject(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(
+		stdhttp.MethodPost,
+		"/api/manager/approvals/approval-rejected/reject",
+		strings.NewReader(`{"rejection_reason":"new request body reason"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	var resp managerApprovalWorkbenchActionResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "rejected", resp.ApprovalState)
+	require.Equal(t, "stored persisted rejection reason", resp.RejectionReason)
+}
+
 func TestManagerApprovalEndpointsMapMissingAndConflictErrors(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -348,6 +367,14 @@ func (a *fakeManagerHTTPApp) RejectApproval(ctx context.Context, approvalID, rej
 		return manageragent.ApprovalWorkbenchActionResponse{}, command.ErrApprovalActionNotFound
 	case "conflict":
 		return manageragent.ApprovalWorkbenchActionResponse{}, command.ErrApprovalActionConflict
+	case "approval-rejected":
+		return manageragent.ApprovalWorkbenchActionResponse{
+			ApprovalID:      approvalID,
+			ApprovalState:   "rejected",
+			RejectionReason: "stored persisted rejection reason",
+			TaskID:          "task-1",
+			TaskState:       "ready",
+		}, nil
 	default:
 		return manageragent.ApprovalWorkbenchActionResponse{
 			ApprovalID:      approvalID,

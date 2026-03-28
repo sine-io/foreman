@@ -2,6 +2,7 @@ package manageragent
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -427,6 +428,8 @@ func normalizeApprovalActionError(err error) error {
 		return err
 	case errors.Is(err, command.ErrApprovalActionConflict):
 		return err
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("%w: %v", command.ErrApprovalActionNotFound, err)
 	default:
 		return err
 	}

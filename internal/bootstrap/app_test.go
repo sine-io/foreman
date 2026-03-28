@@ -265,6 +265,29 @@ func TestServeKeepsRejectedApprovalDirectlyViewableAfterProcessing(t *testing.T)
 	require.NoError(t, <-errCh)
 }
 
+func TestServeReturns404ForMissingApprovalWorkbenchDetail(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	resp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/approvals/missing-approval")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Equal(t, stdhttp.StatusNotFound, resp.StatusCode)
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 
