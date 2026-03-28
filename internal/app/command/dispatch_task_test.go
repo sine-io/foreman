@@ -74,6 +74,38 @@ func TestDispatchCreatesApprovalWhenRiskyActionDetected(t *testing.T) {
 	require.Equal(t, 1, approvals.saveCount)
 }
 
+func TestDispatchCopiesPolicyMetadataIntoCreatedApproval(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
+	require.NoError(t, tasks.Save(riskyTask))
+
+	approvals := &fakeApprovalRepo{}
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{
+			decision: domainpolicy.Decision{
+				RequiresApproval: true,
+				Reason:           "git push origin main requires approval",
+				RiskLevel:        approval.RiskHigh,
+				PolicyRule:       "strict.git_push",
+			},
+		},
+		&fakeRunner{},
+		approvals,
+		tx.runs,
+		tx.artifacts,
+	)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.Equal(t, "waiting_approval", out.TaskState)
+	require.Equal(t, approval.RiskHigh, approvals.saved.RiskLevel)
+	require.Equal(t, "strict.git_push", approvals.saved.PolicyRule)
+}
+
 func TestDispatchReusesExistingPendingApprovalWhenRetried(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	riskyTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "git push origin main", "repo:project-1")
