@@ -96,6 +96,30 @@ func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
 	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql")
 }
 
+func TestOpenDoesNotNeedWriteLockWhenDatabaseIsAlreadyMigrated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "writer-lock.db")
+
+	db, err := Open(path)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	lockDB, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, lockDB.Close()) }()
+	_, err = lockDB.Exec(`PRAGMA busy_timeout = 5000`)
+	require.NoError(t, err)
+	_, err = lockDB.Exec(`BEGIN IMMEDIATE`)
+	require.NoError(t, err)
+	defer func() {
+		_, rollbackErr := lockDB.Exec(`ROLLBACK`)
+		require.NoError(t, rollbackErr)
+	}()
+
+	reopened, err := Open(path)
+	require.NoError(t, err)
+	require.NoError(t, reopened.Close())
+}
+
 func OpenTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 

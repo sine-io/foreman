@@ -63,6 +63,22 @@ func applyMigrations(db *sql.DB) error {
 
 	for _, migration := range sorted {
 		ctx := context.Background()
+		var applied bool
+
+		hasMigrationsTable, err := schemaMigrationsTableExists(db)
+		if err != nil {
+			return fmt.Errorf("check schema_migrations table: %w", err)
+		}
+		if hasMigrationsTable {
+			applied, err := migrationApplied(db, migration.version)
+			if err != nil {
+				return fmt.Errorf("check migration %s: %w", migration.version, err)
+			}
+			if applied {
+				continue
+			}
+		}
+
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			return fmt.Errorf("acquire connection for migration %s: %w", migration.version, err)
@@ -85,7 +101,7 @@ create table if not exists schema_migrations (
 			return fmt.Errorf("ensure schema migrations table: %w", err)
 		}
 
-		applied, err := migrationAppliedConn(ctx, conn, migration.version)
+		applied, err = migrationAppliedConn(ctx, conn, migration.version)
 		if err != nil {
 			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
 			_ = conn.Close()
@@ -121,6 +137,27 @@ create table if not exists schema_migrations (
 	}
 
 	return nil
+}
+
+func schemaMigrationsTableExists(db *sql.DB) (bool, error) {
+	var count int
+	if err := db.QueryRow(
+		`select count(1) from sqlite_master where type = 'table' and name = 'schema_migrations'`,
+	).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func migrationApplied(db *sql.DB, version string) (bool, error) {
+	var count int
+	if err := db.QueryRow(
+		`select count(1) from schema_migrations where version = ?`,
+		version,
+	).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func migrationAppliedConn(ctx context.Context, conn *sql.Conn, version string) (bool, error) {
