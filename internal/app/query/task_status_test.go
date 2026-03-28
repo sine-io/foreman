@@ -48,6 +48,91 @@ func TestTaskStatusIncludesRunAndApprovalFields(t *testing.T) {
 	require.Equal(t, "approval-1", view.ApprovalID)
 	require.Equal(t, "git push origin main requires approval", view.ApprovalReason)
 	require.Equal(t, "approved", view.ApprovalState)
+	require.False(t, view.PendingApproval)
+}
+
+func TestTaskStatusCompletedWithoutApproval(t *testing.T) {
+	q := NewTaskStatusQuery(fakeStatusRepo{
+		task: task.Task{
+			ID:       "task-1",
+			ModuleID: "module-1",
+			Summary:  "Ship dedicated status query",
+			State:    task.TaskStateCompleted,
+			Priority: 3,
+		},
+		module: modulepkg.Module{
+			ID:        "module-1",
+			ProjectID: "project-1",
+		},
+		run: ports.Run{
+			ID:     "run-1",
+			TaskID: "task-1",
+			State:  "completed",
+		},
+	})
+
+	view, err := q.Execute("project-1", "task-1")
+	require.NoError(t, err)
+	require.Equal(t, "completed", view.State)
+	require.Equal(t, 3, view.Priority)
+	require.Equal(t, "run-1", view.RunID)
+	require.Equal(t, "completed", view.RunState)
+	require.Empty(t, view.ApprovalID)
+	require.False(t, view.PendingApproval)
+}
+
+func TestTaskStatusWaitingApprovalSetsPendingApprovalTrue(t *testing.T) {
+	q := NewTaskStatusQuery(fakeStatusRepo{
+		task: task.Task{
+			ID:       "task-1",
+			ModuleID: "module-1",
+			Summary:  "Needs approval",
+			State:    task.TaskStateWaitingApproval,
+		},
+		module: modulepkg.Module{
+			ID:        "module-1",
+			ProjectID: "project-1",
+		},
+		pendingApproval: approval.Approval{
+			ID:     "approval-1",
+			TaskID: "task-1",
+			Reason: "git push origin main requires approval",
+			Status: approval.StatusPending,
+		},
+	})
+
+	view, err := q.Execute("project-1", "task-1")
+	require.NoError(t, err)
+	require.Equal(t, "waiting_approval", view.State)
+	require.Equal(t, "pending", view.ApprovalState)
+	require.True(t, view.PendingApproval)
+}
+
+func TestTaskStatusRunningWithoutApprovalUsesRunState(t *testing.T) {
+	q := NewTaskStatusQuery(fakeStatusRepo{
+		task: task.Task{
+			ID:       "task-1",
+			ModuleID: "module-1",
+			Summary:  "Still running",
+			State:    task.TaskStateRunning,
+		},
+		module: modulepkg.Module{
+			ID:        "module-1",
+			ProjectID: "project-1",
+		},
+		run: ports.Run{
+			ID:     "run-1",
+			TaskID: "task-1",
+			State:  "running",
+		},
+	})
+
+	view, err := q.Execute("project-1", "task-1")
+	require.NoError(t, err)
+	require.Equal(t, "running", view.State)
+	require.Equal(t, "run-1", view.RunID)
+	require.Equal(t, "running", view.RunState)
+	require.False(t, view.PendingApproval)
 }
 
 func TestTaskStatusReturnsNotFoundForCrossProjectTask(t *testing.T) {
