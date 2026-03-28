@@ -99,7 +99,6 @@ func BuildApp(cfg Config) (App, error) {
 		createProject: command.NewCreateProjectHandler(projects),
 		createModule:  command.NewCreateModuleHandler(projects, modules),
 		createTask:    command.NewCreateTaskHandler(modules, tasks),
-		approveTask:   command.NewApproveTaskHandler(transactor, approvals, tasks),
 		retryTask:     command.NewRetryTaskHandler(tasks),
 		cancelTask:    command.NewCancelTaskHandler(tasks),
 		reprioritize:  command.NewReprioritizeTaskHandler(tasks),
