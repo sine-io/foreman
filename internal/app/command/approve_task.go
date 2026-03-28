@@ -35,6 +35,17 @@ func (h *ApproveTaskHandler) Handle(cmd ApproveTaskCommand) error {
 	return h.Tx.WithinTransaction(context.Background(), func(_ context.Context, repos ports.TransactionRepositories) error {
 		record, err := repos.Approvals.FindPendingByTask(cmd.TaskID)
 		if err != nil {
+			latest, latestErr := repos.Approvals.FindLatestByTask(cmd.TaskID)
+			if latestErr != nil {
+				return err
+			}
+			repoTask, taskErr := repos.Tasks.Get(cmd.TaskID)
+			if taskErr != nil {
+				return taskErr
+			}
+			if latest.Status == approval.StatusApproved && repoTask.State != task.TaskStateWaitingApproval {
+				return nil
+			}
 			return err
 		}
 

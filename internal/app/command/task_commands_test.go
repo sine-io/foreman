@@ -100,6 +100,29 @@ func TestApproveTaskTransitionsWithinSingleTransaction(t *testing.T) {
 	require.Equal(t, task.TaskStateReady, savedTask.State)
 }
 
+func TestApproveTaskIsIdempotentAfterApprovalAlreadyResolved(t *testing.T) {
+	approvals := &fakeApprovalRepo{
+		byTaskID: map[string]approval.Approval{
+			"task-1": {
+				ID:     "approval-1",
+				TaskID: "task-1",
+				Reason: "git push origin main",
+				Status: approval.StatusApproved,
+			},
+		},
+	}
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board", "repo:project-1")
+	repoTask.State = task.TaskStateLeased
+	require.NoError(t, tasks.Save(repoTask))
+
+	tx := newFakeTransactor(tasks, approvals, &fakeRunRepo{}, &fakeArtifactRepo{})
+	handler := NewApproveTaskHandler(tx, approvals, tasks)
+
+	err := handler.Handle(ApproveTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+}
+
 func TestRetryTaskMovesFailedTaskToReady(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	failedTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Retry me", "repo:project-1")
@@ -225,9 +248,13 @@ type fakeApprovalRepo struct {
 	byTaskID  map[string]approval.Approval
 	saved     approval.Approval
 	saveCount int
+	saveErr   error
 }
 
 func (f *fakeApprovalRepo) Save(value approval.Approval) error {
+	if f.saveErr != nil {
+		return f.saveErr
+	}
 	if f.byTaskID == nil {
 		f.byTaskID = map[string]approval.Approval{}
 	}

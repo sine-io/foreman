@@ -240,18 +240,58 @@ func TestDispatchDoesNotReinvokeRunnerWhenTaskAlreadyHasPersistedRun(t *testing.
 	require.Zero(t, leases.acquireCount)
 }
 
+func TestDispatchDoesNotReinvokeRunnerWhenRunAppearsAfterLeaseAcquire(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
+	require.NoError(t, tasks.Save(repoTask))
+
+	runs := &fakeRunRepo{}
+	leases := &fakeLeaseRepo{
+		onAcquire: func() {
+			_ = runs.Save(ports.Run{
+				ID:     "run-1",
+				TaskID: "task-1",
+				State:  "completed",
+			})
+		},
+	}
+	runner := &fakeRunner{}
+	tx := newFakeTransactor(tasks, &fakeApprovalRepo{}, runs, &fakeArtifactRepo{})
+
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		leases,
+		fakePolicy{decision: domainpolicy.Decision{}},
+		runner,
+		tx.approvals,
+		runs,
+		tx.artifacts,
+	)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.RunState)
+	require.Equal(t, 0, runner.dispatchCount)
+	require.Equal(t, 1, leases.releaseCount)
+}
+
 type fakeLeaseRepo struct {
 	taskID           string
 	scopeKey         string
 	releasedScopeKey string
 	acquireCount     int
 	releaseCount     int
+	onAcquire        func()
 }
 
 func (f *fakeLeaseRepo) Acquire(taskID, scopeKey string) error {
 	f.taskID = taskID
 	f.scopeKey = scopeKey
 	f.acquireCount++
+	if f.onAcquire != nil {
+		f.onAcquire()
+	}
 	return nil
 }
 

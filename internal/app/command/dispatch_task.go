@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	domainapproval "github.com/sine-io/foreman/internal/domain/approval"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
@@ -87,6 +88,19 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 	if err := h.Leases.Acquire(repoTask.ID, repoTask.WriteScope); err != nil {
 		return DispatchTaskResult{}, err
 	}
+	if persistedRun, err := h.Runs.FindByTask(repoTask.ID); err == nil && isAuthoritativeRun(persistedRun) {
+		releaseErr := h.Leases.Release(repoTask.WriteScope)
+		if releaseErr != nil {
+			return DispatchTaskResult{}, releaseErr
+		}
+		return persistedRunResult(repoTask, persistedRun), nil
+	} else if err != nil && err != sql.ErrNoRows {
+		releaseErr := h.Leases.Release(repoTask.WriteScope)
+		if releaseErr != nil {
+			return DispatchTaskResult{}, errors.Join(err, releaseErr)
+		}
+		return DispatchTaskResult{}, err
+	}
 
 	run, err := h.Runner.Dispatch(ports.RunRequest{
 		TaskID:     repoTask.ID,
@@ -161,6 +175,9 @@ func (h *DispatchTaskHandler) handleApprovalDispatch(taskID string, decision dom
 
 			record = domainapproval.New(nextID("approval"), repoTask.ID, decision.Reason)
 			if err := repos.Approvals.Save(record); err != nil {
+				if !isDuplicatePendingApprovalError(err) {
+					return err
+				}
 				existing, findErr := repos.Approvals.FindPendingByTask(taskID)
 				if findErr != nil {
 					return err
@@ -205,4 +222,13 @@ func persistedRunResult(repoTask task.Task, run ports.Run) DispatchTaskResult {
 		TaskState: taskState,
 		RunState:  run.State,
 	}
+}
+
+func isDuplicatePendingApprovalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "approvals_pending_task_idx") ||
+		strings.Contains(msg, "UNIQUE constraint failed: approvals.task_id")
 }
