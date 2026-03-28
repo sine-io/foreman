@@ -4,6 +4,3 @@ import appmanageragent "github.com/sine-io/foreman/internal/app/manageragent"
 
 type Request = appmanageragent.Request
 type Response = appmanageragent.Response
-
-type Command = Request
-type Result = Response
