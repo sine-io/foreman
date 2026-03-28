@@ -165,6 +165,10 @@ Rationale:
 
 The sorting should be performed server-side so all clients see the same queue order.
 
+For v1, `risk level` must come from a persisted approval field rather than being re-derived at render time.
+
+Existing approvals should keep the risk metadata they were created with, even if policy rules change later.
+
 ## Action Semantics
 
 ### Approve
@@ -182,6 +186,8 @@ Result handling:
 - if execution finishes quickly, the UI may show `completed`
 - if execution starts and continues, the UI should show `running`
 - if dispatch fails after approval, the approval remains `approved` and the UI should show the failure result explicitly
+- repeated `approve` against an already-approved approval should be a no-op success that returns current authoritative state and must not trigger a second dispatch
+- `approve` against an already-rejected approval should return `409 Conflict` with current approval and task state
 
 ### Reject
 
@@ -194,6 +200,11 @@ Semantics:
 - the task returns to `ready`
 
 This means the task is not destroyed. It is sent back for revision or later resubmission, while preserving an auditable rejection record.
+
+Additional reject semantics:
+
+- repeated `reject` against an already-rejected approval should be a no-op success that returns current authoritative state
+- `reject` against an already-approved approval should return `409 Conflict` with current approval and task state
 
 ## Interaction Flow
 
@@ -237,7 +248,7 @@ Add workbench-specific manager-facing endpoints:
 
 - `GET /api/manager/approvals/:id`
   - returns one approval review view
-  - includes risk explanation, task context, latest run context, assistant summary preview, artifacts, and approval status
+  - includes risk explanation, task context, latest run context, assistant summary preview, artifacts, approval status, and `rejection_reason` when present
 
 - `POST /api/manager/approvals/:id/approve`
   - approves and immediately continues dispatch
@@ -247,6 +258,8 @@ Add workbench-specific manager-facing endpoints:
   - rejects and moves the task back to `ready`
 
 The workbench should operate primarily on `approval_id`, not `task_id`, because the object under review is the approval decision itself.
+
+Action responses should return the authoritative resulting approval and task state so the UI can update deterministically after success, retries, or conflicts.
 
 ## Data And State Requirements
 
@@ -269,6 +282,52 @@ That read model should include:
 - relevant artifact metadata
 - policy/risk explanation
 
+## Approval Metadata Model
+
+The workbench needs a canonical approval-review record that is stable for ordering, history, and explainability.
+
+For v1, the approval record should carry these approval-specific metadata fields:
+
+- `risk_level`
+- `policy_rule`
+- `approval_reason`
+- `rejection_reason`
+
+### Persisted Fields
+
+The following fields should be persisted on the approval record at approval-creation time:
+
+- `risk_level`
+- `policy_rule`
+- `approval_reason`
+
+`rejection_reason` should be persisted on that same approval record when a rejection occurs.
+
+Rationale:
+
+- queue ordering should not depend on re-running policy code later
+- historical review by `approval_id` must preserve the original reason the approval existed
+- the workbench should render stable review data even if policy rules evolve after approval creation
+
+### Derived Or Joined Fields
+
+The following fields can be assembled at read time from other control-plane records:
+
+- task context
+- latest run context
+- assistant summary preview
+- artifact list
+
+### Historical Review Requirement
+
+`GET /api/manager/approvals/:id` must work for:
+
+- pending approvals
+- already-approved approvals
+- already-rejected approvals
+
+For rejected approvals, the detail view must return the persisted `rejection_reason`.
+
 ## Error Handling
 
 The workbench should treat action results as explicit operator outcomes, not silent failures.
@@ -280,6 +339,11 @@ If approval succeeds but dispatch fails:
 - keep the approval as `approved`
 - return the dispatch failure clearly
 - do not reopen the approval automatically
+
+If an action request targets a non-pending approval:
+
+- repeated same-direction action should return the current authoritative state without creating new side effects
+- opposite-direction action should return `409 Conflict`
 
 ### Reject Errors
 
@@ -296,6 +360,22 @@ If the selected `approval_id` no longer exists or is no longer pending:
 - the workbench should show a clear non-pending or not-found state
 - the queue should refresh
 - the operator should not be left viewing misleading stale pending data
+
+## Planning Anchor In The Existing Runtime
+
+This sub-project should extend the current approval vertical slice instead of introducing a second approval stack.
+
+The current runtime anchor is:
+
+- board queue read path through `internal/adapters/http/router.go`, `internal/adapters/http/board_handlers.go`, `internal/app/query/approval_queue.go`, and `internal/infrastructure/store/sqlite/board_query_repo.go`
+- approval action path through `internal/bootstrap/app.go` into `internal/app/command/approve_task.go`
+- existing task and approval reconstruction through `internal/app/query/task_status.go`
+
+Implementation planning should stay anchored to that path and extend it with:
+
+- workbench-specific read models
+- approval-centered HTTP handlers and DTOs
+- workbench UI under `web/board/*`
 
 ## V1 Scope Boundary
 
