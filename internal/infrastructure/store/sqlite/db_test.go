@@ -67,11 +67,13 @@ func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
+	start := make(chan struct{})
 
 	for range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			<-start
 			db, err := Open(path)
 			if err == nil {
 				err = db.Close()
@@ -80,6 +82,7 @@ func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
 		}()
 	}
 
+	close(start)
 	wg.Wait()
 	close(errs)
 

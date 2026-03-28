@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"sort"
 
 	_ "modernc.org/sqlite"
 )
@@ -49,15 +50,30 @@ func Open(path string) (*sql.DB, error) {
 }
 
 func applyMigrations(db *sql.DB) error {
-	for _, migration := range migrations {
+	sorted := append([]migration(nil), migrations...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].version < sorted[j].version
+	})
+
+	for i, migration := range migrations {
+		if migration.version != sorted[i].version {
+			return fmt.Errorf("migrations must be declared in filename order")
+		}
+	}
+
+	for _, migration := range sorted {
 		ctx := context.Background()
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			return fmt.Errorf("acquire connection for migration %s: %w", migration.version, err)
 		}
-		defer conn.Close()
+		if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout = 5000`); err != nil {
+			_ = conn.Close()
+			return fmt.Errorf("set connection busy timeout for migration %s: %w", migration.version, err)
+		}
 
 		if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+			_ = conn.Close()
 			return fmt.Errorf("lock migration %s: %w", migration.version, err)
 		}
 		if _, err := conn.ExecContext(ctx, `
@@ -65,22 +81,27 @@ create table if not exists schema_migrations (
   version text primary key
 )`); err != nil {
 			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+			_ = conn.Close()
 			return fmt.Errorf("ensure schema migrations table: %w", err)
 		}
 
 		applied, err := migrationAppliedConn(ctx, conn, migration.version)
 		if err != nil {
 			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+			_ = conn.Close()
 			return fmt.Errorf("check migration %s: %w", migration.version, err)
 		}
 		if applied {
 			if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+				_ = conn.Close()
 				return fmt.Errorf("commit skipped migration %s: %w", migration.version, err)
 			}
+			_ = conn.Close()
 			continue
 		}
 		if _, err := conn.ExecContext(ctx, migration.sql); err != nil {
 			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+			_ = conn.Close()
 			return fmt.Errorf("apply migration %s: %w", migration.version, err)
 		}
 		if _, err := conn.ExecContext(
@@ -89,11 +110,14 @@ create table if not exists schema_migrations (
 			migration.version,
 		); err != nil {
 			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+			_ = conn.Close()
 			return fmt.Errorf("record migration %s: %w", migration.version, err)
 		}
 		if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+			_ = conn.Close()
 			return fmt.Errorf("commit migration %s: %w", migration.version, err)
 		}
+		_ = conn.Close()
 	}
 
 	return nil
