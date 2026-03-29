@@ -116,6 +116,8 @@ Primary ownership by package:
 **Files:**
 - Create: `internal/app/query/task_workbench.go`
 - Create: `internal/app/query/task_workbench_test.go`
+- Modify: `internal/ports/repositories.go`
+- Modify: `internal/infrastructure/store/sqlite/board_query_repo.go`
 - Modify: `internal/app/manageragent/types.go`
 - Modify: `internal/app/manageragent/service.go`
 - Modify: `internal/app/manageragent/service_test.go`
@@ -129,6 +131,7 @@ func TestTaskWorkbenchHandlesNoRunAndNoApproval(t *testing.T) {}
 func TestTaskWorkbenchRejectsCrossProjectTask(t *testing.T) {}
 func TestTaskWorkbenchApprovalLinkDeepLinksToLatestApproval(t *testing.T) {}
 func TestTaskWorkbenchIncludesTaskMetadataFields(t *testing.T) {}
+func TestTaskWorkbenchExposesRunDetailURL(t *testing.T) {}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -155,11 +158,15 @@ type TaskWorkbenchAction struct {
 Rules:
 
 - use a dedicated query/view rather than extending `TaskStatusView`
+- extend `internal/ports/repositories.go` with a dedicated task-workbench read-model row or query method so the query has one explicit data source for latest run summary and latest task artifacts
+- implement that task-workbench read-model source in `internal/infrastructure/store/sqlite/board_query_repo.go`
+- wire the new query object through `internal/app/manageragent.Service` so the runtime path is explicit: router -> manager handlers -> manager service -> task workbench query -> repo implementation
 - approval summary comes from latest approval, with `approval_workbench_url` deep-linking to `approval_id=<latest-approval-id>` when one exists
 - if no approval exists, keep the approval-workbench link visible but disabled with reason `No approval history`
 - latest run summary uses the latest run only
 - artifact summary uses the latest task artifacts approximation, not new run-to-artifact linkage
 - task metadata section must include `write_scope`, `task_type`, and `acceptance`
+- `run_detail_url` must be computed server-side in the workbench view and returned to the client as a navigation field
 - action availability matrix must exactly match the approved spec:
   - `ready`: dispatch/cancel/reprioritize enabled, retry disabled
   - `leased`: dispatch/cancel/reprioritize enabled, retry disabled
@@ -182,7 +189,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/app/query/task_workbench.go internal/app/query/task_workbench_test.go internal/app/manageragent/types.go internal/app/manageragent/service.go internal/app/manageragent/service_test.go
+git add internal/app/query/task_workbench.go internal/app/query/task_workbench_test.go internal/ports/repositories.go internal/infrastructure/store/sqlite/board_query_repo.go internal/app/manageragent/types.go internal/app/manageragent/service.go internal/app/manageragent/service_test.go
 git commit -m "feat: add task workbench query model"
 ```
 
@@ -196,6 +203,7 @@ git commit -m "feat: add task workbench query model"
 - Modify: `internal/app/manageragent/service.go`
 - Modify: `internal/app/manageragent/service_test.go`
 - Modify: `internal/bootstrap/app.go`
+- Modify: `internal/bootstrap/app_test.go`
 
 - [ ] **Step 1: Write the failing HTTP and service tests**
 
@@ -205,6 +213,7 @@ func TestManagerTaskWorkbenchActionEndpointsRespectProjectScope(t *testing.T) {}
 func TestManagerTaskWorkbenchActionEndpointsReturnConflictForIneligibleActions(t *testing.T) {}
 func TestManagerTaskWorkbenchReprioritizeBindsPriorityBody(t *testing.T) {}
 func TestTaskWorkbenchActionResponsesAreCompactAndRequireRefresh(t *testing.T) {}
+func TestBuildAppWiresTaskWorkbenchSurface(t *testing.T) {}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -230,6 +239,7 @@ Rules:
 - all action endpoints must validate that the task belongs to the supplied `project_id`
 - cross-project mismatches return a not-found style result
 - action results are compact payloads, not full refreshed workbench views
+- compact action results must include at least `task_id`, `task_state`, latest run fields when relevant, latest approval fields when relevant, and an optional operator-facing message
 - reprioritize binds JSON body `{"priority": <int>}` and enforces integer `>= 1`
 - ineligible actions return conflict-style results with stable operator-facing messages
 - define typed or sentinel task-action errors for not-found versus conflict so the task workbench HTTP layer can map `404` and `409` consistently
@@ -250,7 +260,7 @@ Expected: PASS after live wiring
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/adapters/http/dto.go internal/adapters/http/manager_handlers.go internal/adapters/http/manager_handlers_test.go internal/adapters/http/router.go internal/app/manageragent/service.go internal/app/manageragent/service_test.go internal/bootstrap/app.go
+git add internal/adapters/http/dto.go internal/adapters/http/manager_handlers.go internal/adapters/http/manager_handlers_test.go internal/adapters/http/router.go internal/app/manageragent/service.go internal/app/manageragent/service_test.go internal/bootstrap/app.go internal/bootstrap/app_test.go
 git commit -m "feat: add task workbench endpoints"
 ```
 
@@ -273,6 +283,7 @@ func TestTaskWorkbenchPageServes(t *testing.T) {}
 func TestTaskWorkbenchJavaScriptUsesProjectAndTaskURLState(t *testing.T) {}
 func TestTaskWorkbenchJavaScriptIncludesDisabledActionReasons(t *testing.T) {}
 func TestApprovalWorkbenchDetailLinksToTaskWorkbench(t *testing.T) {}
+func TestTaskWorkbenchJavaScriptUsesServerProvidedRunDetailURL(t *testing.T) {}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -288,6 +299,7 @@ UI rules:
 - top section shows current state and primary actions
 - actions remain visible when disabled and explain why
 - latest run summary shows latest run only, with link to `/board/runs/:id`
+- client should consume `run_detail_url` from the API rather than constructing run links ad hoc
 - approval summary links to the approval workbench using latest approval deep-link when one exists
 - if no approval exists, show disabled approval-workbench link with reason `No approval history`
 - artifact summary shows latest task artifacts approximation, not inline artifact contents
