@@ -27,6 +27,9 @@ type Response struct {
 }
 
 type TaskStatusView = query.TaskStatusView
+type TaskWorkbenchView = query.TaskWorkbenchView
+type TaskWorkbenchAction = query.TaskWorkbenchAction
+type TaskWorkbenchArtifact = query.TaskWorkbenchArtifact
 type ApprovalWorkbenchQueueView = query.ApprovalWorkbenchQueueView
 type ApprovalWorkbenchItem = query.ApprovalWorkbenchItem
 type ApprovalWorkbenchDetailView = query.ApprovalWorkbenchDetailView

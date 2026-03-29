@@ -33,6 +33,7 @@ type Dependencies struct {
 	CreateTask                   *command.CreateTaskHandler
 	DispatchTask                 *command.DispatchTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
+	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
 	QueryApprovalWorkbenchQueue  *query.ApprovalWorkbenchQueueQuery
@@ -54,6 +55,7 @@ type Service struct {
 	CreateTask                   *command.CreateTaskHandler
 	DispatchTask                 *command.DispatchTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
+	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
 	QueryApprovalWorkbenchQueue  *query.ApprovalWorkbenchQueueQuery
@@ -76,6 +78,7 @@ func NewService(deps Dependencies) *Service {
 		CreateTask:                   deps.CreateTask,
 		DispatchTask:                 deps.DispatchTask,
 		QueryTaskStatus:              deps.QueryTaskStatus,
+		QueryTaskWorkbench:           deps.QueryTaskWorkbench,
 		QueryModuleBoard:             deps.QueryModuleBoard,
 		QueryTaskBoard:               deps.QueryTaskBoard,
 		QueryApprovalWorkbenchQueue:  deps.QueryApprovalWorkbenchQueue,
@@ -186,6 +189,19 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 	}
 
 	return s.QueryTaskStatus.Execute(resolvedProjectID, taskID)
+}
+
+func (s *Service) TaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return TaskWorkbenchView{}, err
+	}
+
+	resolvedProjectID, err := s.resolveProjectID(projectID)
+	if err != nil {
+		return TaskWorkbenchView{}, err
+	}
+
+	return s.QueryTaskWorkbench.Execute(resolvedProjectID, taskID)
 }
 
 func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSnapshotView, error) {

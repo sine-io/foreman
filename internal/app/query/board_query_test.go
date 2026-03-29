@@ -58,6 +58,7 @@ type fakeBoardReadRepo struct {
 	tasks     []ports.TaskBoardRow
 	runDetail ports.RunDetailRecord
 	approvals []ports.ApprovalQueueRow
+	workbench ports.TaskWorkbenchRow
 }
 
 func (f fakeBoardReadRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -82,4 +83,8 @@ func (f fakeBoardReadRepo) ListApprovalWorkbenchQueue(projectID string) ([]ports
 
 func (f fakeBoardReadRepo) GetApprovalWorkbenchDetail(approvalID string) (ports.ApprovalWorkbenchDetailRow, error) {
 	return ports.ApprovalWorkbenchDetailRow{}, nil
+}
+
+func (f fakeBoardReadRepo) GetTaskWorkbench(taskID string) (ports.TaskWorkbenchRow, error) {
+	return f.workbench, nil
 }

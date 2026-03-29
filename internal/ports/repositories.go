@@ -126,6 +126,25 @@ type ApprovalWorkbenchDetailRow struct {
 	Artifacts        []ArtifactRecord
 }
 
+type TaskWorkbenchRow struct {
+	TaskID               string
+	ProjectID            string
+	ModuleID             string
+	Summary              string
+	TaskState            string
+	Priority             int
+	WriteScope           string
+	TaskType             string
+	Acceptance           string
+	LatestRunID          string
+	LatestRunState       string
+	LatestRunSummary     string
+	LatestApprovalID     string
+	LatestApprovalState  string
+	LatestApprovalReason string
+	Artifacts            []ArtifactRecord
+}
+
 type BoardQueryRepository interface {
 	ListModules(projectID string) ([]ModuleBoardRow, error)
 	ListTasks(projectID string) ([]TaskBoardRow, error)
@@ -133,4 +152,5 @@ type BoardQueryRepository interface {
 	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
 	ListApprovalWorkbenchQueue(projectID string) ([]ApprovalWorkbenchQueueRow, error)
 	GetApprovalWorkbenchDetail(approvalID string) (ApprovalWorkbenchDetailRow, error)
+	GetTaskWorkbench(taskID string) (TaskWorkbenchRow, error)
 }
