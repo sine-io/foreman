@@ -119,6 +119,18 @@ func TestTaskWorkbenchPageServesHTML(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "/board/assets/task-workbench.js")
 }
 
+func TestRunWorkbenchPageServes(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/runs/workbench?run_id=run-1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Run Workbench")
+	require.Contains(t, rec.Body.String(), "/board/assets/run-workbench.js")
+}
+
 func TestTaskWorkbenchJavaScriptUsesProjectAndTaskURLState(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -134,6 +146,19 @@ func TestTaskWorkbenchJavaScriptUsesProjectAndTaskURLState(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"task_id\", taskId)")
 }
 
+func TestRunWorkbenchJavaScriptUsesRunIDURLState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "searchParams.get(\"run_id\")")
+	require.Contains(t, rec.Body.String(), "searchParams.set(\"run_id\", runId)")
+}
+
 func TestTaskWorkbenchJavaScriptIncludesDisabledActionReasons(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -147,7 +172,7 @@ func TestTaskWorkbenchJavaScriptIncludesDisabledActionReasons(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "No approval history")
 }
 
-func TestTaskWorkbenchJavaScriptUsesServerProvidedRunDetailURL(t *testing.T) {
+func TestTaskWorkbenchJavaScriptLinksLatestRunsToRunWorkbenchRoute(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
 	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/task-workbench.js", nil)
@@ -155,8 +180,58 @@ func TestTaskWorkbenchJavaScriptUsesServerProvidedRunDetailURL(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "detail.run_detail_url")
-	require.NotContains(t, rec.Body.String(), "\"/board/runs/${")
+	require.Contains(t, rec.Body.String(), "/board/runs/workbench?run_id=")
+	require.Contains(t, rec.Body.String(), "detail.latest_run_id")
+	require.NotContains(t, rec.Body.String(), "detail.run_detail_url")
+}
+
+func TestRunWorkbenchJavaScriptUsesServerProvidedTaskWorkbenchURL(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.task_workbench_url")
+}
+
+func TestRunWorkbenchJavaScriptUsesArtifactTargetURLs(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.artifact_target_urls")
+	require.Contains(t, rec.Body.String(), "detail.artifact_target_urls[artifact.id]")
+}
+
+func TestRunWorkbenchJavaScriptIncludesRefreshControl(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "document.getElementById(\"run-workbench-refresh\")")
+	require.Contains(t, rec.Body.String(), "refreshButton.addEventListener(\"click\", refreshWorkbench)")
+}
+
+func TestRunWorkbenchJavaScriptRendersSupplementalMetadata(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.run_created_at")
+	require.Contains(t, rec.Body.String(), "detail.runner_kind")
+	require.Contains(t, rec.Body.String(), "detail.project_id")
+	require.Contains(t, rec.Body.String(), "detail.module_id")
 }
 
 func TestApprovalWorkbenchJavaScriptAssetServesManagerApprovalClient(t *testing.T) {

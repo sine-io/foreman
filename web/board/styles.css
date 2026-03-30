@@ -200,6 +200,7 @@ body {
   max-width: 1240px;
 }
 
+.run-workbench-shell,
 .task-workbench-shell {
   max-width: 1240px;
 }
@@ -227,11 +228,21 @@ body {
   align-items: start;
 }
 
+.run-workbench-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.run-workbench-detail,
 .task-workbench-detail {
   display: grid;
   gap: 0.85rem;
 }
 
+.run-overview-panel,
+.run-side-panel,
 .task-overview-panel,
 .task-side-panel {
   min-height: 30rem;
@@ -478,6 +489,19 @@ body {
   background: #fffdf7;
 }
 
+.run-artifact-card {
+  scroll-margin-top: 1.5rem;
+}
+
+.run-artifact-card:target {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.run-metadata-grid {
+  align-items: stretch;
+}
+
 .artifact-link {
   color: var(--accent);
   text-decoration: none;
@@ -492,6 +516,7 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .run-workbench-layout,
   .task-workbench-layout,
   .approval-workbench-layout,
   .detail-grid,

@@ -73,6 +73,14 @@ if (projectInput && taskInput && refreshButton && statusNode && overviewRoot && 
     return action.disabled_reason || (detail.disabled_reasons && detail.disabled_reasons[action.action_id]) || "";
   };
 
+  const latestRunWorkbenchURL = (detail) => {
+    if (!detail.latest_run_id) {
+      return "";
+    }
+
+    return `/board/runs/workbench?run_id=${encodeURIComponent(detail.latest_run_id)}`;
+  };
+
   const renderPrimaryAction = (detail, actionID) => {
     const action = findAction(detail, actionID) || { action_id: actionID, enabled: false };
     const disabledReason = actionDisabledReason(detail, action);
@@ -196,6 +204,7 @@ if (projectInput && taskInput && refreshButton && statusNode && overviewRoot && 
     }
 
     const detail = state.detail;
+    const latestRunHref = latestRunWorkbenchURL(detail);
     const latestRunSummary = detail.latest_run_id
       ? `
           <section class="detail-block detail-block-wide">
@@ -203,9 +212,9 @@ if (projectInput && taskInput && refreshButton && statusNode && overviewRoot && 
             <p class="detail-copy">${escapeHTML(detail.latest_run_id)} • ${escapeHTML(detail.latest_run_state || "unknown")}</p>
             <p class="detail-copy">${escapeHTML(detail.latest_run_summary || "No summary recorded")}</p>
             ${
-              detail.run_detail_url
-                ? `<a class="artifact-link" href="${escapeHTML(detail.run_detail_url)}">Open run detail</a>`
-                : '<span class="artifact-link artifact-link-muted">Run detail unavailable</span>'
+              latestRunHref
+                ? `<a class="artifact-link" href="${escapeHTML(latestRunHref)}">Open run workbench</a>`
+                : '<span class="artifact-link artifact-link-muted">Run workbench unavailable</span>'
             }
           </section>
         `
@@ -264,7 +273,7 @@ if (projectInput && taskInput && refreshButton && statusNode && overviewRoot && 
           ${renderPrimaryAction(detail, "retry")}
           ${renderPrimaryAction(detail, "cancel")}
           ${renderPrimaryAction(detail, "reprioritize")}
-          ${renderLinkAction(detail, "open_latest_run", detail.run_detail_url, "No latest run")}
+          ${renderLinkAction(detail, "open_latest_run", latestRunHref, "No latest run")}
           ${renderLinkAction(detail, "open_approval_workbench", approvalHref, "No approval history")}
         </section>
 

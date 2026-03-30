@@ -25,7 +25,7 @@ func NewRouter(app App) *gin.Engine {
 		c.File(filepath.Join(boardAssetDir(), "task-workbench.html"))
 	})
 	router.GET("/board/runs/workbench", func(c *gin.Context) {
-		c.String(http.StatusOK, "run workbench placeholder")
+		c.File(filepath.Join(boardAssetDir(), "run-workbench.html"))
 	})
 	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)

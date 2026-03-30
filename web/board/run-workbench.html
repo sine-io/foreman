@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Foreman Run Workbench</title>
+    <link rel="stylesheet" href="/board/assets/styles.css" />
+  </head>
+  <body>
+    <main class="board-shell run-workbench-shell">
+      <header class="board-header">
+        <p class="eyebrow">Foreman</p>
+        <h1>Run Workbench</h1>
+        <p class="subtitle">
+          Inspect one run, review the operator-facing summary, and jump back to the related task
+          workbench without leaving a stable deep link.
+        </p>
+      </header>
+
+      <section class="board-toolbar workbench-toolbar">
+        <label class="board-label" for="run-workbench-run-id">Run ID</label>
+        <input id="run-workbench-run-id" class="board-input" />
+        <button id="run-workbench-refresh" class="board-button" type="button">Refresh run</button>
+        <a class="board-link" href="/board">Back to Board</a>
+        <p id="run-workbench-status" class="board-status">Loading run detail...</p>
+      </section>
+
+      <section class="run-workbench-layout">
+        <section class="board-panel run-overview-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Overview</p>
+            <h2>Run State And Primary Conclusion</h2>
+          </header>
+          <div id="run-workbench-overview" class="run-workbench-detail"></div>
+        </section>
+
+        <section class="board-panel run-side-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Metadata</p>
+            <h2>Supplemental Run Metadata</h2>
+          </header>
+          <div id="run-workbench-metadata" class="run-workbench-detail"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/board/assets/run-workbench.js"></script>
+  </body>
+</html>
