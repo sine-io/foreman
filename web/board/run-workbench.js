@@ -11,6 +11,7 @@ if (runInput && refreshButton && statusNode && overviewRoot && metadataRoot) {
     detailState: "idle",
     notice: "",
     noticeTone: "info",
+    requestToken: 0,
   };
 
   const escapeHTML = (value) =>
@@ -217,7 +218,10 @@ if (runInput && refreshButton && statusNode && overviewRoot && metadataRoot) {
   };
 
   const loadRunDetail = async () => {
-    if (!state.runId) {
+    const requestedRunId = state.runId;
+    const requestToken = ++state.requestToken;
+
+    if (!requestedRunId) {
       state.detail = null;
       state.detailState = "idle";
       state.notice = "";
@@ -228,35 +232,43 @@ if (runInput && refreshButton && statusNode && overviewRoot && metadataRoot) {
 
     state.detailState = "loading";
     state.notice = "";
-    updateURLState(state.runId);
+    updateURLState(requestedRunId);
     renderOverview();
-    setStatus(`Loading ${state.runId}...`);
+    setStatus(`Loading ${requestedRunId}...`);
 
     try {
-      const detail = await fetchJSON(`/api/manager/runs/${encodeURIComponent(state.runId)}/workbench`, {
+      const detail = await fetchJSON(`/api/manager/runs/${encodeURIComponent(requestedRunId)}/workbench`, {
         method: "GET",
       });
+
+      if (requestToken !== state.requestToken) {
+        return;
+      }
 
       if (detail.notFound) {
         state.detail = null;
         state.detailState = "not_found";
         renderOverview();
-        setStatus(`Run ${state.runId} not found.`, "danger");
+        setStatus(`Run ${requestedRunId} not found.`, "danger");
         return;
       }
 
       state.detail = detail;
       state.detailState = "ready";
       renderOverview();
-      setStatus(`Loaded ${state.runId}.`);
+      setStatus(`Loaded ${requestedRunId}.`);
     } catch (error) {
+      if (requestToken !== state.requestToken) {
+        return;
+      }
+
       console.error(error);
       state.detail = null;
       state.detailState = "error";
       state.notice = error.message || "Failed to load run workbench.";
       state.noticeTone = "danger";
       renderOverview();
-      setStatus(`Failed to load ${state.runId}.`, "danger");
+      setStatus(`Failed to load ${requestedRunId}.`, "danger");
     }
   };
 

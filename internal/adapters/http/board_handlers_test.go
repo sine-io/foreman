@@ -220,6 +220,19 @@ func TestRunWorkbenchJavaScriptIncludesRefreshControl(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "refreshButton.addEventListener(\"click\", refreshWorkbench)")
 }
 
+func TestRunWorkbenchJavaScriptGuardsAgainstStaleResponses(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "const requestedRunId = state.runId;")
+	require.Contains(t, rec.Body.String(), "const requestToken = ++state.requestToken;")
+	require.Contains(t, rec.Body.String(), "if (requestToken !== state.requestToken) {")
+}
+
 func TestRunWorkbenchJavaScriptRendersSupplementalMetadata(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
