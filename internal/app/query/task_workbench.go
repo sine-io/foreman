@@ -154,6 +154,12 @@ func dispatchAction(taskState string) TaskWorkbenchAction {
 
 func cancelAction(taskState string) TaskWorkbenchAction {
 	switch taskState {
+	case "leased":
+		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Lease active"}
+	case "waiting_approval":
+		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Waiting approval"}
+	case "running":
+		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Run in progress"}
 	case "completed":
 		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Already completed"}
 	case "canceled":

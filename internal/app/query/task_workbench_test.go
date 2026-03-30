@@ -85,6 +85,40 @@ func TestTaskWorkbenchComputesDisabledReasonsPerAction(t *testing.T) {
 	require.Equal(t, "Task not failed", view.DisabledReasons["retry"])
 }
 
+func TestTaskWorkbenchDisablesCancelForActiveStates(t *testing.T) {
+	cases := []struct {
+		state      string
+		wantReason string
+	}{
+		{state: "leased", wantReason: "Lease active"},
+		{state: "waiting_approval", wantReason: "Waiting approval"},
+		{state: "running", wantReason: "Run in progress"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.state, func(t *testing.T) {
+			query := NewTaskWorkbenchQuery(fakeTaskWorkbenchRepo{
+				row: ports.TaskWorkbenchRow{
+					TaskID:     "task-1",
+					ProjectID:  "project-1",
+					ModuleID:   "module-1",
+					Summary:    "Active task",
+					TaskState:  tc.state,
+					Priority:   5,
+					WriteScope: "repo:project-1",
+					TaskType:   "write",
+					Acceptance: "Active task",
+				},
+			})
+
+			view, err := query.Execute("project-1", "task-1")
+			require.NoError(t, err)
+			require.False(t, taskWorkbenchAction(view.AvailableActions, "cancel").Enabled)
+			require.Equal(t, tc.wantReason, taskWorkbenchAction(view.AvailableActions, "cancel").DisabledReason)
+		})
+	}
+}
+
 func TestTaskWorkbenchActionMatrixMatchesTaskState(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -99,10 +133,10 @@ func TestTaskWorkbenchActionMatrixMatchesTaskState(t *testing.T) {
 		retryReason        string
 	}{
 		{name: "ready", taskState: "ready", expectDispatch: true, expectCancel: true, expectReprioritize: true, expectRetry: false, retryReason: "Task not failed"},
-		{name: "leased", taskState: "leased", expectDispatch: true, expectCancel: true, expectReprioritize: true, expectRetry: false, retryReason: "Task not failed"},
-		{name: "waiting approval", taskState: "waiting_approval", expectDispatch: false, expectCancel: true, expectReprioritize: true, expectRetry: false, dispatchReason: "Waiting approval", retryReason: "Task not failed"},
-		{name: "approved pending dispatch", taskState: "approved_pending_dispatch", expectDispatch: false, expectCancel: true, expectReprioritize: true, expectRetry: false, dispatchReason: "Use approval workbench retry-dispatch", retryReason: "Task not failed"},
-		{name: "running", taskState: "running", expectDispatch: false, expectCancel: true, expectReprioritize: true, expectRetry: false, dispatchReason: "Already running", retryReason: "Task not failed"},
+			{name: "leased", taskState: "leased", expectDispatch: true, expectCancel: false, expectReprioritize: true, expectRetry: false, cancelReason: "Lease active", retryReason: "Task not failed"},
+			{name: "waiting approval", taskState: "waiting_approval", expectDispatch: false, expectCancel: false, expectReprioritize: true, expectRetry: false, dispatchReason: "Waiting approval", cancelReason: "Waiting approval", retryReason: "Task not failed"},
+			{name: "approved pending dispatch", taskState: "approved_pending_dispatch", expectDispatch: false, expectCancel: true, expectReprioritize: true, expectRetry: false, dispatchReason: "Use approval workbench retry-dispatch", retryReason: "Task not failed"},
+			{name: "running", taskState: "running", expectDispatch: false, expectCancel: false, expectReprioritize: true, expectRetry: false, dispatchReason: "Already running", cancelReason: "Run in progress", retryReason: "Task not failed"},
 		{name: "failed", taskState: "failed", expectDispatch: false, expectCancel: true, expectReprioritize: true, expectRetry: true, dispatchReason: "Use retry for failed tasks"},
 		{name: "completed", taskState: "completed", expectDispatch: false, expectCancel: false, expectReprioritize: false, expectRetry: false, dispatchReason: "Already completed", cancelReason: "Already completed", reprioritizeReason: "Already completed", retryReason: "Task not failed"},
 		{name: "canceled", taskState: "canceled", expectDispatch: false, expectCancel: false, expectReprioritize: false, expectRetry: false, dispatchReason: "Task canceled", cancelReason: "Task canceled", reprioritizeReason: "Task canceled", retryReason: "Task canceled"},

@@ -1,6 +1,9 @@
 package command
 
-import "github.com/sine-io/foreman/internal/ports"
+import (
+	"github.com/sine-io/foreman/internal/domain/task"
+	"github.com/sine-io/foreman/internal/ports"
+)
 
 type ReprioritizeTaskCommand struct {
 	TaskID   string
@@ -19,6 +22,9 @@ func (h *ReprioritizeTaskHandler) Handle(cmd ReprioritizeTaskCommand) error {
 	record, err := h.Tasks.Get(cmd.TaskID)
 	if err != nil {
 		return err
+	}
+	if record.State == task.TaskStateCompleted || record.State == task.TaskStateCanceled {
+		return ErrTaskActionConflict
 	}
 
 	record.Priority = cmd.Priority

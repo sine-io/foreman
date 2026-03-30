@@ -536,6 +536,8 @@ func normalizeTaskActionError(taskID, projectID string, err error) error {
 		return err
 	case errors.Is(err, ErrTaskActionConflict):
 		return err
+	case errors.Is(err, command.ErrTaskActionConflict):
+		return ErrTaskActionConflict
 	case errors.Is(err, sql.ErrNoRows):
 		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
 	case strings.Contains(err.Error(), "does not belong to project"):
