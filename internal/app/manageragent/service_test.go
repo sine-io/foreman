@@ -437,7 +437,7 @@ func TestTaskWorkbenchRejectsCrossProjectTask(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = svc.TaskWorkbench(context.Background(), "project-1", out.TaskID)
-	require.EqualError(t, err, "task "+out.TaskID+" does not belong to project project-1")
+	require.ErrorIs(t, err, ErrTaskActionNotFound)
 }
 
 func TestTaskWorkbenchActionRespectsProjectScope(t *testing.T) {
