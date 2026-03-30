@@ -61,3 +61,14 @@
 - Made dispatch and approval transitions retry-safe under duplicate dispatch and approval retries
 - Hardened completed-run retries so lease cleanup is retried instead of leaving write scopes stranded
 - Documented repeated-dispatch and approval-gated smoke flows for the manager API
+
+## 2026-03-29
+
+### Phase 2 Task Workbench
+
+- Linked the task-detail workbench spec and execution plan from the main docs
+- Documented the board -> task workbench -> run detail operator flow
+- Added task workbench smoke coverage for `GET /api/manager/tasks/:id/workbench`
+- Documented task workbench action routes for `POST /dispatch`, `POST /retry`, `POST /cancel`, and `POST /reprioritize`
+- Recorded that the task page links to approval workbench and run detail
+- Recorded the no-approval task workbench state with disabled approval-workbench link reason `No approval history`

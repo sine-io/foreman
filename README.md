@@ -31,6 +31,7 @@ The currently implemented slice now includes:
 - deterministic manager-facing task status reconstruction from persisted task/run/approval state
 - retry-safe dispatch and approval handling with tx-bound SQLite persistence
 - approval workbench queue/detail/action endpoints, including `approved_pending_dispatch` retry-dispatch recovery
+- task-detail workbench detail/action endpoints for per-task operator flow, including direct task dispatch, retry, cancel, and reprioritize controls
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
@@ -135,6 +136,29 @@ Approval workbench recovery flow:
 - `approved_pending_dispatch` means the approval is already granted, but Foreman still has to resume or recover dispatch safely
 - Use `POST /api/manager/approvals/<approval-id>/retry-dispatch` to continue from that persisted recovery point instead of creating a new approval
 - `retry-dispatch` is the recovery path for approved work that could not move directly from approval resolution back into runner execution
+
+## Task-Detail Workbench
+
+Task-detail workbench spec and execution plan:
+
+- [`docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md)
+- [`docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md)
+
+Task workbench operator flow:
+
+- Start on the board overview and open a task from its task card into the task-detail workbench.
+- The task page acts as the operator hub between the board and deeper execution detail.
+- From the task-detail workbench, open the latest run detail when execution context or artifacts need a deeper inspection.
+- The task page also links to the approval workbench when approval history exists.
+- If no approval exists, the approval-workbench link stays visible but disabled with reason `No approval history`.
+
+Task workbench manager endpoints:
+
+- Detail: `GET /api/manager/tasks/<task-id>/workbench?project_id=demo`
+- Dispatch: `POST /api/manager/tasks/<task-id>/dispatch?project_id=demo`
+- Retry: `POST /api/manager/tasks/<task-id>/retry?project_id=demo`
+- Cancel: `POST /api/manager/tasks/<task-id>/cancel?project_id=demo`
+- Reprioritize: `POST /api/manager/tasks/<task-id>/reprioritize?project_id=demo`
 
 ## Control-Plane Guarantees
 
