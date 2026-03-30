@@ -1,5 +1,7 @@
 package manageragent
 
+import "errors"
+
 import "github.com/sine-io/foreman/internal/app/query"
 
 type Request struct {
@@ -30,6 +32,16 @@ type TaskStatusView = query.TaskStatusView
 type TaskWorkbenchView = query.TaskWorkbenchView
 type TaskWorkbenchAction = query.TaskWorkbenchAction
 type TaskWorkbenchArtifact = query.TaskWorkbenchArtifact
+type TaskWorkbenchActionResponse struct {
+	TaskID             string
+	TaskState          string
+	LatestRunID        string
+	LatestRunState     string
+	LatestApprovalID   string
+	LatestApprovalState string
+	RefreshRequired    bool
+	Message            string
+}
 type ApprovalWorkbenchQueueView = query.ApprovalWorkbenchQueueView
 type ApprovalWorkbenchItem = query.ApprovalWorkbenchItem
 type ApprovalWorkbenchDetailView = query.ApprovalWorkbenchDetailView
@@ -44,6 +56,11 @@ type ApprovalWorkbenchActionResponse struct {
 	RunID           string
 	RunState        string
 }
+
+var (
+	ErrTaskActionNotFound = errors.New("task action not found")
+	ErrTaskActionConflict = errors.New("task action conflict")
+)
 
 type ModuleSnapshot struct {
 	ModuleID string

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sine-io/foreman/internal/app/command"
 	"github.com/stretchr/testify/require"
 )
 
@@ -283,6 +284,75 @@ func TestServeReturns404ForMissingApprovalWorkbenchDetail(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	require.Equal(t, stdhttp.StatusNotFound, resp.StatusCode)
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
+func TestServeExposesManagerTaskWorkbenchAPI(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	_, err = appIface.CreateProject(command.CreateProjectCommand{
+		ID:       defaultProjectID,
+		Name:     "Demo Project",
+		RepoRoot: cfg.RuntimeRoot,
+	})
+	require.NoError(t, err)
+
+	_, err = appIface.CreateModule(command.CreateModuleCommand{
+		ID:          defaultModuleID,
+		ProjectID:   defaultProjectID,
+		Name:        "Inbox",
+		Description: "Task workbench test module",
+	})
+	require.NoError(t, err)
+
+	taskDTO, err := appIface.CreateTask(command.CreateTaskCommand{
+		ModuleID:   defaultModuleID,
+		Title:      "Inspect repo state",
+		TaskType:   "write",
+		WriteScope: "repo:demo",
+		Acceptance: "Inspect repo state",
+		Priority:   10,
+	})
+	require.NoError(t, err)
+	taskID := taskDTO.ID
+	require.NotEmpty(t, taskID)
+
+	workbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/tasks/" + taskID + "/workbench?project_id=demo")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = workbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, workbenchResp.StatusCode)
+
+	var workbenchPayload map[string]any
+	require.NoError(t, json.NewDecoder(workbenchResp.Body).Decode(&workbenchPayload))
+	require.Equal(t, taskID, workbenchPayload["task_id"])
+
+	reprioritizeResp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/tasks/"+taskID+"/reprioritize?project_id=demo",
+		"application/json",
+		strings.NewReader(`{"priority":42}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reprioritizeResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, reprioritizeResp.StatusCode)
+
+	var actionPayload map[string]any
+	require.NoError(t, json.NewDecoder(reprioritizeResp.Body).Decode(&actionPayload))
+	require.Equal(t, taskID, actionPayload["task_id"])
+	require.Equal(t, "ready", actionPayload["task_state"])
+	require.Equal(t, true, actionPayload["refresh_required"])
 
 	cancel()
 	require.NoError(t, <-errCh)

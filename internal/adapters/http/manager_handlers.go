@@ -15,6 +15,11 @@ import (
 type ManagerApp interface {
 	Handle(context.Context, manageragent.Request) (manageragent.Response, error)
 	TaskStatus(context.Context, string, string) (manageragent.TaskStatusView, error)
+	TaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchView, error)
+	DispatchTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
+	RetryTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
+	CancelTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
+	ReprioritizeTaskWorkbench(context.Context, string, string, int) (manageragent.TaskWorkbenchActionResponse, error)
 	BoardSnapshot(context.Context, string) (manageragent.BoardSnapshotView, error)
 	ApprovalWorkbenchQueue(context.Context, string) (manageragent.ApprovalWorkbenchQueueView, error)
 	ApprovalWorkbenchDetail(context.Context, string) (manageragent.ApprovalWorkbenchDetailView, error)
@@ -88,6 +93,16 @@ func (h *ManagerHandlers) ManagerTaskStatus(c *gin.Context) {
 		ApprovalState:   view.ApprovalState,
 		PendingApproval: view.PendingApproval,
 	})
+}
+
+func (h *ManagerHandlers) ManagerTaskWorkbench(c *gin.Context) {
+	view, err := h.app.TaskWorkbench(c.Request.Context(), c.Query("project_id"), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+
+	c.JSON(nethttp.StatusOK, view)
 }
 
 func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
@@ -224,8 +239,58 @@ func (h *ManagerHandlers) RetryApprovalDispatch(c *gin.Context) {
 	c.JSON(nethttp.StatusOK, approvalActionResponseDTO(resp))
 }
 
+func (h *ManagerHandlers) DispatchTaskWorkbench(c *gin.Context) {
+	resp, err := h.app.DispatchTaskWorkbench(c.Request.Context(), c.Query("project_id"), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	c.JSON(nethttp.StatusOK, taskWorkbenchActionResponseDTO(resp))
+}
+
+func (h *ManagerHandlers) RetryTaskWorkbench(c *gin.Context) {
+	resp, err := h.app.RetryTaskWorkbench(c.Request.Context(), c.Query("project_id"), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	c.JSON(nethttp.StatusOK, taskWorkbenchActionResponseDTO(resp))
+}
+
+func (h *ManagerHandlers) CancelTaskWorkbench(c *gin.Context) {
+	resp, err := h.app.CancelTaskWorkbench(c.Request.Context(), c.Query("project_id"), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	c.JSON(nethttp.StatusOK, taskWorkbenchActionResponseDTO(resp))
+}
+
+func (h *ManagerHandlers) ReprioritizeTaskWorkbench(c *gin.Context) {
+	var req managerTaskWorkbenchReprioritizeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Priority < 1 {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": "priority must be >= 1"})
+		return
+	}
+
+	resp, err := h.app.ReprioritizeTaskWorkbench(c.Request.Context(), c.Query("project_id"), c.Param("id"), req.Priority)
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+	c.JSON(nethttp.StatusOK, taskWorkbenchActionResponseDTO(resp))
+}
+
 func respondManagerError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, manageragent.ErrTaskActionNotFound):
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, manageragent.ErrTaskActionConflict):
+		c.JSON(nethttp.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionNotFound):
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionConflict):
@@ -259,5 +324,18 @@ func approvalActionResponseDTO(resp manageragent.ApprovalWorkbenchActionResponse
 		TaskState:       resp.TaskState,
 		RunID:           resp.RunID,
 		RunState:        resp.RunState,
+	}
+}
+
+func taskWorkbenchActionResponseDTO(resp manageragent.TaskWorkbenchActionResponse) managerTaskWorkbenchActionResponse {
+	return managerTaskWorkbenchActionResponse{
+		TaskID:              resp.TaskID,
+		TaskState:           resp.TaskState,
+		LatestRunID:         resp.LatestRunID,
+		LatestRunState:      resp.LatestRunState,
+		LatestApprovalID:    resp.LatestApprovalID,
+		LatestApprovalState: resp.LatestApprovalState,
+		RefreshRequired:     resp.RefreshRequired,
+		Message:             resp.Message,
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	stdhttp "net/http"
 	"net/http/httptest"
 	"strings"
@@ -53,6 +54,25 @@ func TestManagerTaskStatusEndpointReturnsTaskSnapshot(t *testing.T) {
 	require.False(t, resp.PendingApproval)
 }
 
+func TestManagerTaskWorkbenchEndpointReturnsProjectScopedView(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/tasks/task-workbench/workbench?project_id=project-2", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	var resp manageragent.TaskWorkbenchView
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "task-workbench", resp.TaskID)
+	require.Equal(t, "project-2", resp.ProjectID)
+	require.Equal(t, "module-2", resp.ModuleID)
+	require.Equal(t, "waiting_approval", resp.TaskState)
+	require.Equal(t, "approval-9", resp.LatestApprovalID)
+	require.Equal(t, "pending", resp.LatestApprovalState)
+	require.Equal(t, "Waiting approval", managerTaskWorkbenchAction(resp.AvailableActions, "dispatch").DisabledReason)
+}
+
 func TestManagerBoardSnapshotEndpointReturnsBoardShape(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -92,6 +112,169 @@ func TestManagerCommandEndpointMapsClientErrorsTo400(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusBadRequest, rec.Code)
+}
+
+func TestManagerTaskWorkbenchActionEndpointsRespectProjectScope(t *testing.T) {
+	paths := []string{
+		"/api/manager/tasks/task-run/dispatch?project_id=project-2",
+		"/api/manager/tasks/task-failed/retry?project_id=project-2",
+		"/api/manager/tasks/task-ready/cancel?project_id=project-2",
+		"/api/manager/tasks/task-ready/reprioritize?project_id=project-2",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			body := ""
+			if strings.Contains(path, "reprioritize") {
+				body = `{"priority":7}`
+			}
+
+			router := NewRouter(newFakeManagerHTTPApp())
+			req := httptest.NewRequest(stdhttp.MethodPost, path, strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, stdhttp.StatusNotFound, rec.Code)
+			require.Contains(t, rec.Body.String(), "not found in project project-2")
+		})
+	}
+}
+
+func TestManagerTaskWorkbenchActionEndpointsReturnConflictForIneligibleActions(t *testing.T) {
+	cases := []struct {
+		name        string
+		path        string
+		body        string
+		wantMessage string
+	}{
+		{
+			name:        "dispatch waiting approval",
+			path:        "/api/manager/tasks/task-workbench/dispatch?project_id=project-2",
+			wantMessage: "dispatch unavailable: Waiting approval",
+		},
+		{
+			name:        "retry ready task",
+			path:        "/api/manager/tasks/task-ready/retry?project_id=project-1",
+			wantMessage: "retry unavailable: Task not failed",
+		},
+		{
+			name:        "cancel completed task",
+			path:        "/api/manager/tasks/task-completed/cancel?project_id=project-1",
+			wantMessage: "cancel unavailable: Already completed",
+		},
+		{
+			name:        "reprioritize canceled task",
+			path:        "/api/manager/tasks/task-canceled/reprioritize?project_id=project-1",
+			body:        `{"priority":7}`,
+			wantMessage: "reprioritize unavailable: Task canceled",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(newFakeManagerHTTPApp())
+			req := httptest.NewRequest(stdhttp.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, stdhttp.StatusConflict, rec.Code)
+			require.Contains(t, rec.Body.String(), tc.wantMessage)
+		})
+	}
+}
+
+func TestManagerTaskWorkbenchReprioritizeEndpointBindsPriorityBody(t *testing.T) {
+	app := newFakeManagerHTTPApp()
+	router := NewRouter(app)
+
+	req := httptest.NewRequest(
+		stdhttp.MethodPost,
+		"/api/manager/tasks/task-ready/reprioritize?project_id=project-1",
+		strings.NewReader(`{"priority":7}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Equal(t, 7, app.lastReprioritizePriority)
+}
+
+func TestManagerTaskWorkbenchReprioritizeEndpointRejectsPriorityBelowOne(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(
+		stdhttp.MethodPost,
+		"/api/manager/tasks/task-ready/reprioritize?project_id=project-1",
+		strings.NewReader(`{"priority":0}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusBadRequest, rec.Code)
+}
+
+func TestManagerTaskWorkbenchActionEndpointsReturnCompactRefreshRequiredPayloads(t *testing.T) {
+	cases := []struct {
+		name               string
+		path               string
+		body               string
+		wantTaskID         string
+		wantTaskState      string
+		wantLatestRunState string
+	}{
+		{
+			name:               "dispatch",
+			path:               "/api/manager/tasks/task-run/dispatch?project_id=project-1",
+			wantTaskID:         "task-run",
+			wantTaskState:      "completed",
+			wantLatestRunState: "completed",
+		},
+		{
+			name:          "retry",
+			path:          "/api/manager/tasks/task-failed/retry?project_id=project-1",
+			wantTaskID:    "task-failed",
+			wantTaskState: "ready",
+		},
+		{
+			name:          "cancel",
+			path:          "/api/manager/tasks/task-ready/cancel?project_id=project-1",
+			wantTaskID:    "task-ready",
+			wantTaskState: "canceled",
+		},
+		{
+			name:          "reprioritize",
+			path:          "/api/manager/tasks/task-ready/reprioritize?project_id=project-1",
+			body:          `{"priority":5}`,
+			wantTaskID:    "task-ready",
+			wantTaskState: "ready",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(newFakeManagerHTTPApp())
+			req := httptest.NewRequest(stdhttp.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, stdhttp.StatusOK, rec.Code)
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Equal(t, tc.wantTaskID, resp["task_id"])
+			require.Equal(t, tc.wantTaskState, resp["task_state"])
+			require.Equal(t, true, resp["refresh_required"])
+			require.NotContains(t, resp, "available_actions")
+			require.NotContains(t, resp, "write_scope")
+			if tc.wantLatestRunState != "" {
+				require.Equal(t, tc.wantLatestRunState, resp["latest_run_state"])
+			}
+		})
+	}
 }
 
 func TestManagerApprovalQueueEndpointReturnsPendingApprovals(t *testing.T) {
@@ -228,6 +411,7 @@ func TestManagerApprovalEndpointsMapMissingAndConflictErrors(t *testing.T) {
 
 type fakeManagerHTTPApp struct {
 	*fakeHTTPApp
+	lastReprioritizePriority int
 }
 
 func newFakeManagerHTTPApp() *fakeManagerHTTPApp {
@@ -270,6 +454,81 @@ func (a *fakeManagerHTTPApp) TaskStatus(ctx context.Context, projectID, taskID s
 		RunState:        "completed",
 		PendingApproval: false,
 	}, nil
+}
+
+func (a *fakeManagerHTTPApp) TaskWorkbench(ctx context.Context, projectID, taskID string) (manageragent.TaskWorkbenchView, error) {
+	expectedProjectID := expectedManagerTaskProject(taskID)
+	if taskID == "missing" {
+		return manageragent.TaskWorkbenchView{}, sql.ErrNoRows
+	}
+	if projectID != expectedProjectID {
+		return manageragent.TaskWorkbenchView{}, fmt.Errorf("task %s does not belong to project %s", taskID, projectID)
+	}
+
+	view := manageragent.TaskWorkbenchView{
+		TaskID:               taskID,
+		ProjectID:            projectID,
+		ModuleID:             "module-1",
+		Summary:              "Review push",
+		TaskState:            "ready",
+		Priority:             3,
+		WriteScope:           "repo:" + projectID,
+		TaskType:             "write",
+		Acceptance:           "Review push",
+		ApprovalWorkbenchURL: "/board/approvals/workbench?project_id=" + projectID,
+		Artifacts:            []manageragent.TaskWorkbenchArtifact{},
+		AvailableActions: []manageragent.TaskWorkbenchAction{
+			{ActionID: "dispatch", Enabled: true},
+			{ActionID: "cancel", Enabled: true},
+			{ActionID: "reprioritize", Enabled: true, CurrentValue: 3},
+			{ActionID: "retry", DisabledReason: "Task not failed"},
+		},
+		DisabledReasons: map[string]string{"retry": "Task not failed"},
+	}
+
+	switch taskID {
+	case "task-workbench":
+		view.ModuleID = "module-2"
+		view.TaskState = "waiting_approval"
+		view.LatestApprovalID = "approval-9"
+		view.LatestApprovalState = "pending"
+		view.LatestApprovalReason = "git push origin main requires approval"
+		view.ApprovalWorkbenchURL = "/board/approvals/workbench?project_id=project-2&approval_id=approval-9"
+		view.AvailableActions[0] = manageragent.TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Waiting approval"}
+		view.DisabledReasons["dispatch"] = "Waiting approval"
+	case "task-failed":
+		view.TaskState = "failed"
+		view.LatestRunID = "run-failed"
+		view.LatestRunState = "failed"
+		view.AvailableActions[0] = manageragent.TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Use retry for failed tasks"}
+		view.AvailableActions[3] = manageragent.TaskWorkbenchAction{ActionID: "retry", Enabled: true}
+		view.DisabledReasons["dispatch"] = "Use retry for failed tasks"
+		delete(view.DisabledReasons, "retry")
+	case "task-completed":
+		view.TaskState = "completed"
+		view.LatestRunID = "run-done"
+		view.LatestRunState = "completed"
+		view.AvailableActions[0] = manageragent.TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Already completed"}
+		view.AvailableActions[1] = manageragent.TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Already completed"}
+		view.AvailableActions[2] = manageragent.TaskWorkbenchAction{ActionID: "reprioritize", DisabledReason: "Already completed", CurrentValue: 3}
+		view.DisabledReasons["dispatch"] = "Already completed"
+		view.DisabledReasons["cancel"] = "Already completed"
+		view.DisabledReasons["reprioritize"] = "Already completed"
+	case "task-canceled":
+		view.TaskState = "canceled"
+		view.AvailableActions[0] = manageragent.TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Task canceled"}
+		view.AvailableActions[1] = manageragent.TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Task canceled"}
+		view.AvailableActions[2] = manageragent.TaskWorkbenchAction{ActionID: "reprioritize", DisabledReason: "Task canceled", CurrentValue: 3}
+		view.AvailableActions[3] = manageragent.TaskWorkbenchAction{ActionID: "retry", DisabledReason: "Task canceled"}
+		view.DisabledReasons = map[string]string{
+			"dispatch":     "Task canceled",
+			"cancel":       "Task canceled",
+			"reprioritize": "Task canceled",
+			"retry":        "Task canceled",
+		}
+	}
+
+	return view, nil
 }
 
 func (a *fakeManagerHTTPApp) BoardSnapshot(ctx context.Context, projectID string) (manageragent.BoardSnapshotView, error) {
@@ -402,4 +661,86 @@ func (a *fakeManagerHTTPApp) RetryApprovalDispatch(ctx context.Context, approval
 			RunState:      "running",
 		}, nil
 	}
+}
+
+func (a *fakeManagerHTTPApp) DispatchTaskWorkbench(ctx context.Context, projectID, taskID string) (manageragent.TaskWorkbenchActionResponse, error) {
+	if projectID != expectedManagerTaskProject(taskID) {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: task %s not found in project %s", manageragent.ErrTaskActionNotFound, taskID, projectID)
+	}
+	if taskID == "task-workbench" {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: dispatch unavailable: Waiting approval", manageragent.ErrTaskActionConflict)
+	}
+
+	return manageragent.TaskWorkbenchActionResponse{
+		TaskID:          taskID,
+		TaskState:       "completed",
+		LatestRunID:     "run-dispatch",
+		LatestRunState:  "completed",
+		RefreshRequired: true,
+	}, nil
+}
+
+func (a *fakeManagerHTTPApp) RetryTaskWorkbench(ctx context.Context, projectID, taskID string) (manageragent.TaskWorkbenchActionResponse, error) {
+	if projectID != expectedManagerTaskProject(taskID) {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: task %s not found in project %s", manageragent.ErrTaskActionNotFound, taskID, projectID)
+	}
+	if taskID == "task-ready" {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: retry unavailable: Task not failed", manageragent.ErrTaskActionConflict)
+	}
+
+	return manageragent.TaskWorkbenchActionResponse{
+		TaskID:          taskID,
+		TaskState:       "ready",
+		RefreshRequired: true,
+	}, nil
+}
+
+func (a *fakeManagerHTTPApp) CancelTaskWorkbench(ctx context.Context, projectID, taskID string) (manageragent.TaskWorkbenchActionResponse, error) {
+	if projectID != expectedManagerTaskProject(taskID) {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: task %s not found in project %s", manageragent.ErrTaskActionNotFound, taskID, projectID)
+	}
+	if taskID == "task-completed" {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: cancel unavailable: Already completed", manageragent.ErrTaskActionConflict)
+	}
+
+	return manageragent.TaskWorkbenchActionResponse{
+		TaskID:          taskID,
+		TaskState:       "canceled",
+		RefreshRequired: true,
+	}, nil
+}
+
+func (a *fakeManagerHTTPApp) ReprioritizeTaskWorkbench(ctx context.Context, projectID, taskID string, priority int) (manageragent.TaskWorkbenchActionResponse, error) {
+	if projectID != expectedManagerTaskProject(taskID) {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: task %s not found in project %s", manageragent.ErrTaskActionNotFound, taskID, projectID)
+	}
+	if taskID == "task-canceled" {
+		return manageragent.TaskWorkbenchActionResponse{}, fmt.Errorf("%w: reprioritize unavailable: Task canceled", manageragent.ErrTaskActionConflict)
+	}
+
+	a.lastReprioritizePriority = priority
+	return manageragent.TaskWorkbenchActionResponse{
+		TaskID:          taskID,
+		TaskState:       "ready",
+		RefreshRequired: true,
+		Message:         fmt.Sprintf("priority updated to %d", priority),
+	}, nil
+}
+
+func expectedManagerTaskProject(taskID string) string {
+	switch taskID {
+	case "task-workbench":
+		return "project-2"
+	default:
+		return "project-1"
+	}
+}
+
+func managerTaskWorkbenchAction(actions []manageragent.TaskWorkbenchAction, actionID string) manageragent.TaskWorkbenchAction {
+	for _, action := range actions {
+		if action.ActionID == actionID {
+			return action
+		}
+	}
+	return manageragent.TaskWorkbenchAction{}
 }

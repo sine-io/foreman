@@ -47,6 +47,21 @@ type managerTaskStatusResponse struct {
 	PendingApproval bool   `json:"pending_approval"`
 }
 
+type managerTaskWorkbenchReprioritizeRequest struct {
+	Priority int `json:"priority"`
+}
+
+type managerTaskWorkbenchActionResponse struct {
+	TaskID              string `json:"task_id"`
+	TaskState           string `json:"task_state"`
+	LatestRunID         string `json:"latest_run_id,omitempty"`
+	LatestRunState      string `json:"latest_run_state,omitempty"`
+	LatestApprovalID    string `json:"latest_approval_id,omitempty"`
+	LatestApprovalState string `json:"latest_approval_state,omitempty"`
+	RefreshRequired     bool   `json:"refresh_required"`
+	Message             string `json:"message,omitempty"`
+}
+
 type managerRejectApprovalRequest struct {
 	RejectionReason string `json:"rejection_reason"`
 }

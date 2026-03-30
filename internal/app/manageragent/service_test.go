@@ -440,6 +440,68 @@ func TestTaskWorkbenchRejectsCrossProjectTask(t *testing.T) {
 	require.EqualError(t, err, "task "+out.TaskID+" does not belong to project project-1")
 }
 
+func TestTaskWorkbenchActionRespectsProjectScope(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateProject(t, "project-2")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.mustCreateModule(t, "module-2", "project-2")
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-2",
+		ModuleID:  "module-2",
+		Summary:   "Inspect repo state",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.DispatchTaskWorkbench(context.Background(), "project-1", out.TaskID)
+	require.ErrorIs(t, err, ErrTaskActionNotFound)
+}
+
+func TestTaskWorkbenchActionReturnsConflictForDisabledAction(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
+	}
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-2",
+		ProjectID: "project-1",
+		ModuleID:  "module-1",
+		Summary:   "git push origin main",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approval_needed", out.Kind)
+
+	_, err = svc.DispatchTaskWorkbench(context.Background(), "project-1", out.TaskID)
+	require.ErrorIs(t, err, ErrTaskActionConflict)
+}
+
+func TestTaskWorkbenchActionReturnsCompactRefreshResult(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	svc := harness.newService()
+
+	record := task.NewTask("task-ready", "module-1", task.TaskTypeWrite, "Inspect repo state", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(record))
+
+	resp, err := svc.ReprioritizeTaskWorkbench(context.Background(), "project-1", "task-ready", 42)
+	require.NoError(t, err)
+	require.Equal(t, "task-ready", resp.TaskID)
+	require.Equal(t, "ready", resp.TaskState)
+	require.True(t, resp.RefreshRequired)
+	require.Equal(t, "priority updated to 42", resp.Message)
+}
+
 type serviceHarness struct {
 	projects       *fakeProjectRepo
 	modules        *fakeModuleRepo
@@ -521,6 +583,9 @@ func (h *serviceHarness) newService() *Service {
 			h.runs,
 			artifacts,
 		),
+		RetryTask:                    command.NewRetryTaskHandler(h.tasks),
+		CancelTask:                   command.NewCancelTaskHandler(h.tasks),
+		ReprioritizeTask:             command.NewReprioritizeTaskHandler(h.tasks),
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
 		QueryTaskWorkbench:           query.NewTaskWorkbenchQuery(h.board),
 		QueryModuleBoard:             query.NewModuleBoardQuery(h.board),
