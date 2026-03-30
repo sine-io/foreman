@@ -258,6 +258,9 @@ func (s *Service) CancelTaskWorkbench(ctx context.Context, projectID, taskID str
 	if err != nil {
 		return TaskWorkbenchActionResponse{}, err
 	}
+	if view.LatestRunState == "running" {
+		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: cancel unavailable: Run in progress", ErrTaskActionConflict)
+	}
 	if action := taskWorkbenchAction(view.AvailableActions, "cancel"); !action.Enabled {
 		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: cancel unavailable: %s", ErrTaskActionConflict, action.DisabledReason)
 	}

@@ -520,6 +520,25 @@ func TestTaskWorkbenchDispatchResponseIncludesLatestRunID(t *testing.T) {
 	require.True(t, resp.RefreshRequired)
 }
 
+func TestTaskWorkbenchCancelConflictsWhenLatestRunIsStillRunning(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	svc := harness.newService()
+
+	record := task.NewTask("task-run", "module-1", task.TaskTypeWrite, "Inspect repo state", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(record))
+	require.NoError(t, harness.runs.Save(ports.Run{
+		ID:         "run-live",
+		TaskID:     "task-run",
+		RunnerKind: "codex",
+		State:      "running",
+	}))
+
+	_, err := svc.CancelTaskWorkbench(context.Background(), "project-1", "task-run")
+	require.ErrorIs(t, err, ErrTaskActionConflict)
+}
+
 type serviceHarness struct {
 	projects       *fakeProjectRepo
 	modules        *fakeModuleRepo
