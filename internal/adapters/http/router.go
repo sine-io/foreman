@@ -21,6 +21,9 @@ func NewRouter(app App) *gin.Engine {
 	router.GET("/board/approvals/workbench", func(c *gin.Context) {
 		c.File(filepath.Join(boardAssetDir(), "approval-workbench.html"))
 	})
+	router.GET("/board/tasks/workbench", func(c *gin.Context) {
+		c.File(filepath.Join(boardAssetDir(), "task-workbench.html"))
+	})
 	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)
 	router.GET("/board/tasks", handlers.TaskBoard)
@@ -36,6 +39,11 @@ func NewRouter(app App) *gin.Engine {
 		managerHandlers := NewManagerHandlers(managerApp)
 		router.POST("/api/manager/commands", managerHandlers.ManagerCommand)
 		router.GET("/api/manager/tasks/:id", managerHandlers.ManagerTaskStatus)
+		router.GET("/api/manager/tasks/:id/workbench", managerHandlers.ManagerTaskWorkbench)
+		router.POST("/api/manager/tasks/:id/dispatch", managerHandlers.DispatchTaskWorkbench)
+		router.POST("/api/manager/tasks/:id/retry", managerHandlers.RetryTaskWorkbench)
+		router.POST("/api/manager/tasks/:id/cancel", managerHandlers.CancelTaskWorkbench)
+		router.POST("/api/manager/tasks/:id/reprioritize", managerHandlers.ReprioritizeTaskWorkbench)
 		router.GET("/api/manager/projects/:id/board", managerHandlers.ManagerBoardSnapshot)
 		router.GET("/api/manager/projects/:id/approvals", managerHandlers.ManagerApprovalWorkbenchQueue)
 		router.GET("/api/manager/approvals/:id", managerHandlers.ManagerApprovalWorkbenchDetail)

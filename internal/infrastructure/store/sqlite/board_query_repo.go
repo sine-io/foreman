@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/sine-io/foreman/internal/domain/approval"
 	"github.com/sine-io/foreman/internal/ports"
 )
 
@@ -206,7 +207,7 @@ func (r *BoardQueryRepository) GetApprovalWorkbenchDetail(approvalID string) (po
 	detail.RunID = run.ID
 	detail.RunState = run.State
 
-	artifacts, preview, err := r.approvalArtifacts(detail.TaskID)
+	artifacts, preview, err := r.taskArtifacts(detail.TaskID)
 	if err != nil {
 		return ports.ApprovalWorkbenchDetailRow{}, err
 	}
@@ -214,6 +215,63 @@ func (r *BoardQueryRepository) GetApprovalWorkbenchDetail(approvalID string) (po
 	detail.AssistantSummary = preview
 
 	return detail, nil
+}
+
+func (r *BoardQueryRepository) GetTaskWorkbench(taskID string) (ports.TaskWorkbenchRow, error) {
+	var row ports.TaskWorkbenchRow
+	err := r.db.QueryRow(
+		`select
+		   t.id,
+		   m.project_id,
+		   t.module_id,
+		   t.summary,
+		   t.state,
+		   t.priority,
+		   t.write_scope,
+		   t.task_type,
+		   t.acceptance
+		 from tasks t
+		 join modules m on m.id = t.module_id
+		 where t.id = ?`,
+		taskID,
+	).Scan(
+		&row.TaskID,
+		&row.ProjectID,
+		&row.ModuleID,
+		&row.Summary,
+		&row.TaskState,
+		&row.Priority,
+		&row.WriteScope,
+		&row.TaskType,
+		&row.Acceptance,
+	)
+	if err != nil {
+		return ports.TaskWorkbenchRow{}, err
+	}
+
+	run, err := r.latestRunForTask(taskID)
+	if err != nil {
+		return ports.TaskWorkbenchRow{}, err
+	}
+	row.LatestRunID = run.ID
+	row.LatestRunState = run.State
+	row.LatestRunSummary = latestRunSummary(run)
+
+	approval, err := r.latestApprovalForTask(taskID)
+	if err != nil {
+		return ports.TaskWorkbenchRow{}, err
+	}
+	row.LatestApprovalID = approval.ID
+	row.LatestApprovalState = string(approval.Status)
+	row.LatestApprovalReason = approval.Reason
+
+	artifacts, _, err := r.taskArtifacts(taskID)
+	if err != nil {
+		return ports.TaskWorkbenchRow{}, err
+	}
+	row.Artifacts = artifacts
+
+	return row, nil
 }
 
 func (r *BoardQueryRepository) latestRunForTask(taskID string) (ports.Run, error) {
@@ -235,7 +293,36 @@ func (r *BoardQueryRepository) latestRunForTask(taskID string) (ports.Run, error
 	return run, nil
 }
 
-func (r *BoardQueryRepository) approvalArtifacts(taskID string) ([]ports.ArtifactRecord, string, error) {
+func latestRunSummary(run ports.Run) string {
+	if run.ID == "" {
+		return ""
+	}
+	if run.RunnerKind == "" {
+		return run.State
+	}
+	return run.RunnerKind + " run is " + run.State
+}
+
+func (r *BoardQueryRepository) latestApprovalForTask(taskID string) (approval.Approval, error) {
+	var record approval.Approval
+	err := r.db.QueryRow(
+		`select id, task_id, reason, state
+		 from approvals
+		 where task_id = ?
+		 order by created_at desc, id desc
+		 limit 1`,
+		taskID,
+	).Scan(&record.ID, &record.TaskID, &record.Reason, &record.Status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return approval.Approval{}, nil
+	}
+	if err != nil {
+		return approval.Approval{}, err
+	}
+	return record, nil
+}
+
+func (r *BoardQueryRepository) taskArtifacts(taskID string) ([]ports.ArtifactRecord, string, error) {
 	rows, err := r.db.Query(
 		`select id, task_id, kind, path, summary
 		 from artifacts

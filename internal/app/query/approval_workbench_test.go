@@ -135,6 +135,10 @@ func (f fakeApprovalWorkbenchRepo) GetApprovalWorkbenchDetail(approvalID string)
 	return f.details[approvalID], nil
 }
 
+func (f fakeApprovalWorkbenchRepo) GetTaskWorkbench(taskID string) (ports.TaskWorkbenchRow, error) {
+	return ports.TaskWorkbenchRow{}, nil
+}
+
 func approvalIDs(items []ApprovalWorkbenchItem) []string {
 	ids := make([]string, 0, len(items))
 	for _, item := range items {

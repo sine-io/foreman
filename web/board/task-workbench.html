@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Foreman Task Workbench</title>
+    <link rel="stylesheet" href="/board/assets/styles.css" />
+  </head>
+  <body>
+    <main class="board-shell task-workbench-shell">
+      <header class="board-header">
+        <p class="eyebrow">Foreman</p>
+        <h1>Task Workbench</h1>
+        <p class="subtitle">
+          Inspect a single task, review its latest run and approval history, and trigger task
+          actions without losing a deep link back to the same detail view.
+        </p>
+      </header>
+
+      <section class="board-toolbar workbench-toolbar">
+        <label class="board-label" for="task-workbench-project-id">Project ID</label>
+        <input id="task-workbench-project-id" class="board-input" value="demo" />
+        <label class="board-label" for="task-workbench-task-id">Task ID</label>
+        <input id="task-workbench-task-id" class="board-input" />
+        <button id="task-workbench-refresh" class="board-button" type="button">Refresh</button>
+        <a class="board-link" href="/board">Back to Board</a>
+        <p id="task-workbench-status" class="board-status">Loading task detail...</p>
+      </section>
+
+      <section class="task-workbench-layout">
+        <section class="board-panel task-overview-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Overview</p>
+            <h2>Current State</h2>
+          </header>
+          <div id="task-workbench-overview" class="task-workbench-detail"></div>
+        </section>
+
+        <section class="board-panel task-side-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Metadata</p>
+            <h2>Task Context</h2>
+          </header>
+          <div id="task-workbench-metadata" class="task-workbench-detail"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/board/assets/task-workbench.js"></script>
+  </body>
+</html>

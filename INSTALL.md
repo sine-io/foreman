@@ -101,6 +101,64 @@ Expected outcomes:
 - `approved_pending_dispatch` means approval already succeeded and only dispatch recovery remains
 - `POST /retry-dispatch` is the recovery route for the `approved_pending_dispatch` state
 
+## Task Workbench API Smoke
+
+With `foreman serve` running, verify the task workbench detail and action routes:
+
+1. Create a normal task and copy the returned `task_id`.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/commands \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"create_task","summary":"Summarize current project status"}'
+```
+
+2. Read the task workbench detail and confirm it returns the task operator view.
+
+```bash
+curl http://localhost:8080/api/manager/tasks/<task-id>/workbench?project_id=demo
+```
+
+3. Dispatch the task from the task workbench action route.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/tasks/<task-id>/dispatch?project_id=demo
+```
+
+4. Retry the task from the task workbench action route after the task reaches a retryable state.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/tasks/<task-id>/retry?project_id=demo
+```
+
+5. Cancel the task from the task workbench action route while it is still cancellable.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/tasks/<task-id>/cancel?project_id=demo
+```
+
+6. Reprioritize the task through the task workbench action route.
+
+```bash
+curl -X POST http://localhost:8080/api/manager/tasks/<task-id>/reprioritize?project_id=demo \
+  -H 'Content-Type: application/json' \
+  -d '{"priority":42}'
+```
+
+7. In the board UI, follow the task path from board to task workbench to run detail, and confirm the task page also links to approval workbench when approval history exists.
+
+8. For a task with no approvals, confirm the task workbench still shows the approval-workbench link in a disabled state with reason `No approval history`.
+
+Expected outcomes:
+
+- `GET /api/manager/tasks/<task-id>/workbench?project_id=demo` returns the task-detail workbench view for that task
+- `POST /dispatch?project_id=demo` starts or resumes task execution through the task workbench action path
+- `POST /retry?project_id=demo` reissues work only from a retryable task state
+- `POST /cancel?project_id=demo` cancels work only when the task is still cancellable
+- `POST /reprioritize?project_id=demo` accepts a JSON body and persists the new task priority
+- the task page links operators to approval workbench and run detail when those destinations exist
+- the no-approval state keeps the approval-workbench link visible but disabled with reason `No approval history`
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:
@@ -169,3 +227,5 @@ It intentionally excludes the previous shell-runtime and skill-packaging line. I
 - Plan: [docs/superpowers/plans/2026-03-27-foreman-go-phase-1.md](/root/link/repo/docs/superpowers/plans/2026-03-27-foreman-go-phase-1.md)
 - Approval workbench spec: [docs/superpowers/specs/2026-03-28-foreman-approval-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-28-foreman-approval-workbench-design.md)
 - Approval workbench plan: [docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md)
+- Task-detail workbench spec: [docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md)
+- Task-detail workbench plan: [docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md)

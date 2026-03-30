@@ -22,6 +22,9 @@ func (h *RetryTaskHandler) Handle(cmd RetryTaskCommand) error {
 	if err != nil {
 		return err
 	}
+	if record.State != task.TaskStateFailed {
+		return ErrTaskActionConflict
+	}
 
 	record.State = task.TaskStateReady
 	return h.Tasks.Save(record)

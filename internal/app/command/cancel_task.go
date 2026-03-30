@@ -22,6 +22,11 @@ func (h *CancelTaskHandler) Handle(cmd CancelTaskCommand) error {
 	if err != nil {
 		return err
 	}
+	switch record.State {
+	case task.TaskStateReady, task.TaskStateFailed, task.TaskStateApprovedPendingDispatch:
+	default:
+		return ErrTaskActionConflict
+	}
 
 	record.State = task.TaskStateCanceled
 	return h.Tasks.Save(record)

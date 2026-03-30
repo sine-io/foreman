@@ -119,6 +119,7 @@ func BuildApp(cfg Config) (App, error) {
 	instance.approveApproval = command.NewApproveApprovalHandler(transactor, approvals, tasks, instance.dispatchTask)
 	instance.rejectApproval = command.NewRejectApprovalHandler(transactor, approvals, tasks)
 	instance.retryApproval = command.NewRetryApprovalDispatchHandler(approvals, tasks, instance.dispatchTask)
+	taskWorkbenchQuery := query.NewTaskWorkbenchQuery(board)
 	approvalWorkbenchQueue := query.NewApprovalWorkbenchQueueQuery(board)
 	approvalWorkbenchDetail := query.NewApprovalWorkbenchDetailQuery(board)
 	instance.manager = appmanageragent.NewService(appmanageragent.Dependencies{
@@ -134,7 +135,11 @@ func BuildApp(cfg Config) (App, error) {
 		CreateModule:                 instance.createModule,
 		CreateTask:                   instance.createTask,
 		DispatchTask:                 instance.dispatchTask,
+		RetryTask:                    instance.retryTask,
+		CancelTask:                   instance.cancelTask,
+		ReprioritizeTask:             instance.reprioritize,
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
+		QueryTaskWorkbench:           taskWorkbenchQuery,
 		QueryModuleBoard:             query.NewModuleBoardQuery(board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(board),
 		QueryApprovalWorkbenchQueue:  approvalWorkbenchQueue,
@@ -216,6 +221,26 @@ func (a *app) TaskBoard(projectID string) (query.TaskBoardView, error) {
 
 func (a *app) TaskStatus(ctx context.Context, projectID, taskID string) (appmanageragent.TaskStatusView, error) {
 	return a.manager.TaskStatus(ctx, projectID, taskID)
+}
+
+func (a *app) TaskWorkbench(ctx context.Context, projectID, taskID string) (appmanageragent.TaskWorkbenchView, error) {
+	return a.manager.TaskWorkbench(ctx, projectID, taskID)
+}
+
+func (a *app) DispatchTaskWorkbench(ctx context.Context, projectID, taskID string) (appmanageragent.TaskWorkbenchActionResponse, error) {
+	return a.manager.DispatchTaskWorkbench(ctx, projectID, taskID)
+}
+
+func (a *app) RetryTaskWorkbench(ctx context.Context, projectID, taskID string) (appmanageragent.TaskWorkbenchActionResponse, error) {
+	return a.manager.RetryTaskWorkbench(ctx, projectID, taskID)
+}
+
+func (a *app) CancelTaskWorkbench(ctx context.Context, projectID, taskID string) (appmanageragent.TaskWorkbenchActionResponse, error) {
+	return a.manager.CancelTaskWorkbench(ctx, projectID, taskID)
+}
+
+func (a *app) ReprioritizeTaskWorkbench(ctx context.Context, projectID, taskID string, priority int) (appmanageragent.TaskWorkbenchActionResponse, error) {
+	return a.manager.ReprioritizeTaskWorkbench(ctx, projectID, taskID, priority)
 }
 
 func (a *app) BoardSnapshot(ctx context.Context, projectID string) (appmanageragent.BoardSnapshotView, error) {

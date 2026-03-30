@@ -107,6 +107,58 @@ func TestApprovalWorkbenchPageServesHTML(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "/board/assets/approval-workbench.js")
 }
 
+func TestTaskWorkbenchPageServesHTML(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/tasks/workbench?project_id=project-2&task_id=task-workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Task Workbench")
+	require.Contains(t, rec.Body.String(), "/board/assets/task-workbench.js")
+}
+
+func TestTaskWorkbenchJavaScriptUsesProjectAndTaskURLState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/task-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "searchParams.get(\"project_id\")")
+	require.Contains(t, rec.Body.String(), "searchParams.get(\"task_id\")")
+	require.Contains(t, rec.Body.String(), "searchParams.set(\"project_id\", projectId || \"demo\")")
+	require.Contains(t, rec.Body.String(), "searchParams.set(\"task_id\", taskId)")
+}
+
+func TestTaskWorkbenchJavaScriptIncludesDisabledActionReasons(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/task-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.disabled_reasons")
+	require.Contains(t, rec.Body.String(), "action.disabled_reason")
+	require.Contains(t, rec.Body.String(), "No approval history")
+}
+
+func TestTaskWorkbenchJavaScriptUsesServerProvidedRunDetailURL(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/task-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.run_detail_url")
+	require.NotContains(t, rec.Body.String(), "\"/board/runs/${")
+}
+
 func TestApprovalWorkbenchJavaScriptAssetServesManagerApprovalClient(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -171,6 +223,18 @@ func TestApprovalWorkbenchJavaScriptClearsStateBeforeRefreshFailureCanRender(t *
 	require.Contains(t, rec.Body.String(), "state.detail = null;")
 	require.Contains(t, rec.Body.String(), "state.selectedApprovalID = \"\";")
 	require.Contains(t, rec.Body.String(), "state.queueState = \"loading\";")
+}
+
+func TestApprovalWorkbenchJavaScriptLinksDetailToTaskWorkbench(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/approval-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "/board/tasks/workbench?project_id=")
+	require.Contains(t, rec.Body.String(), "detail.task_id")
 }
 
 func TestOpenClawGatewayEndpointReturnsResponseEnvelope(t *testing.T) {

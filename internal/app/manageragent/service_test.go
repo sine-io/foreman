@@ -381,6 +381,164 @@ func TestTaskStatusKeepsLatestApprovalAfterApprovalDecision(t *testing.T) {
 	require.False(t, view.PendingApproval)
 }
 
+func TestTaskWorkbenchUsesRequestedProjectBoard(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateProject(t, "project-2")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.mustCreateModule(t, "module-2", "project-2")
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
+	}
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-2",
+		ProjectID: "project-2",
+		ModuleID:  "module-2",
+		Summary:   "git push origin main",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approval_needed", out.Kind)
+
+	view, err := svc.TaskWorkbench(context.Background(), "project-2", out.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, out.TaskID, view.TaskID)
+	require.Equal(t, "project-2", view.ProjectID)
+	require.Equal(t, "module-2", view.ModuleID)
+	require.Equal(t, "waiting_approval", view.TaskState)
+	require.Equal(t, "repo:project-2", view.WriteScope)
+	require.Equal(t, "write", view.TaskType)
+	require.Equal(t, "git push origin main", view.Acceptance)
+	require.NotEmpty(t, view.LatestApprovalID)
+	require.Equal(t, "pending", view.LatestApprovalState)
+	require.Equal(t, "/board/approvals/workbench?project_id=project-2&approval_id="+view.LatestApprovalID, view.ApprovalWorkbenchURL)
+	require.False(t, managerTaskWorkbenchAction(view.AvailableActions, "dispatch").Enabled)
+	require.Equal(t, "Waiting approval", managerTaskWorkbenchAction(view.AvailableActions, "dispatch").DisabledReason)
+}
+
+func TestTaskWorkbenchRejectsCrossProjectTask(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateProject(t, "project-2")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.mustCreateModule(t, "module-2", "project-2")
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-2",
+		ModuleID:  "module-2",
+		Summary:   "Inspect repo state",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.TaskWorkbench(context.Background(), "project-1", out.TaskID)
+	require.ErrorIs(t, err, ErrTaskActionNotFound)
+}
+
+func TestTaskWorkbenchActionRespectsProjectScope(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateProject(t, "project-2")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.mustCreateModule(t, "module-2", "project-2")
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-1",
+		ProjectID: "project-2",
+		ModuleID:  "module-2",
+		Summary:   "Inspect repo state",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.DispatchTaskWorkbench(context.Background(), "project-1", out.TaskID)
+	require.ErrorIs(t, err, ErrTaskActionNotFound)
+}
+
+func TestTaskWorkbenchActionReturnsConflictForDisabledAction(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	harness.policyDecision = domainpolicy.Decision{
+		RequiresApproval: true,
+		Reason:           "git push origin main requires approval",
+	}
+	svc := harness.newService()
+
+	out, err := svc.Handle(context.Background(), Request{
+		Kind:      "create_task",
+		SessionID: "mgr-2",
+		ProjectID: "project-1",
+		ModuleID:  "module-1",
+		Summary:   "git push origin main",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approval_needed", out.Kind)
+
+	_, err = svc.DispatchTaskWorkbench(context.Background(), "project-1", out.TaskID)
+	require.ErrorIs(t, err, ErrTaskActionConflict)
+}
+
+func TestTaskWorkbenchActionReturnsCompactRefreshResult(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	svc := harness.newService()
+
+	record := task.NewTask("task-ready", "module-1", task.TaskTypeWrite, "Inspect repo state", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(record))
+
+	resp, err := svc.ReprioritizeTaskWorkbench(context.Background(), "project-1", "task-ready", 42)
+	require.NoError(t, err)
+	require.Equal(t, "task-ready", resp.TaskID)
+	require.Equal(t, "ready", resp.TaskState)
+	require.True(t, resp.RefreshRequired)
+	require.Equal(t, "priority updated to 42", resp.Message)
+}
+
+func TestTaskWorkbenchDispatchResponseIncludesLatestRunID(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	svc := harness.newService()
+
+	record := task.NewTask("task-dispatch", "module-1", task.TaskTypeWrite, "Inspect repo state", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(record))
+
+	resp, err := svc.DispatchTaskWorkbench(context.Background(), "project-1", "task-dispatch")
+	require.NoError(t, err)
+	require.Equal(t, "task-dispatch", resp.TaskID)
+	require.Equal(t, "completed", resp.TaskState)
+	require.Equal(t, "completed", resp.LatestRunState)
+	require.NotEmpty(t, resp.LatestRunID)
+	require.True(t, resp.RefreshRequired)
+}
+
+func TestTaskWorkbenchCancelConflictsWhenLatestRunIsStillRunning(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	svc := harness.newService()
+
+	record := task.NewTask("task-run", "module-1", task.TaskTypeWrite, "Inspect repo state", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(record))
+	require.NoError(t, harness.runs.Save(ports.Run{
+		ID:         "run-live",
+		TaskID:     "task-run",
+		RunnerKind: "codex",
+		State:      "running",
+	}))
+
+	_, err := svc.CancelTaskWorkbench(context.Background(), "project-1", "task-run")
+	require.ErrorIs(t, err, ErrTaskActionConflict)
+}
+
 type serviceHarness struct {
 	projects       *fakeProjectRepo
 	modules        *fakeModuleRepo
@@ -462,7 +620,11 @@ func (h *serviceHarness) newService() *Service {
 			h.runs,
 			artifacts,
 		),
+		RetryTask:                    command.NewRetryTaskHandler(h.tasks),
+		CancelTask:                   command.NewCancelTaskHandler(h.tasks),
+		ReprioritizeTask:             command.NewReprioritizeTaskHandler(h.tasks),
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
+		QueryTaskWorkbench:           query.NewTaskWorkbenchQuery(h.board),
 		QueryModuleBoard:             query.NewModuleBoardQuery(h.board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(h.board),
 		QueryApprovalWorkbenchQueue:  query.NewApprovalWorkbenchQueueQuery(h.board),
@@ -472,6 +634,15 @@ func (h *serviceHarness) newService() *Service {
 			ModuleID:  "module-1",
 		},
 	})
+}
+
+func managerTaskWorkbenchAction(actions []TaskWorkbenchAction, id string) TaskWorkbenchAction {
+	for _, action := range actions {
+		if action.ActionID == id {
+			return action
+		}
+	}
+	return TaskWorkbenchAction{}
 }
 
 type managerAgentTransactor struct {
@@ -816,4 +987,47 @@ func (f *fakeBoardQueryRepo) GetApprovalWorkbenchDetail(approvalID string) (port
 	}
 
 	return ports.ApprovalWorkbenchDetailRow{}, sql.ErrNoRows
+}
+
+func (f *fakeBoardQueryRepo) GetTaskWorkbench(taskID string) (ports.TaskWorkbenchRow, error) {
+	taskValue, err := f.tasks.Get(taskID)
+	if err != nil {
+		return ports.TaskWorkbenchRow{}, err
+	}
+
+	moduleValue, err := f.modules.Get(taskValue.ModuleID)
+	if err != nil {
+		return ports.TaskWorkbenchRow{}, err
+	}
+
+	runValue, runErr := f.runs.FindByTask(taskID)
+	if runErr != nil && runErr != sql.ErrNoRows {
+		return ports.TaskWorkbenchRow{}, runErr
+	}
+
+	approvalValue, approvalErr := f.approvals.FindLatestByTask(taskID)
+	if approvalErr != nil && approvalErr != sql.ErrNoRows {
+		return ports.TaskWorkbenchRow{}, approvalErr
+	}
+
+	row := ports.TaskWorkbenchRow{
+		TaskID:         taskValue.ID,
+		ProjectID:      moduleValue.ProjectID,
+		ModuleID:       taskValue.ModuleID,
+		Summary:        taskValue.Summary,
+		TaskState:      string(taskValue.State),
+		Priority:       taskValue.Priority,
+		WriteScope:     taskValue.WriteScope,
+		TaskType:       string(taskValue.Type),
+		Acceptance:     taskValue.Acceptance,
+		LatestRunID:    runValue.ID,
+		LatestRunState: runValue.State,
+	}
+	if approvalErr == nil {
+		row.LatestApprovalID = approvalValue.ID
+		row.LatestApprovalState = string(approvalValue.Status)
+		row.LatestApprovalReason = approvalValue.Reason
+	}
+
+	return row, nil
 }

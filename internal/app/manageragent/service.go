@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sine-io/foreman/internal/app/command"
 	"github.com/sine-io/foreman/internal/app/query"
@@ -32,7 +33,11 @@ type Dependencies struct {
 	CreateModule                 *command.CreateModuleHandler
 	CreateTask                   *command.CreateTaskHandler
 	DispatchTask                 *command.DispatchTaskHandler
+	RetryTask                    *command.RetryTaskHandler
+	CancelTask                   *command.CancelTaskHandler
+	ReprioritizeTask             *command.ReprioritizeTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
+	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
 	QueryApprovalWorkbenchQueue  *query.ApprovalWorkbenchQueueQuery
@@ -53,7 +58,11 @@ type Service struct {
 	CreateModule                 *command.CreateModuleHandler
 	CreateTask                   *command.CreateTaskHandler
 	DispatchTask                 *command.DispatchTaskHandler
+	RetryTask                    *command.RetryTaskHandler
+	CancelTask                   *command.CancelTaskHandler
+	ReprioritizeTask             *command.ReprioritizeTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
+	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
 	QueryApprovalWorkbenchQueue  *query.ApprovalWorkbenchQueueQuery
@@ -75,7 +84,11 @@ func NewService(deps Dependencies) *Service {
 		CreateModule:                 deps.CreateModule,
 		CreateTask:                   deps.CreateTask,
 		DispatchTask:                 deps.DispatchTask,
+		RetryTask:                    deps.RetryTask,
+		CancelTask:                   deps.CancelTask,
+		ReprioritizeTask:             deps.ReprioritizeTask,
 		QueryTaskStatus:              deps.QueryTaskStatus,
+		QueryTaskWorkbench:           deps.QueryTaskWorkbench,
 		QueryModuleBoard:             deps.QueryModuleBoard,
 		QueryTaskBoard:               deps.QueryTaskBoard,
 		QueryApprovalWorkbenchQueue:  deps.QueryApprovalWorkbenchQueue,
@@ -186,6 +199,91 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 	}
 
 	return s.QueryTaskStatus.Execute(resolvedProjectID, taskID)
+}
+
+func (s *Service) TaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return TaskWorkbenchView{}, err
+	}
+
+	resolvedProjectID, err := s.resolveProjectID(projectID)
+	if err != nil {
+		return TaskWorkbenchView{}, err
+	}
+
+	view, err := s.QueryTaskWorkbench.Execute(resolvedProjectID, taskID)
+	if err != nil {
+		return TaskWorkbenchView{}, normalizeTaskActionError(taskID, resolvedProjectID, err)
+	}
+	return view, nil
+}
+
+func (s *Service) DispatchTaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchActionResponse, error) {
+	view, err := s.taskWorkbenchForAction(ctx, projectID, taskID)
+	if err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	if action := taskWorkbenchAction(view.AvailableActions, "dispatch"); !action.Enabled {
+		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: dispatch unavailable: %s", ErrTaskActionConflict, action.DisabledReason)
+	}
+
+	result, err := s.DispatchTask.Handle(command.DispatchTaskCommand{
+		TaskID:          taskID,
+		RequestedAction: view.Summary,
+	})
+	if err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	_ = result
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, "")
+}
+
+func (s *Service) RetryTaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchActionResponse, error) {
+	view, err := s.taskWorkbenchForAction(ctx, projectID, taskID)
+	if err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	if action := taskWorkbenchAction(view.AvailableActions, "retry"); !action.Enabled {
+		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: retry unavailable: %s", ErrTaskActionConflict, action.DisabledReason)
+	}
+
+	if err := s.RetryTask.Handle(command.RetryTaskCommand{TaskID: taskID}); err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, "")
+}
+
+func (s *Service) CancelTaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchActionResponse, error) {
+	view, err := s.taskWorkbenchForAction(ctx, projectID, taskID)
+	if err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	if view.LatestRunState == "running" {
+		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: cancel unavailable: Run in progress", ErrTaskActionConflict)
+	}
+	if action := taskWorkbenchAction(view.AvailableActions, "cancel"); !action.Enabled {
+		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: cancel unavailable: %s", ErrTaskActionConflict, action.DisabledReason)
+	}
+
+	if err := s.CancelTask.Handle(command.CancelTaskCommand{TaskID: taskID}); err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, "")
+}
+
+func (s *Service) ReprioritizeTaskWorkbench(ctx context.Context, projectID, taskID string, priority int) (TaskWorkbenchActionResponse, error) {
+	view, err := s.taskWorkbenchForAction(ctx, projectID, taskID)
+	if err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	if action := taskWorkbenchAction(view.AvailableActions, "reprioritize"); !action.Enabled {
+		return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: reprioritize unavailable: %s", ErrTaskActionConflict, action.DisabledReason)
+	}
+
+	if err := s.ReprioritizeTask.Handle(command.ReprioritizeTaskCommand{TaskID: taskID, Priority: priority}); err != nil {
+		return TaskWorkbenchActionResponse{}, err
+	}
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, fmt.Sprintf("priority updated to %d", priority))
 }
 
 func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSnapshotView, error) {
@@ -433,6 +531,70 @@ func normalizeApprovalActionError(err error) error {
 	default:
 		return err
 	}
+}
+
+func normalizeTaskActionError(taskID, projectID string, err error) error {
+	switch {
+	case errors.Is(err, ErrTaskActionNotFound):
+		return err
+	case errors.Is(err, ErrTaskActionConflict):
+		return err
+	case errors.Is(err, command.ErrTaskActionConflict):
+		return ErrTaskActionConflict
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
+	case strings.Contains(err.Error(), "does not belong to project"):
+		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
+	default:
+		return err
+	}
+}
+
+func taskWorkbenchAction(actions []TaskWorkbenchAction, actionID string) TaskWorkbenchAction {
+	for _, action := range actions {
+		if action.ActionID == actionID {
+			return action
+		}
+	}
+	return TaskWorkbenchAction{}
+}
+
+func (s *Service) taskWorkbenchForAction(ctx context.Context, projectID, taskID string) (TaskWorkbenchView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return TaskWorkbenchView{}, err
+	}
+
+	view, err := s.TaskWorkbench(ctx, projectID, taskID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return TaskWorkbenchView{}, fmt.Errorf("%w: %v", ErrTaskActionNotFound, err)
+		}
+		if strings.Contains(err.Error(), "does not belong to project") {
+			return TaskWorkbenchView{}, fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
+		}
+		return TaskWorkbenchView{}, err
+	}
+	return view, nil
+}
+
+func (s *Service) taskWorkbenchActionResponse(ctx context.Context, projectID, taskID, message string) (TaskWorkbenchActionResponse, error) {
+	view, err := s.TaskWorkbench(ctx, projectID, taskID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: %v", ErrTaskActionNotFound, err)
+		}
+		return TaskWorkbenchActionResponse{}, err
+	}
+	return TaskWorkbenchActionResponse{
+		TaskID:              view.TaskID,
+		TaskState:           view.TaskState,
+		LatestRunID:         view.LatestRunID,
+		LatestRunState:      view.LatestRunState,
+		LatestApprovalID:    view.LatestApprovalID,
+		LatestApprovalState: view.LatestApprovalState,
+		RefreshRequired:     true,
+		Message:             message,
+	}, nil
 }
 
 func ctxErr(ctx context.Context) error {
