@@ -98,6 +98,21 @@ func TestRunWorkbenchIncludesTaskWorkbenchURLAndArtifactTargets(t *testing.T) {
 	require.Equal(t, "artifacts/tasks/task-1/assistant_summary.txt", view.Artifacts[0].Path)
 }
 
+func TestRunWorkbenchEscapesTaskWorkbenchURLQueryParameters(t *testing.T) {
+	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
+		row: ports.RunWorkbenchRow{
+			RunID:     "run-1",
+			TaskID:    "task&1#frag",
+			ProjectID: "project=1?x/y",
+			RunState:  "running",
+		},
+	})
+
+	view, err := query.Execute("run-1")
+	require.NoError(t, err)
+	require.Equal(t, "/board/tasks/workbench?project_id=project%3D1%3Fx%2Fy&task_id=task%261%23frag", view.TaskWorkbenchURL)
+}
+
 func TestRunWorkbenchIncludesSupplementalMetadata(t *testing.T) {
 	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
 		row: ports.RunWorkbenchRow{

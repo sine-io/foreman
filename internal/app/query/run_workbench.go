@@ -1,6 +1,7 @@
 package query
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/sine-io/foreman/internal/ports"
@@ -120,5 +121,8 @@ func taskWorkbenchURL(projectID, taskID string) string {
 	if projectID == "" || taskID == "" {
 		return ""
 	}
-	return "/board/tasks/workbench?project_id=" + projectID + "&task_id=" + taskID
+	return "/board/tasks/workbench?" + url.Values{
+		"project_id": []string{projectID},
+		"task_id":    []string{taskID},
+	}.Encode()
 }
