@@ -53,12 +53,20 @@ func TestRunDetailIncludesArtifactSummaries(t *testing.T) {
 	require.NotEmpty(t, view.Artifacts)
 }
 
+func TestBoardQueryRepositoryPortExposesRunWorkbenchLookup(t *testing.T) {
+	var repo ports.BoardQueryRepository = fakeBoardReadRepo{}
+
+	_, err := repo.GetRunWorkbench("run-1")
+	require.NoError(t, err)
+}
+
 type fakeBoardReadRepo struct {
-	modules   []ports.ModuleBoardRow
-	tasks     []ports.TaskBoardRow
-	runDetail ports.RunDetailRecord
-	approvals []ports.ApprovalQueueRow
-	workbench ports.TaskWorkbenchRow
+	modules      []ports.ModuleBoardRow
+	tasks        []ports.TaskBoardRow
+	runDetail    ports.RunDetailRecord
+	runWorkbench ports.RunWorkbenchRow
+	approvals    []ports.ApprovalQueueRow
+	workbench    ports.TaskWorkbenchRow
 }
 
 func (f fakeBoardReadRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -71,6 +79,10 @@ func (f fakeBoardReadRepo) ListTasks(projectID string) ([]ports.TaskBoardRow, er
 
 func (f fakeBoardReadRepo) GetRunDetail(runID string) (ports.RunDetailRecord, error) {
 	return f.runDetail, nil
+}
+
+func (f fakeBoardReadRepo) GetRunWorkbench(runID string) (ports.RunWorkbenchRow, error) {
+	return f.runWorkbench, nil
 }
 
 func (f fakeBoardReadRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {

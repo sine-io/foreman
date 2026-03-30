@@ -123,6 +123,10 @@ func (f fakeApprovalWorkbenchRepo) GetRunDetail(runID string) (ports.RunDetailRe
 	return ports.RunDetailRecord{}, nil
 }
 
+func (f fakeApprovalWorkbenchRepo) GetRunWorkbench(runID string) (ports.RunWorkbenchRow, error) {
+	return ports.RunWorkbenchRow{}, nil
+}
+
 func (f fakeApprovalWorkbenchRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return nil, nil
 }

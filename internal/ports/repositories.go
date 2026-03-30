@@ -161,6 +161,7 @@ type BoardQueryRepository interface {
 	ListModules(projectID string) ([]ModuleBoardRow, error)
 	ListTasks(projectID string) ([]TaskBoardRow, error)
 	GetRunDetail(runID string) (RunDetailRecord, error)
+	GetRunWorkbench(runID string) (RunWorkbenchRow, error)
 	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
 	ListApprovalWorkbenchQueue(projectID string) ([]ApprovalWorkbenchQueueRow, error)
 	GetApprovalWorkbenchDetail(approvalID string) (ApprovalWorkbenchDetailRow, error)
