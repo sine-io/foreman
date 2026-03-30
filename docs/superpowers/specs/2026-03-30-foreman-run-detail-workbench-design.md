@@ -45,7 +45,7 @@ For Phase 2, Foreman needs a dedicated run-level workbench that answers:
 
 - Add a dedicated run-detail workbench as a troubleshooting hub
 - Make run state and primary conclusion visible at the top
-- Show a concise artifact list with summaries
+- Show a concise task-scoped latest-artifacts approximation with summaries
 - Show the related task context and a direct jump back to task-detail workbench
 - Keep the page refresh-safe through a stable URL
 
@@ -166,7 +166,7 @@ This keeps the page focused on troubleshooting instead of turning it into a log 
 
 The first version should show only:
 
-- artifact list
+- a task-scoped latest-artifacts approximation
 - each artifact's `kind`
 - summary or path
 
@@ -174,7 +174,7 @@ It should not inline artifact contents.
 
 Artifact interactions should open the artifact target or surrounding run context rather than expanding content inline.
 
-In v1, `artifact target` means an internal anchor or selection target inside the run-detail workbench itself. Artifact rows are primarily summary rows, not navigation into a separate artifact surface. It does not imply:
+In v1, `artifact target` means an internal anchor or selection target inside the run-detail workbench itself. Artifact rows are primarily summary rows, not navigation into a separate artifact surface. The artifact list is intentionally a task-scoped latest-artifacts approximation rather than a new run-to-artifact linkage model. It does not imply:
 
 - raw filesystem paths
 - a dedicated artifact-detail page
@@ -211,7 +211,7 @@ This endpoint should return the full run-detail workbench view, including:
 
 - run state
 - primary summary
-- artifact list with summaries
+- task-scoped latest-artifacts approximation with summaries
 - related task context
 - navigation URLs
 
@@ -236,7 +236,7 @@ If no `assistant_summary` artifact exists:
 
 ### Missing Artifacts
 
-If the run has no artifacts:
+If the task has no artifacts available to approximate:
 
 - show an explicit empty artifact state
 - keep the page usable
@@ -256,7 +256,7 @@ V1 must include:
 - stable `run_id`-based URL
 - task-detail to run-detail navigation
 - run state and primary summary
-- artifact list with summaries
+- task-scoped latest-artifacts approximation with summaries
 - related task context and task-workbench navigation
 - dedicated run workbench detail endpoint
 

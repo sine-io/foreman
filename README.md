@@ -74,6 +74,7 @@ These stay in outer layers. Domain and application code should not depend on fra
 - [`docs/superpowers/plans/2026-03-28-foreman-phase-2-control-plane-hardening.md`](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-control-plane-hardening.md): second Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md): third Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md): fourth Phase 2 execution plan
+- [`docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md): fifth Phase 2 execution plan
 
 ## Quick Start
 
