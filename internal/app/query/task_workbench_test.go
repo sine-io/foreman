@@ -219,7 +219,7 @@ func (f fakeTaskWorkbenchRepo) GetTaskWorkbench(taskID string) (ports.TaskWorkbe
 
 func taskWorkbenchAction(actions []TaskWorkbenchAction, id string) TaskWorkbenchAction {
 	for _, action := range actions {
-		if action.ID == id {
+		if action.ActionID == id {
 			return action
 		}
 	}

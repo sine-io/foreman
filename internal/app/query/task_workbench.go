@@ -14,9 +14,10 @@ type TaskWorkbenchArtifact struct {
 }
 
 type TaskWorkbenchAction struct {
-	ID             string `json:"id"`
+	ActionID       string `json:"action_id"`
 	Enabled        bool   `json:"enabled"`
 	DisabledReason string `json:"disabled_reason,omitempty"`
+	CurrentValue   any    `json:"current_value,omitempty"`
 }
 
 type TaskWorkbenchView struct {
@@ -94,10 +95,10 @@ func (q *TaskWorkbenchQuery) Execute(projectID, taskID string) (TaskWorkbenchVie
 		})
 	}
 
-	view.AvailableActions = taskWorkbenchActions(row.TaskState, row.LatestRunID, row.LatestApprovalID)
+	view.AvailableActions = taskWorkbenchActions(row.TaskState, row.LatestRunID, row.LatestApprovalID, row.Priority)
 	for _, action := range view.AvailableActions {
 		if !action.Enabled && action.DisabledReason != "" {
-			view.DisabledReasons[action.ID] = action.DisabledReason
+			view.DisabledReasons[action.ActionID] = action.DisabledReason
 		}
 	}
 
@@ -119,11 +120,11 @@ func runDetailURL(runID string) string {
 	return "/board/runs/" + runID
 }
 
-func taskWorkbenchActions(taskState, latestRunID, latestApprovalID string) []TaskWorkbenchAction {
+func taskWorkbenchActions(taskState, latestRunID, latestApprovalID string, priority int) []TaskWorkbenchAction {
 	return []TaskWorkbenchAction{
 		dispatchAction(taskState),
 		cancelAction(taskState),
-		reprioritizeAction(taskState),
+		reprioritizeAction(taskState, priority),
 		retryAction(taskState),
 		openLatestRunAction(latestRunID),
 		openApprovalWorkbenchAction(latestApprovalID),
@@ -133,67 +134,67 @@ func taskWorkbenchActions(taskState, latestRunID, latestApprovalID string) []Tas
 func dispatchAction(taskState string) TaskWorkbenchAction {
 	switch taskState {
 	case "ready", "leased":
-		return TaskWorkbenchAction{ID: "dispatch", Enabled: true}
+		return TaskWorkbenchAction{ActionID: "dispatch", Enabled: true}
 	case "waiting_approval":
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Waiting approval"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Waiting approval"}
 	case "approved_pending_dispatch":
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Use approval workbench retry-dispatch"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Use approval workbench retry-dispatch"}
 	case "running":
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Already running"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Already running"}
 	case "failed":
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Use retry for failed tasks"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Use retry for failed tasks"}
 	case "completed":
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Already completed"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Already completed"}
 	case "canceled":
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Task canceled"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Task canceled"}
 	default:
-		return TaskWorkbenchAction{ID: "dispatch", DisabledReason: "Task not dispatchable"}
+		return TaskWorkbenchAction{ActionID: "dispatch", DisabledReason: "Task not dispatchable"}
 	}
 }
 
 func cancelAction(taskState string) TaskWorkbenchAction {
 	switch taskState {
 	case "completed":
-		return TaskWorkbenchAction{ID: "cancel", DisabledReason: "Already completed"}
+		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Already completed"}
 	case "canceled":
-		return TaskWorkbenchAction{ID: "cancel", DisabledReason: "Task canceled"}
+		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Task canceled"}
 	default:
-		return TaskWorkbenchAction{ID: "cancel", Enabled: true}
+		return TaskWorkbenchAction{ActionID: "cancel", Enabled: true}
 	}
 }
 
-func reprioritizeAction(taskState string) TaskWorkbenchAction {
+func reprioritizeAction(taskState string, priority int) TaskWorkbenchAction {
 	switch taskState {
 	case "completed":
-		return TaskWorkbenchAction{ID: "reprioritize", DisabledReason: "Already completed"}
+		return TaskWorkbenchAction{ActionID: "reprioritize", DisabledReason: "Already completed", CurrentValue: priority}
 	case "canceled":
-		return TaskWorkbenchAction{ID: "reprioritize", DisabledReason: "Task canceled"}
+		return TaskWorkbenchAction{ActionID: "reprioritize", DisabledReason: "Task canceled", CurrentValue: priority}
 	default:
-		return TaskWorkbenchAction{ID: "reprioritize", Enabled: true}
+		return TaskWorkbenchAction{ActionID: "reprioritize", Enabled: true, CurrentValue: priority}
 	}
 }
 
 func retryAction(taskState string) TaskWorkbenchAction {
 	switch taskState {
 	case "failed":
-		return TaskWorkbenchAction{ID: "retry", Enabled: true}
+		return TaskWorkbenchAction{ActionID: "retry", Enabled: true}
 	case "canceled":
-		return TaskWorkbenchAction{ID: "retry", DisabledReason: "Task canceled"}
+		return TaskWorkbenchAction{ActionID: "retry", DisabledReason: "Task canceled"}
 	default:
-		return TaskWorkbenchAction{ID: "retry", DisabledReason: "Task not failed"}
+		return TaskWorkbenchAction{ActionID: "retry", DisabledReason: "Task not failed"}
 	}
 }
 
 func openLatestRunAction(latestRunID string) TaskWorkbenchAction {
 	if latestRunID == "" {
-		return TaskWorkbenchAction{ID: "open_latest_run", DisabledReason: "No latest run"}
+		return TaskWorkbenchAction{ActionID: "open_latest_run", DisabledReason: "No latest run"}
 	}
-	return TaskWorkbenchAction{ID: "open_latest_run", Enabled: true}
+	return TaskWorkbenchAction{ActionID: "open_latest_run", Enabled: true}
 }
 
 func openApprovalWorkbenchAction(latestApprovalID string) TaskWorkbenchAction {
 	if latestApprovalID == "" {
-		return TaskWorkbenchAction{ID: "open_approval_workbench", DisabledReason: "No approval history"}
+		return TaskWorkbenchAction{ActionID: "open_approval_workbench", DisabledReason: "No approval history"}
 	}
-	return TaskWorkbenchAction{ID: "open_approval_workbench", Enabled: true}
+	return TaskWorkbenchAction{ActionID: "open_approval_workbench", Enabled: true}
 }

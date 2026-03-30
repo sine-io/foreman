@@ -536,7 +536,7 @@ func (h *serviceHarness) newService() *Service {
 
 func managerTaskWorkbenchAction(actions []TaskWorkbenchAction, id string) TaskWorkbenchAction {
 	for _, action := range actions {
-		if action.ID == id {
+		if action.ActionID == id {
 			return action
 		}
 	}

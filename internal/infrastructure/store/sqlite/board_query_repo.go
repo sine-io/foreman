@@ -255,6 +255,7 @@ func (r *BoardQueryRepository) GetTaskWorkbench(taskID string) (ports.TaskWorkbe
 	}
 	row.LatestRunID = run.ID
 	row.LatestRunState = run.State
+	row.LatestRunSummary = latestRunSummary(run)
 
 	approval, err := r.latestApprovalForTask(taskID)
 	if err != nil {
@@ -290,6 +291,16 @@ func (r *BoardQueryRepository) latestRunForTask(taskID string) (ports.Run, error
 		return ports.Run{}, err
 	}
 	return run, nil
+}
+
+func latestRunSummary(run ports.Run) string {
+	if run.ID == "" {
+		return ""
+	}
+	if run.RunnerKind == "" {
+		return run.State
+	}
+	return run.RunnerKind + " run is " + run.State
 }
 
 func (r *BoardQueryRepository) latestApprovalForTask(taskID string) (approval.Approval, error) {
