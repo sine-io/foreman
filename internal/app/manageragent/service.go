@@ -211,7 +211,11 @@ func (s *Service) TaskWorkbench(ctx context.Context, projectID, taskID string) (
 		return TaskWorkbenchView{}, err
 	}
 
-	return s.QueryTaskWorkbench.Execute(resolvedProjectID, taskID)
+	view, err := s.QueryTaskWorkbench.Execute(resolvedProjectID, taskID)
+	if err != nil {
+		return TaskWorkbenchView{}, normalizeTaskActionError(taskID, resolvedProjectID, err)
+	}
+	return view, nil
 }
 
 func (s *Service) DispatchTaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchActionResponse, error) {
@@ -520,6 +524,21 @@ func normalizeApprovalActionError(err error) error {
 		return err
 	case errors.Is(err, sql.ErrNoRows):
 		return fmt.Errorf("%w: %v", command.ErrApprovalActionNotFound, err)
+	default:
+		return err
+	}
+}
+
+func normalizeTaskActionError(taskID, projectID string, err error) error {
+	switch {
+	case errors.Is(err, ErrTaskActionNotFound):
+		return err
+	case errors.Is(err, ErrTaskActionConflict):
+		return err
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
+	case strings.Contains(err.Error(), "does not belong to project"):
+		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
 	default:
 		return err
 	}

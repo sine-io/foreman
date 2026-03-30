@@ -73,6 +73,16 @@ func TestManagerTaskWorkbenchEndpointReturnsProjectScopedView(t *testing.T) {
 	require.Equal(t, "Waiting approval", managerTaskWorkbenchAction(resp.AvailableActions, "dispatch").DisabledReason)
 }
 
+func TestManagerTaskWorkbenchEndpointMapsMissingTaskTo404(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/tasks/missing/workbench?project_id=project-1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusNotFound, rec.Code)
+}
+
 func TestManagerBoardSnapshotEndpointReturnsBoardShape(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
