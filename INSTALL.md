@@ -180,7 +180,7 @@ curl http://localhost:8080/board/runs/workbench?run_id=<run-id>
 4. Check the legacy board route compatibility redirect.
 
 ```bash
-curl -I http://localhost:8080/board/runs/<run-id>
+curl -sS -D - -o /dev/null http://localhost:8080/board/runs/<run-id>
 ```
 
 Expected outcomes:
