@@ -32,6 +32,7 @@ The currently implemented slice now includes:
 - retry-safe dispatch and approval handling with tx-bound SQLite persistence
 - approval workbench queue/detail/action endpoints, including `approved_pending_dispatch` retry-dispatch recovery
 - task-detail workbench detail/action endpoints for per-task operator flow, including direct task dispatch, retry, cancel, and reprioritize controls
+- run-detail workbench detail flow, including the canonical `/board/runs/workbench?run_id=<run-id>` route and legacy `/board/runs/:id` compatibility redirect
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
@@ -150,7 +151,8 @@ Task workbench operator flow:
 
 - Start on the board overview and open a task from its task card into the task-detail workbench.
 - The task page acts as the operator hub between the board and deeper execution detail.
-- From the task-detail workbench, open the latest run detail when execution context or artifacts need a deeper inspection.
+- From the task-detail workbench, open the latest run workbench when execution context or artifacts need deeper troubleshooting.
+- That task-to-run hop now uses the canonical `/board/runs/workbench?run_id=<run-id>` route.
 - The task page also links to the approval workbench when approval history exists.
 - If no approval exists, the approval-workbench link stays visible but disabled with reason `No approval history`.
 
@@ -161,6 +163,20 @@ Task workbench manager endpoints:
 - Retry: `POST /api/manager/tasks/<task-id>/retry?project_id=demo`
 - Cancel: `POST /api/manager/tasks/<task-id>/cancel?project_id=demo`
 - Reprioritize: `POST /api/manager/tasks/<task-id>/reprioritize?project_id=demo`
+
+## Run-Detail Workbench
+
+Run-detail workbench spec and execution plan:
+
+- [`docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md)
+- [`docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md)
+
+Run workbench operator flow:
+
+- The run-detail workbench is the run-level troubleshooting page that sits beneath the task-detail workbench.
+- Read the manager view with `GET /api/manager/runs/<run-id>/workbench`.
+- Open the canonical board route at `/board/runs/workbench?run_id=<run-id>`.
+- Legacy `/board/runs/<run-id>` remains available as a compatibility redirect to `/board/runs/workbench?run_id=<run-id>`.
 
 ## Control-Plane Guarantees
 

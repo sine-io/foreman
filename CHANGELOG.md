@@ -72,3 +72,13 @@
 - Documented task workbench action routes for `POST /dispatch`, `POST /retry`, `POST /cancel`, and `POST /reprioritize`
 - Recorded that the task page links to approval workbench and run detail
 - Recorded the no-approval task workbench state with disabled approval-workbench link reason `No approval history`
+
+## 2026-03-30
+
+### Phase 2 Run Workbench
+
+- Linked the run-detail workbench spec and execution plan from the main docs
+- Documented the task workbench -> run workbench operator flow
+- Added run workbench smoke coverage for `GET /api/manager/runs/:id/workbench`
+- Documented the canonical board run workbench route at `/board/runs/workbench?run_id=<run-id>`
+- Recorded that legacy `/board/runs/:id` now redirects to `/board/runs/workbench?run_id=<run-id>`

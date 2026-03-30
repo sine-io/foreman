@@ -145,7 +145,7 @@ curl -X POST http://localhost:8080/api/manager/tasks/<task-id>/reprioritize?proj
   -d '{"priority":42}'
 ```
 
-7. In the board UI, follow the task path from board to task workbench to run detail, and confirm the task page also links to approval workbench when approval history exists.
+7. In the board UI, follow the task path from board to task workbench to run workbench, and confirm the task page now links to the canonical run workbench route while still linking to approval workbench when approval history exists.
 
 8. For a task with no approvals, confirm the task workbench still shows the approval-workbench link in a disabled state with reason `No approval history`.
 
@@ -156,8 +156,39 @@ Expected outcomes:
 - `POST /retry?project_id=demo` reissues work only from a retryable task state
 - `POST /cancel?project_id=demo` cancels work only when the task is still cancellable
 - `POST /reprioritize?project_id=demo` accepts a JSON body and persists the new task priority
-- the task page links operators to approval workbench and run detail when those destinations exist
+- the task page links operators to approval workbench and the canonical run workbench route when those destinations exist
 - the no-approval state keeps the approval-workbench link visible but disabled with reason `No approval history`
+
+## Run Workbench Smoke
+
+With `foreman serve` running, verify the run workbench detail and compatibility routes:
+
+1. Use a run created during the task workbench smoke and copy its `run_id` from the task workbench response or board UI.
+
+2. Read the manager run workbench detail.
+
+```bash
+curl http://localhost:8080/api/manager/runs/<run-id>/workbench
+```
+
+3. Load the canonical board run workbench page.
+
+```bash
+curl http://localhost:8080/board/runs/workbench?run_id=<run-id>
+```
+
+4. Check the legacy board route compatibility redirect.
+
+```bash
+curl -I http://localhost:8080/board/runs/<run-id>
+```
+
+Expected outcomes:
+
+- `GET /api/manager/runs/<run-id>/workbench` returns the run-detail workbench view for that run
+- `GET /board/runs/workbench?run_id=<run-id>` serves the canonical run workbench page
+- `GET /board/runs/<run-id>` redirects to `/board/runs/workbench?run_id=<run-id>`
+- the task workbench now links to the canonical run workbench route instead of the legacy run page
 
 ## Control-Plane Hardening Smoke
 
@@ -229,3 +260,5 @@ It intentionally excludes the previous shell-runtime and skill-packaging line. I
 - Approval workbench plan: [docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-approval-workbench.md)
 - Task-detail workbench spec: [docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md)
 - Task-detail workbench plan: [docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md)
+- Run-detail workbench spec: [docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md)
+- Run-detail workbench plan: [docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md)
