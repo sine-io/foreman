@@ -87,6 +87,18 @@ type RunDetailRecord struct {
 	Artifacts   []ArtifactRecord
 }
 
+type RunWorkbenchRow struct {
+	RunID        string
+	TaskID       string
+	ProjectID    string
+	ModuleID     string
+	TaskSummary  string
+	RunState     string
+	RunnerKind   string
+	RunCreatedAt string
+	Artifacts    []ArtifactRecord
+}
+
 type ApprovalQueueRow struct {
 	ApprovalID      string
 	TaskID          string

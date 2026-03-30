@@ -3,6 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
 	"github.com/sine-io/foreman/internal/ports"
@@ -109,6 +110,53 @@ func (r *BoardQueryRepository) GetRunDetail(runID string) (ports.RunDetailRecord
 	}
 
 	return detail, rows.Err()
+}
+
+func (r *BoardQueryRepository) GetRunWorkbench(runID string) (ports.RunWorkbenchRow, error) {
+	var row ports.RunWorkbenchRow
+	err := r.db.QueryRow(
+		`select id, task_id, runner_kind, state, created_at
+		 from runs
+		 where id = ?`,
+		runID,
+	).Scan(
+		&row.RunID,
+		&row.TaskID,
+		&row.RunnerKind,
+		&row.RunState,
+		&row.RunCreatedAt,
+	)
+	if err != nil {
+		return ports.RunWorkbenchRow{}, err
+	}
+
+	err = r.db.QueryRow(
+		`select t.id, m.project_id, t.module_id, t.summary
+		 from tasks t
+		 join modules m on m.id = t.module_id
+		 join projects p on p.id = m.project_id
+		 where t.id = ?`,
+		row.TaskID,
+	).Scan(
+		&row.TaskID,
+		&row.ProjectID,
+		&row.ModuleID,
+		&row.TaskSummary,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ports.RunWorkbenchRow{}, fmt.Errorf("run %s has broken task linkage for task %s", runID, row.TaskID)
+	}
+	if err != nil {
+		return ports.RunWorkbenchRow{}, err
+	}
+
+	artifacts, _, err := r.taskArtifacts(row.TaskID)
+	if err != nil {
+		return ports.RunWorkbenchRow{}, err
+	}
+	row.Artifacts = artifacts
+
+	return row, nil
 }
 
 func (r *BoardQueryRepository) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {

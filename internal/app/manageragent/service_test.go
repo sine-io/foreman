@@ -381,6 +381,44 @@ func TestTaskStatusKeepsLatestApprovalAfterApprovalDecision(t *testing.T) {
 	require.False(t, view.PendingApproval)
 }
 
+func TestRunWorkbenchReturnsView(t *testing.T) {
+	harness := newHarness()
+	harness.board.runWorkbench = ports.RunWorkbenchRow{
+		RunID:        "run-9",
+		TaskID:       "task-1",
+		ProjectID:    "project-1",
+		ModuleID:     "module-1",
+		TaskSummary:  "Inspect the failed run",
+		RunState:     "failed",
+		RunnerKind:   "codex",
+		RunCreatedAt: "2026-03-30T10:00:00.000000000Z",
+		Artifacts: []ports.ArtifactRecord{
+			{ID: "artifact-1", Kind: "assistant_summary", Summary: "Assistant summary explains the run"},
+		},
+	}
+	svc := harness.newService()
+
+	view, err := svc.RunWorkbench(context.Background(), "run-9")
+	require.NoError(t, err)
+	require.Equal(t, "run-9", view.RunID)
+	require.Equal(t, "task-1", view.TaskID)
+	require.Equal(t, "project-1", view.ProjectID)
+	require.Equal(t, "module-1", view.ModuleID)
+	require.Equal(t, "Inspect the failed run", view.TaskSummary)
+	require.Equal(t, "failed", view.RunState)
+	require.Equal(t, "codex", view.RunnerKind)
+	require.Equal(t, "Assistant summary explains the run", view.PrimarySummary)
+}
+
+func TestRunWorkbenchReturnsNotFoundWhenMissing(t *testing.T) {
+	harness := newHarness()
+	harness.board.runWorkbenchErr = sql.ErrNoRows
+	svc := harness.newService()
+
+	_, err := svc.RunWorkbench(context.Background(), "run-missing")
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
 func TestTaskWorkbenchUsesRequestedProjectBoard(t *testing.T) {
 	harness := newHarness()
 	harness.mustCreateProject(t, "project-1")
@@ -624,6 +662,7 @@ func (h *serviceHarness) newService() *Service {
 		CancelTask:                   command.NewCancelTaskHandler(h.tasks),
 		ReprioritizeTask:             command.NewReprioritizeTaskHandler(h.tasks),
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
+		QueryRunWorkbench:            query.NewRunWorkbenchQuery(h.board),
 		QueryTaskWorkbench:           query.NewTaskWorkbenchQuery(h.board),
 		QueryModuleBoard:             query.NewModuleBoardQuery(h.board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(h.board),
@@ -877,10 +916,12 @@ func (f *fakeArtifactRepo) Get(id string) (ports.ArtifactRecord, error) {
 }
 
 type fakeBoardQueryRepo struct {
-	modules   *fakeModuleRepo
-	tasks     *fakeTaskRepo
-	approvals *fakeApprovalRepo
-	runs      *fakeRunRepo
+	modules         *fakeModuleRepo
+	tasks           *fakeTaskRepo
+	approvals       *fakeApprovalRepo
+	runs            *fakeRunRepo
+	runWorkbench    ports.RunWorkbenchRow
+	runWorkbenchErr error
 }
 
 func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -924,6 +965,13 @@ func (f *fakeBoardQueryRepo) ListTasks(projectID string) ([]ports.TaskBoardRow, 
 
 func (f *fakeBoardQueryRepo) GetRunDetail(runID string) (ports.RunDetailRecord, error) {
 	return ports.RunDetailRecord{}, sql.ErrNoRows
+}
+
+func (f *fakeBoardQueryRepo) GetRunWorkbench(runID string) (ports.RunWorkbenchRow, error) {
+	if f.runWorkbenchErr != nil {
+		return ports.RunWorkbenchRow{}, f.runWorkbenchErr
+	}
+	return f.runWorkbench, nil
 }
 
 func (f *fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {

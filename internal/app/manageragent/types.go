@@ -29,18 +29,20 @@ type Response struct {
 }
 
 type TaskStatusView = query.TaskStatusView
+type RunWorkbenchView = query.RunWorkbenchView
+type RunWorkbenchArtifact = query.RunWorkbenchArtifact
 type TaskWorkbenchView = query.TaskWorkbenchView
 type TaskWorkbenchAction = query.TaskWorkbenchAction
 type TaskWorkbenchArtifact = query.TaskWorkbenchArtifact
 type TaskWorkbenchActionResponse struct {
-	TaskID             string
-	TaskState          string
-	LatestRunID        string
-	LatestRunState     string
-	LatestApprovalID   string
+	TaskID              string
+	TaskState           string
+	LatestRunID         string
+	LatestRunState      string
+	LatestApprovalID    string
 	LatestApprovalState string
-	RefreshRequired    bool
-	Message            string
+	RefreshRequired     bool
+	Message             string
 }
 type ApprovalWorkbenchQueueView = query.ApprovalWorkbenchQueueView
 type ApprovalWorkbenchItem = query.ApprovalWorkbenchItem

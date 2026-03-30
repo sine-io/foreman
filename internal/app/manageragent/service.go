@@ -37,6 +37,7 @@ type Dependencies struct {
 	CancelTask                   *command.CancelTaskHandler
 	ReprioritizeTask             *command.ReprioritizeTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
+	QueryRunWorkbench            *query.RunWorkbenchQuery
 	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
@@ -62,6 +63,7 @@ type Service struct {
 	CancelTask                   *command.CancelTaskHandler
 	ReprioritizeTask             *command.ReprioritizeTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
+	QueryRunWorkbench            *query.RunWorkbenchQuery
 	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
@@ -88,6 +90,7 @@ func NewService(deps Dependencies) *Service {
 		CancelTask:                   deps.CancelTask,
 		ReprioritizeTask:             deps.ReprioritizeTask,
 		QueryTaskStatus:              deps.QueryTaskStatus,
+		QueryRunWorkbench:            deps.QueryRunWorkbench,
 		QueryTaskWorkbench:           deps.QueryTaskWorkbench,
 		QueryModuleBoard:             deps.QueryModuleBoard,
 		QueryTaskBoard:               deps.QueryTaskBoard,
@@ -199,6 +202,14 @@ func (s *Service) TaskStatus(ctx context.Context, projectID, taskID string) (Tas
 	}
 
 	return s.QueryTaskStatus.Execute(resolvedProjectID, taskID)
+}
+
+func (s *Service) RunWorkbench(ctx context.Context, runID string) (RunWorkbenchView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return RunWorkbenchView{}, err
+	}
+
+	return s.QueryRunWorkbench.Execute(runID)
 }
 
 func (s *Service) TaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchView, error) {
