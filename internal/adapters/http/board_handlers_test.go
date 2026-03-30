@@ -49,15 +49,15 @@ func TestBoardActionEndpointsWireToCommands(t *testing.T) {
 	}
 }
 
-func TestRunDetailEndpointReturnsArtifactSummaries(t *testing.T) {
+func TestRunDetailEndpointRedirectsToRunWorkbench(t *testing.T) {
 	router := NewRouter(newFakeHTTPApp())
 
 	req := httptest.NewRequest(stdhttp.MethodGet, "/board/runs/run-1", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "assistant_summary")
+	require.Equal(t, stdhttp.StatusSeeOther, rec.Code)
+	require.Equal(t, "/board/runs/workbench?run_id=run-1", rec.Header().Get("Location"))
 }
 
 func TestApprovalQueueEndpointReturnsPendingItems(t *testing.T) {

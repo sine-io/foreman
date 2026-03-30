@@ -15,6 +15,7 @@ import (
 type ManagerApp interface {
 	Handle(context.Context, manageragent.Request) (manageragent.Response, error)
 	TaskStatus(context.Context, string, string) (manageragent.TaskStatusView, error)
+	RunWorkbench(context.Context, string) (manageragent.RunWorkbenchView, error)
 	TaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchView, error)
 	DispatchTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
 	RetryTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
@@ -103,6 +104,40 @@ func (h *ManagerHandlers) ManagerTaskWorkbench(c *gin.Context) {
 	}
 
 	c.JSON(nethttp.StatusOK, view)
+}
+
+func (h *ManagerHandlers) ManagerRunWorkbench(c *gin.Context) {
+	view, err := h.app.RunWorkbench(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+
+	resp := managerRunWorkbenchResponse{
+		RunID:              view.RunID,
+		TaskID:             view.TaskID,
+		ProjectID:          view.ProjectID,
+		ModuleID:           view.ModuleID,
+		TaskSummary:        view.TaskSummary,
+		RunState:           view.RunState,
+		RunnerKind:         view.RunnerKind,
+		PrimarySummary:     view.PrimarySummary,
+		RunCreatedAt:       view.RunCreatedAt,
+		TaskWorkbenchURL:   view.TaskWorkbenchURL,
+		RunWorkbenchURL:    runWorkbenchURL(view.RunID),
+		ArtifactTargetURLs: view.ArtifactTargetURLs,
+		Artifacts:          make([]managerRunWorkbenchArtifactResponse, 0, len(view.Artifacts)),
+	}
+	for _, artifact := range view.Artifacts {
+		resp.Artifacts = append(resp.Artifacts, managerRunWorkbenchArtifactResponse{
+			ID:      artifact.ID,
+			Kind:    artifact.Kind,
+			Path:    artifact.Path,
+			Summary: artifact.Summary,
+		})
+	}
+
+	c.JSON(nethttp.StatusOK, resp)
 }
 
 func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
@@ -338,4 +373,11 @@ func taskWorkbenchActionResponseDTO(resp manageragent.TaskWorkbenchActionRespons
 		RefreshRequired:     resp.RefreshRequired,
 		Message:             resp.Message,
 	}
+}
+
+func runWorkbenchURL(runID string) string {
+	if runID == "" {
+		return ""
+	}
+	return "/board/runs/workbench?run_id=" + runID
 }

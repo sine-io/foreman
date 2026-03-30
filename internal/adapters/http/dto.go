@@ -51,6 +51,29 @@ type managerTaskWorkbenchReprioritizeRequest struct {
 	Priority int `json:"priority"`
 }
 
+type managerRunWorkbenchResponse struct {
+	RunID              string                                 `json:"run_id"`
+	TaskID             string                                 `json:"task_id"`
+	ProjectID          string                                 `json:"project_id"`
+	ModuleID           string                                 `json:"module_id"`
+	TaskSummary        string                                 `json:"task_summary"`
+	RunState           string                                 `json:"run_state"`
+	RunnerKind         string                                 `json:"runner_kind"`
+	PrimarySummary     string                                 `json:"primary_summary"`
+	RunCreatedAt       string                                 `json:"run_created_at,omitempty"`
+	TaskWorkbenchURL   string                                 `json:"task_workbench_url"`
+	RunWorkbenchURL    string                                 `json:"run_workbench_url"`
+	ArtifactTargetURLs map[string]string                      `json:"artifact_target_urls"`
+	Artifacts          []managerRunWorkbenchArtifactResponse `json:"artifacts"`
+}
+
+type managerRunWorkbenchArtifactResponse struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Path    string `json:"path"`
+	Summary string `json:"summary"`
+}
+
 type managerTaskWorkbenchActionResponse struct {
 	TaskID              string `json:"task_id"`
 	TaskState           string `json:"task_state"`

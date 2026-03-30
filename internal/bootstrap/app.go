@@ -119,6 +119,7 @@ func BuildApp(cfg Config) (App, error) {
 	instance.approveApproval = command.NewApproveApprovalHandler(transactor, approvals, tasks, instance.dispatchTask)
 	instance.rejectApproval = command.NewRejectApprovalHandler(transactor, approvals, tasks)
 	instance.retryApproval = command.NewRetryApprovalDispatchHandler(approvals, tasks, instance.dispatchTask)
+	runWorkbenchQuery := query.NewRunWorkbenchQuery(board)
 	taskWorkbenchQuery := query.NewTaskWorkbenchQuery(board)
 	approvalWorkbenchQueue := query.NewApprovalWorkbenchQueueQuery(board)
 	approvalWorkbenchDetail := query.NewApprovalWorkbenchDetailQuery(board)
@@ -139,6 +140,7 @@ func BuildApp(cfg Config) (App, error) {
 		CancelTask:                   instance.cancelTask,
 		ReprioritizeTask:             instance.reprioritize,
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
+		QueryRunWorkbench:            runWorkbenchQuery,
 		QueryTaskWorkbench:           taskWorkbenchQuery,
 		QueryModuleBoard:             query.NewModuleBoardQuery(board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(board),
@@ -221,6 +223,10 @@ func (a *app) TaskBoard(projectID string) (query.TaskBoardView, error) {
 
 func (a *app) TaskStatus(ctx context.Context, projectID, taskID string) (appmanageragent.TaskStatusView, error) {
 	return a.manager.TaskStatus(ctx, projectID, taskID)
+}
+
+func (a *app) RunWorkbench(ctx context.Context, runID string) (appmanageragent.RunWorkbenchView, error) {
+	return a.manager.RunWorkbench(ctx, runID)
 }
 
 func (a *app) TaskWorkbench(ctx context.Context, projectID, taskID string) (appmanageragent.TaskWorkbenchView, error) {

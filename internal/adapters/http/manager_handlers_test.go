@@ -83,6 +83,59 @@ func TestManagerTaskWorkbenchEndpointMapsMissingTaskTo404(t *testing.T) {
 	require.Equal(t, stdhttp.StatusNotFound, rec.Code)
 }
 
+func TestManagerRunWorkbenchEndpointReturnsDetailView(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/runs/run-1/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	var resp managerRunWorkbenchResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "run-1", resp.RunID)
+	require.Equal(t, "task-1", resp.TaskID)
+	require.Equal(t, "project-1", resp.ProjectID)
+	require.Equal(t, "/board/tasks/workbench?project_id=project-1&task_id=task-1", resp.TaskWorkbenchURL)
+	require.Equal(t, "/board/runs/workbench?run_id=run-1", resp.RunWorkbenchURL)
+	require.Len(t, resp.Artifacts, 1)
+	require.Equal(t, "artifact-1", resp.Artifacts[0].ID)
+	require.Equal(t, "#artifact-artifact-1", resp.ArtifactTargetURLs["artifact-1"])
+}
+
+func TestManagerRunWorkbenchEndpointMapsMissingRunTo404(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/runs/missing/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusNotFound, rec.Code)
+	require.Contains(t, rec.Body.String(), "sql: no rows in result set")
+}
+
+func TestManagerRunWorkbenchEndpointMapsBrokenTaskLinkageTo500(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/runs/broken-link/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusInternalServerError, rec.Code)
+	require.Contains(t, rec.Body.String(), "broken run-to-task linkage")
+}
+
+func TestLegacyBoardRunRouteRedirectsToWorkbench(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/runs/run-legacy", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusSeeOther, rec.Code)
+	require.Equal(t, "/board/runs/workbench?run_id=run-legacy", rec.Header().Get("Location"))
+}
+
 func TestManagerBoardSnapshotEndpointReturnsBoardShape(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -539,6 +592,34 @@ func (a *fakeManagerHTTPApp) TaskWorkbench(ctx context.Context, projectID, taskI
 	}
 
 	return view, nil
+}
+
+func (a *fakeManagerHTTPApp) RunWorkbench(ctx context.Context, runID string) (manageragent.RunWorkbenchView, error) {
+	switch runID {
+	case "missing":
+		return manageragent.RunWorkbenchView{}, sql.ErrNoRows
+	case "broken-link":
+		return manageragent.RunWorkbenchView{}, errors.New("broken run-to-task linkage")
+	default:
+		return manageragent.RunWorkbenchView{
+			RunID:            runID,
+			TaskID:           "task-1",
+			ProjectID:        "project-1",
+			ModuleID:         "module-1",
+			TaskSummary:      "Review push",
+			RunState:         "completed",
+			RunnerKind:       "codex",
+			PrimarySummary:   "Created board view",
+			RunCreatedAt:     "2026-03-30T12:00:00Z",
+			TaskWorkbenchURL: "/board/tasks/workbench?project_id=project-1&task_id=task-1",
+			ArtifactTargetURLs: map[string]string{
+				"artifact-1": "#artifact-artifact-1",
+			},
+			Artifacts: []manageragent.RunWorkbenchArtifact{
+				{ID: "artifact-1", Kind: "assistant_summary", Path: "artifacts/run-1/summary.md", Summary: "Created board view"},
+			},
+		}, nil
+	}
 }
 
 func (a *fakeManagerHTTPApp) BoardSnapshot(ctx context.Context, projectID string) (manageragent.BoardSnapshotView, error) {

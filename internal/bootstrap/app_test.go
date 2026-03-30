@@ -358,6 +358,69 @@ func TestServeExposesManagerTaskWorkbenchAPI(t *testing.T) {
 	require.NoError(t, <-errCh)
 }
 
+func TestServeExposesRunWorkbenchAPI(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	resp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/commands",
+		"application/json",
+		strings.NewReader(`{"kind":"create_task","summary":"Inspect repo state"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, resp.StatusCode)
+
+	var created map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	taskID, _ := created["task_id"].(string)
+	require.NotEmpty(t, taskID)
+
+	taskWorkbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/tasks/" + taskID + "/workbench?project_id=demo")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = taskWorkbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, taskWorkbenchResp.StatusCode)
+
+	var taskWorkbenchPayload map[string]any
+	require.NoError(t, json.NewDecoder(taskWorkbenchResp.Body).Decode(&taskWorkbenchPayload))
+	runID, _ := taskWorkbenchPayload["latest_run_id"].(string)
+	require.NotEmpty(t, runID)
+
+	workbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/runs/" + runID + "/workbench")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = workbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, workbenchResp.StatusCode)
+
+	var workbenchPayload map[string]any
+	require.NoError(t, json.NewDecoder(workbenchResp.Body).Decode(&workbenchPayload))
+	require.Equal(t, runID, workbenchPayload["run_id"])
+	require.NotEmpty(t, workbenchPayload["task_workbench_url"])
+
+	redirectClient := &stdhttp.Client{
+		CheckRedirect: func(req *stdhttp.Request, via []*stdhttp.Request) error {
+			return stdhttp.ErrUseLastResponse
+		},
+	}
+	legacyResp, err := redirectClient.Get("http://" + cfg.HTTPAddr + "/board/runs/" + runID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = legacyResp.Body.Close() })
+	require.Contains(t, []int{stdhttp.StatusFound, stdhttp.StatusSeeOther}, legacyResp.StatusCode)
+	require.Equal(t, "/board/runs/workbench?run_id="+runID, legacyResp.Header.Get("Location"))
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 
