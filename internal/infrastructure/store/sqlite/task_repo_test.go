@@ -219,6 +219,77 @@ func TestApprovalRepositoryPersistsMetadataFields(t *testing.T) {
 	require.Equal(t, "manual reviewer rejected the action", latest.RejectionReason)
 }
 
+func TestBoardQueryRepositoryGetTaskWorkbenchIncludesLatestRunSummaryAndArtifacts(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	mustExec(
+		t,
+		db,
+		`update tasks set summary = ?, acceptance = ?, priority = ?, task_type = ?, state = ? where id = ?`,
+		"Ship task workbench query",
+		"Query returns latest task workbench state",
+		7,
+		"write",
+		"failed",
+		taskID,
+	)
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-2",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "failed",
+	}, "2026-03-29T10:00:00.000000000Z")
+
+	record := approval.New("approval-2", taskID, "git push origin main requires approval")
+	record.Status = approval.StatusApproved
+	saveApprovalRow(t, db, record, "2026-03-29T11:00:00.000000000Z")
+
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, kind, path, summary, created_at) values (?, ?, ?, ?, ?, ?)`,
+		"artifact-3",
+		taskID,
+		"assistant_summary",
+		"artifacts/tasks/task-1/assistant_summary.txt",
+		"Latest run failed after syncing artifacts",
+		"2026-03-29T12:00:00.000000000Z",
+	)
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, kind, path, summary, created_at) values (?, ?, ?, ?, ?, ?)`,
+		"artifact-2",
+		taskID,
+		"run_log",
+		"artifacts/tasks/task-1/run.log",
+		"runner output",
+		"2026-03-29T11:59:00.000000000Z",
+	)
+
+	row, err := repo.GetTaskWorkbench(taskID)
+	require.NoError(t, err)
+	require.Equal(t, "task-1", row.TaskID)
+	require.Equal(t, "project-1", row.ProjectID)
+	require.Equal(t, "module-1", row.ModuleID)
+	require.Equal(t, "Ship task workbench query", row.Summary)
+	require.Equal(t, "failed", row.TaskState)
+	require.Equal(t, 7, row.Priority)
+	require.Equal(t, "repo:project-1", row.WriteScope)
+	require.Equal(t, "write", row.TaskType)
+	require.Equal(t, "Query returns latest task workbench state", row.Acceptance)
+	require.Equal(t, "run-2", row.LatestRunID)
+	require.Equal(t, "failed", row.LatestRunState)
+	require.Equal(t, "Latest run failed after syncing artifacts", row.LatestRunSummary)
+	require.Equal(t, "approval-2", row.LatestApprovalID)
+	require.Equal(t, "approved", row.LatestApprovalState)
+	require.Equal(t, "git push origin main requires approval", row.LatestApprovalReason)
+	require.Len(t, row.Artifacts, 2)
+	require.Equal(t, "assistant_summary", row.Artifacts[0].Kind)
+}
+
 func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)

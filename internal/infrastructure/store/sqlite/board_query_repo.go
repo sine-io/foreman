@@ -265,11 +265,14 @@ func (r *BoardQueryRepository) GetTaskWorkbench(taskID string) (ports.TaskWorkbe
 	row.LatestApprovalState = string(approval.Status)
 	row.LatestApprovalReason = approval.Reason
 
-	artifacts, _, err := r.taskArtifacts(taskID)
+	artifacts, preview, err := r.taskArtifacts(taskID)
 	if err != nil {
 		return ports.TaskWorkbenchRow{}, err
 	}
 	row.Artifacts = artifacts
+	if preview != "" {
+		row.LatestRunSummary = preview
+	}
 
 	return row, nil
 }
