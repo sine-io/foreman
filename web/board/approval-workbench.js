@@ -199,6 +199,9 @@ if (projectInput && refreshButton && statusNode && queueRoot && detailRoot) {
     const runSummary = detail.run_detail_url
       ? `<a class="artifact-link" href="${escapeHTML(detail.run_detail_url)}">Open run view</a>`
       : '<span class="artifact-link artifact-link-muted">Run detail unavailable</span>';
+    const taskWorkbenchURL = `/board/tasks/workbench?project_id=${encodeURIComponent(state.projectId)}&task_id=${encodeURIComponent(
+      detail.task_id,
+    )}`;
 
     detailRoot.innerHTML = `
       <article class="approval-detail-card">
@@ -236,6 +239,7 @@ if (projectInput && refreshButton && statusNode && queueRoot && detailRoot) {
           <article class="detail-block">
             <p class="detail-label">Task</p>
             <p class="detail-copy">${escapeHTML(detail.task_id)} • ${escapeHTML(detail.task_state || "unknown")}</p>
+            <a class="artifact-link" href="${escapeHTML(taskWorkbenchURL)}">Open task workbench</a>
           </article>
 
           <article class="detail-block">

@@ -200,6 +200,10 @@ body {
   max-width: 1240px;
 }
 
+.task-workbench-shell {
+  max-width: 1240px;
+}
+
 .workbench-toolbar {
   justify-content: flex-start;
 }
@@ -214,6 +218,74 @@ body {
 .approval-queue-panel,
 .approval-review-panel {
   min-height: 38rem;
+}
+
+.task-workbench-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.task-workbench-detail {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.task-overview-panel,
+.task-side-panel {
+  min-height: 30rem;
+}
+
+.task-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.task-action-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.task-action-card.is-disabled {
+  background: rgba(239, 228, 212, 0.55);
+}
+
+.task-action-copy,
+.task-action-copy strong,
+.task-action-copy p,
+.task-action-inline-field span {
+  margin: 0;
+}
+
+.task-action-copy {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.task-action-copy p {
+  color: #6d5e4c;
+}
+
+.task-action-inline-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.task-priority-input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.board-link-disabled {
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .approval-workbench-queue,
@@ -420,9 +492,14 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .task-workbench-layout,
   .approval-workbench-layout,
   .detail-grid,
   .detail-grid-secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .task-action-grid {
     grid-template-columns: 1fr;
   }
 }
