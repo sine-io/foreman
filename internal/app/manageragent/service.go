@@ -234,7 +234,8 @@ func (s *Service) DispatchTaskWorkbench(ctx context.Context, projectID, taskID s
 	if err != nil {
 		return TaskWorkbenchActionResponse{}, err
 	}
-	return taskWorkbenchActionResponseFromDispatch(view, result), nil
+	_ = result
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, "")
 }
 
 func (s *Service) RetryTaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchActionResponse, error) {
@@ -249,7 +250,7 @@ func (s *Service) RetryTaskWorkbench(ctx context.Context, projectID, taskID stri
 	if err := s.RetryTask.Handle(command.RetryTaskCommand{TaskID: taskID}); err != nil {
 		return TaskWorkbenchActionResponse{}, err
 	}
-	return s.taskWorkbenchActionResponse(projectID, taskID, "")
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, "")
 }
 
 func (s *Service) CancelTaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchActionResponse, error) {
@@ -264,7 +265,7 @@ func (s *Service) CancelTaskWorkbench(ctx context.Context, projectID, taskID str
 	if err := s.CancelTask.Handle(command.CancelTaskCommand{TaskID: taskID}); err != nil {
 		return TaskWorkbenchActionResponse{}, err
 	}
-	return s.taskWorkbenchActionResponse(projectID, taskID, "")
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, "")
 }
 
 func (s *Service) ReprioritizeTaskWorkbench(ctx context.Context, projectID, taskID string, priority int) (TaskWorkbenchActionResponse, error) {
@@ -279,7 +280,7 @@ func (s *Service) ReprioritizeTaskWorkbench(ctx context.Context, projectID, task
 	if err := s.ReprioritizeTask.Handle(command.ReprioritizeTaskCommand{TaskID: taskID, Priority: priority}); err != nil {
 		return TaskWorkbenchActionResponse{}, err
 	}
-	return s.taskWorkbenchActionResponse(projectID, taskID, fmt.Sprintf("priority updated to %d", priority))
+	return s.taskWorkbenchActionResponse(ctx, projectID, taskID, fmt.Sprintf("priority updated to %d", priority))
 }
 
 func (s *Service) BoardSnapshot(ctx context.Context, projectID string) (BoardSnapshotView, error) {
@@ -571,8 +572,8 @@ func (s *Service) taskWorkbenchForAction(ctx context.Context, projectID, taskID 
 	return view, nil
 }
 
-func (s *Service) taskWorkbenchActionResponse(projectID, taskID, message string) (TaskWorkbenchActionResponse, error) {
-	view, err := s.TaskWorkbench(context.Background(), projectID, taskID)
+func (s *Service) taskWorkbenchActionResponse(ctx context.Context, projectID, taskID, message string) (TaskWorkbenchActionResponse, error) {
+	view, err := s.TaskWorkbench(ctx, projectID, taskID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TaskWorkbenchActionResponse{}, fmt.Errorf("%w: %v", ErrTaskActionNotFound, err)
@@ -589,21 +590,6 @@ func (s *Service) taskWorkbenchActionResponse(projectID, taskID, message string)
 		RefreshRequired:     true,
 		Message:             message,
 	}, nil
-}
-
-func taskWorkbenchActionResponseFromDispatch(view TaskWorkbenchView, result command.DispatchTaskResult) TaskWorkbenchActionResponse {
-	resp := TaskWorkbenchActionResponse{
-		TaskID:              view.TaskID,
-		TaskState:           result.TaskState,
-		LatestRunState:      result.RunState,
-		LatestApprovalID:    view.LatestApprovalID,
-		LatestApprovalState: view.LatestApprovalState,
-		RefreshRequired:     true,
-	}
-	if result.RunState != "" {
-		resp.LatestRunID = view.LatestRunID
-	}
-	return resp
 }
 
 func ctxErr(ctx context.Context) error {

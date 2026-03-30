@@ -502,6 +502,24 @@ func TestTaskWorkbenchActionReturnsCompactRefreshResult(t *testing.T) {
 	require.Equal(t, "priority updated to 42", resp.Message)
 }
 
+func TestTaskWorkbenchDispatchResponseIncludesLatestRunID(t *testing.T) {
+	harness := newHarness()
+	harness.mustCreateProject(t, "project-1")
+	harness.mustCreateModule(t, "module-1", "project-1")
+	svc := harness.newService()
+
+	record := task.NewTask("task-dispatch", "module-1", task.TaskTypeWrite, "Inspect repo state", "repo:project-1")
+	require.NoError(t, harness.tasks.Save(record))
+
+	resp, err := svc.DispatchTaskWorkbench(context.Background(), "project-1", "task-dispatch")
+	require.NoError(t, err)
+	require.Equal(t, "task-dispatch", resp.TaskID)
+	require.Equal(t, "completed", resp.TaskState)
+	require.Equal(t, "completed", resp.LatestRunState)
+	require.NotEmpty(t, resp.LatestRunID)
+	require.True(t, resp.RefreshRequired)
+}
+
 type serviceHarness struct {
 	projects       *fakeProjectRepo
 	modules        *fakeModuleRepo
