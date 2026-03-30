@@ -282,7 +282,7 @@ func TestBoardQueryRepositoryGetTaskWorkbenchIncludesLatestRunSummaryAndArtifact
 	require.Equal(t, "Query returns latest task workbench state", row.Acceptance)
 	require.Equal(t, "run-2", row.LatestRunID)
 	require.Equal(t, "failed", row.LatestRunState)
-	require.Equal(t, "Latest run failed after syncing artifacts", row.LatestRunSummary)
+	require.Equal(t, "codex run is failed", row.LatestRunSummary)
 	require.Equal(t, "approval-2", row.LatestApprovalID)
 	require.Equal(t, "approved", row.LatestApprovalState)
 	require.Equal(t, "git push origin main requires approval", row.LatestApprovalReason)

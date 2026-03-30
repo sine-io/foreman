@@ -119,6 +119,7 @@ func BuildApp(cfg Config) (App, error) {
 	instance.approveApproval = command.NewApproveApprovalHandler(transactor, approvals, tasks, instance.dispatchTask)
 	instance.rejectApproval = command.NewRejectApprovalHandler(transactor, approvals, tasks)
 	instance.retryApproval = command.NewRetryApprovalDispatchHandler(approvals, tasks, instance.dispatchTask)
+	taskWorkbenchQuery := query.NewTaskWorkbenchQuery(board)
 	approvalWorkbenchQueue := query.NewApprovalWorkbenchQueueQuery(board)
 	approvalWorkbenchDetail := query.NewApprovalWorkbenchDetailQuery(board)
 	instance.manager = appmanageragent.NewService(appmanageragent.Dependencies{
@@ -135,6 +136,7 @@ func BuildApp(cfg Config) (App, error) {
 		CreateTask:                   instance.createTask,
 		DispatchTask:                 instance.dispatchTask,
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
+		QueryTaskWorkbench:           taskWorkbenchQuery,
 		QueryModuleBoard:             query.NewModuleBoardQuery(board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(board),
 		QueryApprovalWorkbenchQueue:  approvalWorkbenchQueue,
