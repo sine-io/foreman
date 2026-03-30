@@ -119,6 +119,29 @@ func TestTaskWorkbenchDisablesCancelForActiveStates(t *testing.T) {
 	}
 }
 
+func TestTaskWorkbenchDisablesCancelWhenLatestRunIsStillRunning(t *testing.T) {
+	query := NewTaskWorkbenchQuery(fakeTaskWorkbenchRepo{
+		row: ports.TaskWorkbenchRow{
+			TaskID:         "task-1",
+			ProjectID:      "project-1",
+			ModuleID:       "module-1",
+			Summary:        "Recover failed task",
+			TaskState:      "failed",
+			Priority:       5,
+			WriteScope:     "repo:project-1",
+			TaskType:       "write",
+			Acceptance:     "Recovery path exposed",
+			LatestRunID:    "run-3",
+			LatestRunState: "running",
+		},
+	})
+
+	view, err := query.Execute("project-1", "task-1")
+	require.NoError(t, err)
+	require.False(t, taskWorkbenchAction(view.AvailableActions, "cancel").Enabled)
+	require.Equal(t, "Run in progress", taskWorkbenchAction(view.AvailableActions, "cancel").DisabledReason)
+}
+
 func TestTaskWorkbenchActionMatrixMatchesTaskState(t *testing.T) {
 	testCases := []struct {
 		name               string

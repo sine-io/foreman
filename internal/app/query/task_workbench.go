@@ -95,7 +95,7 @@ func (q *TaskWorkbenchQuery) Execute(projectID, taskID string) (TaskWorkbenchVie
 		})
 	}
 
-	view.AvailableActions = taskWorkbenchActions(row.TaskState, row.LatestRunID, row.LatestApprovalID, row.Priority)
+	view.AvailableActions = taskWorkbenchActions(row.TaskState, row.LatestRunID, row.LatestRunState, row.LatestApprovalID, row.Priority)
 	for _, action := range view.AvailableActions {
 		if !action.Enabled && action.DisabledReason != "" {
 			view.DisabledReasons[action.ActionID] = action.DisabledReason
@@ -120,10 +120,10 @@ func runDetailURL(runID string) string {
 	return "/board/runs/" + runID
 }
 
-func taskWorkbenchActions(taskState, latestRunID, latestApprovalID string, priority int) []TaskWorkbenchAction {
+func taskWorkbenchActions(taskState, latestRunID, latestRunState, latestApprovalID string, priority int) []TaskWorkbenchAction {
 	return []TaskWorkbenchAction{
 		dispatchAction(taskState),
-		cancelAction(taskState),
+		cancelAction(taskState, latestRunState),
 		reprioritizeAction(taskState, priority),
 		retryAction(taskState),
 		openLatestRunAction(latestRunID),
@@ -152,7 +152,10 @@ func dispatchAction(taskState string) TaskWorkbenchAction {
 	}
 }
 
-func cancelAction(taskState string) TaskWorkbenchAction {
+func cancelAction(taskState, latestRunState string) TaskWorkbenchAction {
+	if latestRunState == "running" {
+		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Run in progress"}
+	}
 	switch taskState {
 	case "leased":
 		return TaskWorkbenchAction{ActionID: "cancel", DisabledReason: "Lease active"}
