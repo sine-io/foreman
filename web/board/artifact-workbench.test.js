@@ -52,7 +52,7 @@ const loadWorkbenchModule = () => {
   }
 };
 
-const { composeArtifactPreviewMarkup } = loadWorkbenchModule();
+const { composeArtifactPreviewMarkup, buildArtifactCompareURL } = loadWorkbenchModule();
 
 test('TestArtifactWorkbenchJavaScriptUsesRendererHelpersForJSON', () => {
   assert.equal(typeof composeArtifactPreviewMarkup, 'function');
@@ -172,4 +172,12 @@ test('TestArtifactWorkbenchJavaScriptKeepsPageUsableWhenRendererFallsBack', () =
 
   assert.match(markup, /<pre class="artifact-preview artifact-preview-text"># Title/);
   assert.doesNotMatch(markup, /Unable to load artifact detail/);
+});
+
+test('TestArtifactWorkbenchJavaScriptLinksToArtifactCompare', () => {
+  assert.equal(typeof buildArtifactCompareURL, 'function');
+  assert.equal(
+    buildArtifactCompareURL('artifact-1'),
+    '/board/artifacts/compare?artifact_id=artifact-1',
+  );
 });

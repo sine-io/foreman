@@ -201,6 +201,7 @@ body {
 }
 
 .artifact-workbench-shell,
+.artifact-compare-shell,
 .run-workbench-shell,
 .task-workbench-shell {
   max-width: 1240px;
@@ -236,6 +237,13 @@ body {
   align-items: start;
 }
 
+.artifact-compare-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.95fr) minmax(0, 1.45fr) minmax(18rem, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
 .run-workbench-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.95fr);
@@ -244,6 +252,7 @@ body {
 }
 
 .artifact-workbench-detail,
+.artifact-compare-detail,
 .run-workbench-detail,
 .task-workbench-detail {
   display: grid;
@@ -253,6 +262,9 @@ body {
 .artifact-siblings-panel,
 .artifact-detail-panel,
 .artifact-metadata-panel,
+.artifact-compare-current-panel,
+.artifact-compare-diff-panel,
+.artifact-compare-previous-panel,
 .run-overview-panel,
 .run-side-panel,
 .task-overview-panel,
@@ -773,12 +785,38 @@ body {
   gap: 0.75rem;
 }
 
+.artifact-compare-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.artifact-compare-metadata-grid {
+  align-items: stretch;
+}
+
+.artifact-compare-diff {
+  margin: 0;
+  margin-top: 0.9rem;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+  background: #f7f1e7;
+  color: #2d261e;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
 @media (max-width: 960px) {
   .board-layout {
     grid-template-columns: 1fr;
   }
 
   .artifact-workbench-layout,
+  .artifact-compare-layout,
   .run-workbench-layout,
   .task-workbench-layout,
   .approval-workbench-layout,

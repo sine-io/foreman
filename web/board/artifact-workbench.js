@@ -438,8 +438,16 @@
   const composeArtifactPreviewMarkup = (detail, options = {}) =>
     buildArtifactPreviewViewModel(detail, options).markup;
 
+  const buildArtifactCompareURL = (artifactId) => {
+    if (!artifactId) {
+      return "/board/artifacts/compare";
+    }
+    return `/board/artifacts/compare?artifact_id=${encodeURIComponent(artifactId)}`;
+  };
+
   const api = {
     composeArtifactPreviewMarkup,
+    buildArtifactCompareURL,
   };
 
   globalScope.ForemanArtifactWorkbench = api;
@@ -651,6 +659,9 @@
     const runWorkbenchLink = detail.run_workbench_url
       ? `<a class="board-link" href="${escapeHTML(detail.run_workbench_url)}">Back to run workbench</a>`
       : '<span class="board-link board-link-disabled" aria-disabled="true">Run workbench unavailable</span>';
+    const compareLink = detail.artifact_id
+      ? `<a class="board-link" href="${escapeHTML(buildArtifactCompareURL(detail.artifact_id))}">Compare with previous</a>`
+      : '<span class="board-link board-link-disabled" aria-disabled="true">Compare unavailable</span>';
 
     metadataRoot.innerHTML = `
       <article class="approval-detail-card">
@@ -693,6 +704,7 @@
 
         <section class="artifact-metadata-actions">
           ${runWorkbenchLink}
+          ${compareLink}
           ${rawContentLink}
         </section>
       </article>
