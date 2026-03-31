@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	appquery "github.com/sine-io/foreman/internal/app/query"
 	"github.com/sine-io/foreman/internal/domain/approval"
 	"github.com/sine-io/foreman/internal/infrastructure/store/artifactfs"
 	"github.com/sine-io/foreman/internal/ports"
@@ -485,6 +486,65 @@ func TestBoardQueryRepositoryGetRunWorkbenchUsesRequestedRunWithTaskScopedArtifa
 	require.Equal(t, []string{"artifact-after-new-run", "artifact-before-new-run"}, []string{row.Artifacts[0].ID, row.Artifacts[1].ID})
 	require.Equal(t, "Latest run completed successfully", row.Artifacts[0].Summary)
 	require.Equal(t, "Older run failed before retry", row.Artifacts[1].Summary)
+}
+
+func TestRunWorkbenchKeepsOlderRunPrimarySummaryWhenNewerRetryExists(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	mustExec(
+		t,
+		db,
+		`update tasks set summary = ?, state = ? where id = ?`,
+		"Inspect multi-run run workbench summary selection",
+		"failed",
+		taskID,
+	)
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-old",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "failed",
+	}, "2026-03-29T09:00:00.000000000Z")
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-new",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-29T11:00:00.000000000Z")
+
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, run_id, kind, path, summary, created_at) values (?, ?, ?, ?, ?, ?, ?)`,
+		"artifact-after-new-run",
+		taskID,
+		"run-new",
+		"assistant_summary",
+		"artifacts/tasks/task-1/assistant-latest.txt",
+		"Latest run completed successfully",
+		"2026-03-29T12:00:00.000000000Z",
+	)
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, run_id, kind, path, summary, created_at) values (?, ?, ?, ?, ?, ?, ?)`,
+		"artifact-for-old-run",
+		taskID,
+		"run-old",
+		"assistant_summary",
+		"artifacts/tasks/task-1/assistant-old.txt",
+		"Older run failed before retry",
+		"2026-03-29T10:00:00.000000000Z",
+	)
+
+	view, err := appquery.NewRunWorkbenchQuery(repo).Execute("run-old")
+	require.NoError(t, err)
+	require.Equal(t, "run-old", view.RunID)
+	require.Equal(t, "Older run failed before retry", view.PrimarySummary)
+	require.Len(t, view.Artifacts, 2)
+	require.Equal(t, []string{"artifact-after-new-run", "artifact-for-old-run"}, []string{view.Artifacts[0].ID, view.Artifacts[1].ID})
 }
 
 func TestOnlyOnePendingApprovalCanExistForTask(t *testing.T) {

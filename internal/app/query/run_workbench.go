@@ -55,7 +55,7 @@ func (q *RunWorkbenchQuery) Execute(runID string) (RunWorkbenchView, error) {
 		TaskSummary:        row.TaskSummary,
 		RunState:           row.RunState,
 		RunnerKind:         row.RunnerKind,
-		PrimarySummary:     runWorkbenchPrimarySummary(row.RunState, row.Artifacts),
+		PrimarySummary:     runWorkbenchPrimarySummary(row.RunID, row.RunState, row.Artifacts),
 		RunCreatedAt:       row.RunCreatedAt,
 		TaskWorkbenchURL:   taskWorkbenchURL(row.ProjectID, row.TaskID),
 		ArtifactTargetURLs: map[string]string{},
@@ -77,16 +77,17 @@ func (q *RunWorkbenchQuery) Execute(runID string) (RunWorkbenchView, error) {
 	return view, nil
 }
 
-func runWorkbenchPrimarySummary(runState string, artifacts []ports.ArtifactRecord) string {
-	if summary := assistantArtifactSummary(artifacts); summary != "" {
+func runWorkbenchPrimarySummary(runID, runState string, artifacts []ports.ArtifactRecord) string {
+	summaryArtifacts := runWorkbenchSummaryArtifacts(runID, artifacts)
+	if summary := assistantArtifactSummary(summaryArtifacts); summary != "" {
 		return summary
 	}
 
-	parts := make([]string, 0, len(artifacts)+1)
+	parts := make([]string, 0, len(summaryArtifacts)+1)
 	if runState != "" {
 		parts = append(parts, runState)
 	}
-	for _, artifact := range artifacts {
+	for _, artifact := range summaryArtifacts {
 		if artifact.Summary == "" || artifact.Kind == "assistant_summary" || isRawLogArtifact(artifact.Kind) {
 			continue
 		}
@@ -98,6 +99,28 @@ func runWorkbenchPrimarySummary(runState string, artifacts []ports.ArtifactRecor
 	}
 
 	return strings.Join(parts, " — ")
+}
+
+func runWorkbenchSummaryArtifacts(runID string, artifacts []ports.ArtifactRecord) []ports.ArtifactRecord {
+	if runID == "" {
+		return artifacts
+	}
+
+	sameRun := make([]ports.ArtifactRecord, 0, len(artifacts))
+	legacy := make([]ports.ArtifactRecord, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		switch artifact.RunID {
+		case runID:
+			sameRun = append(sameRun, artifact)
+		case "":
+			legacy = append(legacy, artifact)
+		}
+	}
+
+	if len(sameRun) > 0 {
+		return append(sameRun, legacy...)
+	}
+	return legacy
 }
 
 func assistantArtifactSummary(artifacts []ports.ArtifactRecord) string {

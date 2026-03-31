@@ -30,6 +30,42 @@ func TestRunWorkbenchUsesAssistantSummaryWhenPresent(t *testing.T) {
 	require.Equal(t, "Assistant summary explains the failure", view.PrimarySummary)
 }
 
+func TestRunWorkbenchPrefersSelectedRunAssistantSummaryOverNewerRetry(t *testing.T) {
+	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
+		row: ports.RunWorkbenchRow{
+			RunID:    "run-old",
+			TaskID:   "task-1",
+			RunState: "failed",
+			Artifacts: []ports.ArtifactRecord{
+				{ID: "artifact-new", RunID: "run-new", Kind: "assistant_summary", Summary: "Latest retry completed successfully"},
+				{ID: "artifact-old", RunID: "run-old", Kind: "assistant_summary", Summary: "Older run failed while applying the patch"},
+			},
+		},
+	})
+
+	view, err := query.Execute("run-old")
+	require.NoError(t, err)
+	require.Equal(t, "Older run failed while applying the patch", view.PrimarySummary)
+}
+
+func TestRunWorkbenchFallsBackToLegacyUnlinkedAssistantSummaryBeforeOtherRunArtifacts(t *testing.T) {
+	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
+		row: ports.RunWorkbenchRow{
+			RunID:    "run-old",
+			TaskID:   "task-1",
+			RunState: "failed",
+			Artifacts: []ports.ArtifactRecord{
+				{ID: "artifact-new", RunID: "run-new", Kind: "assistant_summary", Summary: "Latest retry completed successfully"},
+				{ID: "artifact-legacy", Kind: "assistant_summary", Summary: "Historical run summary captured before artifact run links"},
+			},
+		},
+	})
+
+	view, err := query.Execute("run-old")
+	require.NoError(t, err)
+	require.Equal(t, "Historical run summary captured before artifact run links", view.PrimarySummary)
+}
+
 func TestRunWorkbenchFallsBackToRunStateAndArtifactSummaries(t *testing.T) {
 	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
 		row: ports.RunWorkbenchRow{
