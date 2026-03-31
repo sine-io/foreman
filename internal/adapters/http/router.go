@@ -49,6 +49,7 @@ func NewRouter(app App) *gin.Engine {
 		router.GET("/api/manager/tasks/:id", managerHandlers.ManagerTaskStatus)
 		router.GET("/api/manager/runs/:id/workbench", managerHandlers.ManagerRunWorkbench)
 		router.GET("/api/manager/artifacts/:id/workbench", managerHandlers.ManagerArtifactWorkbench)
+		router.GET("/api/manager/artifacts/:id/compare", managerHandlers.ManagerArtifactCompare)
 		router.GET("/api/manager/artifacts/:id/content", managerHandlers.ManagerArtifactContent)
 		router.GET("/api/manager/tasks/:id/workbench", managerHandlers.ManagerTaskWorkbench)
 		router.POST("/api/manager/tasks/:id/dispatch", managerHandlers.DispatchTaskWorkbench)

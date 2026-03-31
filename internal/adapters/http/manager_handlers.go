@@ -29,6 +29,7 @@ type ManagerApp interface {
 	TaskStatus(context.Context, string, string) (manageragent.TaskStatusView, error)
 	RunWorkbench(context.Context, string) (manageragent.RunWorkbenchView, error)
 	ArtifactWorkbench(context.Context, string) (manageragent.ArtifactWorkbenchView, error)
+	ArtifactCompare(context.Context, string) (manageragent.ArtifactCompareView, error)
 	ArtifactContent(context.Context, string) (ManagerArtifactContent, error)
 	TaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchView, error)
 	DispatchTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
@@ -162,6 +163,16 @@ func (h *ManagerHandlers) ManagerArtifactWorkbench(c *gin.Context) {
 	}
 
 	c.JSON(nethttp.StatusOK, artifactWorkbenchResponseDTO(view))
+}
+
+func (h *ManagerHandlers) ManagerArtifactCompare(c *gin.Context) {
+	view, err := h.app.ArtifactCompare(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+
+	c.JSON(nethttp.StatusOK, artifactCompareResponseDTO(view))
 }
 
 func (h *ManagerHandlers) ManagerArtifactContent(c *gin.Context) {
@@ -379,6 +390,8 @@ func respondManagerError(c *gin.Context, err error) {
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, manageragent.ErrArtifactWorkbenchConflict):
 		c.JSON(nethttp.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, manageragent.ErrArtifactCompareNotFound):
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionNotFound):
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionConflict):
@@ -461,6 +474,49 @@ func artifactWorkbenchResponseDTO(view manageragent.ArtifactWorkbenchView) manag
 			Summary:    sibling.Summary,
 			Selected:   sibling.Selected,
 		})
+	}
+	return resp
+}
+
+func artifactCompareResponseDTO(view manageragent.ArtifactCompareView) managerArtifactCompareResponse {
+	resp := managerArtifactCompareResponse{
+		Current: managerArtifactCompareArtifactResponse{
+			ArtifactID:  view.Current.ArtifactID,
+			RunID:       view.Current.RunID,
+			TaskID:      view.Current.TaskID,
+			Kind:        view.Current.Kind,
+			ContentType: view.Current.ContentType,
+			CreatedAt:   view.Current.CreatedAt,
+		},
+		Status: view.Status,
+		Limits: managerArtifactCompareLimitsResponse{
+			MaxCompareBytes: view.Limits.MaxCompareBytes,
+		},
+		Messages: managerArtifactCompareMessagesResponse{
+			Title:  view.Messages.Title,
+			Detail: view.Messages.Detail,
+		},
+		Navigation: managerArtifactCompareNavigationResponse{
+			CurrentWorkbenchURL:  view.Navigation.CurrentWorkbenchURL,
+			PreviousWorkbenchURL: view.Navigation.PreviousWorkbenchURL,
+			BackToRunURL:         view.Navigation.BackToRunURL,
+		},
+	}
+	if view.Previous != nil {
+		resp.Previous = &managerArtifactCompareArtifactResponse{
+			ArtifactID:  view.Previous.ArtifactID,
+			RunID:       view.Previous.RunID,
+			TaskID:      view.Previous.TaskID,
+			Kind:        view.Previous.Kind,
+			ContentType: view.Previous.ContentType,
+			CreatedAt:   view.Previous.CreatedAt,
+		}
+	}
+	if view.Diff != nil {
+		resp.Diff = &managerArtifactCompareDiffResponse{
+			Format:  view.Diff.Format,
+			Content: view.Diff.Content,
+		}
 	}
 	return resp
 }

@@ -33,6 +33,12 @@ type RunWorkbenchView = query.RunWorkbenchView
 type RunWorkbenchArtifact = query.RunWorkbenchArtifact
 type ArtifactWorkbenchView = query.ArtifactWorkbenchView
 type ArtifactWorkbenchSibling = query.ArtifactWorkbenchSibling
+type ArtifactCompareView = query.ArtifactCompareView
+type ArtifactCompareArtifact = query.ArtifactCompareArtifact
+type ArtifactCompareDiff = query.ArtifactCompareDiff
+type ArtifactCompareLimits = query.ArtifactCompareLimits
+type ArtifactCompareMessages = query.ArtifactCompareMessages
+type ArtifactCompareNavigation = query.ArtifactCompareNavigation
 type TaskWorkbenchView = query.TaskWorkbenchView
 type TaskWorkbenchAction = query.TaskWorkbenchAction
 type TaskWorkbenchArtifact = query.TaskWorkbenchArtifact
@@ -66,6 +72,7 @@ var (
 	ErrTaskActionConflict        = errors.New("task action conflict")
 	ErrArtifactWorkbenchNotFound = errors.New("artifact workbench not found")
 	ErrArtifactWorkbenchConflict = errors.New("artifact workbench conflict")
+	ErrArtifactCompareNotFound   = errors.New("artifact compare not found")
 )
 
 type ModuleSnapshot struct {

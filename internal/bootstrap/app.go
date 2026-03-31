@@ -128,6 +128,7 @@ func BuildApp(cfg Config) (App, error) {
 	instance.retryApproval = command.NewRetryApprovalDispatchHandler(approvals, tasks, instance.dispatchTask)
 	runWorkbenchQuery := query.NewRunWorkbenchQuery(board)
 	artifactWorkbenchQuery := query.NewArtifactWorkbenchQuery(board, artifactStore)
+	artifactCompareQuery := query.NewArtifactCompareQuery(board, artifactStore)
 	taskWorkbenchQuery := query.NewTaskWorkbenchQuery(board)
 	approvalWorkbenchQueue := query.NewApprovalWorkbenchQueueQuery(board)
 	approvalWorkbenchDetail := query.NewApprovalWorkbenchDetailQuery(board)
@@ -150,6 +151,7 @@ func BuildApp(cfg Config) (App, error) {
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
 		QueryRunWorkbench:            runWorkbenchQuery,
 		QueryArtifactWorkbench:       artifactWorkbenchQuery,
+		QueryArtifactCompare:         artifactCompareQuery,
 		QueryTaskWorkbench:           taskWorkbenchQuery,
 		QueryModuleBoard:             query.NewModuleBoardQuery(board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(board),
@@ -240,6 +242,10 @@ func (a *app) RunWorkbench(ctx context.Context, runID string) (appmanageragent.R
 
 func (a *app) ArtifactWorkbench(ctx context.Context, artifactID string) (appmanageragent.ArtifactWorkbenchView, error) {
 	return a.manager.ArtifactWorkbench(ctx, artifactID)
+}
+
+func (a *app) ArtifactCompare(ctx context.Context, artifactID string) (appmanageragent.ArtifactCompareView, error) {
+	return a.manager.ArtifactCompare(ctx, artifactID)
 }
 
 func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapter.ManagerArtifactContent, error) {

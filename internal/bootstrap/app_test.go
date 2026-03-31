@@ -585,6 +585,114 @@ func TestServeArtifactContentPreservesImagePreviewContract(t *testing.T) {
 	require.NoError(t, <-errCh)
 }
 
+func TestServeArtifactCompareExposesLiveCompareRoute(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	appImpl, ok := appIface.(*app)
+	require.True(t, ok)
+	require.NoError(t, appImpl.ensureDefaultProject())
+	require.NoError(t, appImpl.ensureDefaultModule())
+
+	taskDTO, err := appIface.CreateTask(command.CreateTaskCommand{
+		ModuleID:   defaultModuleID,
+		Title:      "Compare artifact history",
+		TaskType:   "write",
+		WriteScope: "repo:demo",
+		Acceptance: "Compare artifact history",
+		Priority:   10,
+	})
+	require.NoError(t, err)
+
+	previousPath := filepath.ToSlash(filepath.Join("tasks", taskDTO.ID, "assistant_summary-previous.txt"))
+	currentPath := filepath.ToSlash(filepath.Join("tasks", taskDTO.ID, "assistant_summary-current.txt"))
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(previousPath))), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(previousPath)), []byte("previous artifact\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(currentPath)), []byte("current artifact\n"), 0o644))
+
+	require.NoError(t, appImpl.runs.Save(ports.Run{
+		ID:         "run-compare-1",
+		TaskID:     taskDTO.ID,
+		RunnerKind: "codex",
+		State:      "completed",
+		CreatedAt:  "2026-04-01T09:00:00.000000000Z",
+	}))
+	previousID, err := appImpl.artifacts.Create(taskDTO.ID, "run-compare-1", "assistant_summary", previousPath)
+	require.NoError(t, err)
+
+	require.NoError(t, appImpl.runs.Save(ports.Run{
+		ID:         "run-compare-2",
+		TaskID:     taskDTO.ID,
+		RunnerKind: "codex",
+		State:      "completed",
+		CreatedAt:  "2026-04-01T10:00:00.000000000Z",
+	}))
+	currentID, err := appImpl.artifacts.Create(taskDTO.ID, "run-compare-2", "assistant_summary", currentPath)
+	require.NoError(t, err)
+	require.NotEqual(t, previousID, currentID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	compareResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/artifacts/" + currentID + "/compare")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = compareResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, compareResp.StatusCode)
+
+	var comparePayload struct {
+		Status   string `json:"status"`
+		Current  struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+			TaskID     string `json:"task_id"`
+			Kind       string `json:"kind"`
+		} `json:"current"`
+		Previous *struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+		} `json:"previous"`
+		Diff *struct {
+			Format  string `json:"format"`
+			Content string `json:"content"`
+		} `json:"diff"`
+		Limits struct {
+			MaxCompareBytes int `json:"max_compare_bytes"`
+		} `json:"limits"`
+		Navigation struct {
+			CurrentWorkbenchURL  string `json:"current_workbench_url"`
+			PreviousWorkbenchURL string `json:"previous_workbench_url"`
+			BackToRunURL         string `json:"back_to_run_url"`
+		} `json:"navigation"`
+	}
+	require.NoError(t, json.NewDecoder(compareResp.Body).Decode(&comparePayload))
+	require.Equal(t, "ready", comparePayload.Status)
+	require.Equal(t, currentID, comparePayload.Current.ArtifactID)
+	require.Equal(t, "run-compare-2", comparePayload.Current.RunID)
+	require.Equal(t, taskDTO.ID, comparePayload.Current.TaskID)
+	require.Equal(t, "assistant_summary", comparePayload.Current.Kind)
+	require.NotNil(t, comparePayload.Previous)
+	require.Equal(t, previousID, comparePayload.Previous.ArtifactID)
+	require.Equal(t, "run-compare-1", comparePayload.Previous.RunID)
+	require.NotNil(t, comparePayload.Diff)
+	require.Equal(t, "text/unified-diff", comparePayload.Diff.Format)
+	require.Contains(t, comparePayload.Diff.Content, "previous:"+previousID)
+	require.Contains(t, comparePayload.Diff.Content, "current:"+currentID)
+	require.Equal(t, 64*1024, comparePayload.Limits.MaxCompareBytes)
+	require.Equal(t, "/board/artifacts/workbench?artifact_id="+currentID, comparePayload.Navigation.CurrentWorkbenchURL)
+	require.Equal(t, "/board/artifacts/workbench?artifact_id="+previousID, comparePayload.Navigation.PreviousWorkbenchURL)
+	require.Equal(t, "/board/runs/workbench?run_id=run-compare-2", comparePayload.Navigation.BackToRunURL)
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 
