@@ -403,6 +403,68 @@ func TestArtifactRendererHelpersRespectPreviewTruncation(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "Preview truncated to the workbench preview limit.")
 }
 
+func TestArtifactLogErgonomicsAssetServes(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-log-ergonomics.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "ForemanArtifactLogErgonomics")
+	require.Contains(t, rec.Body.String(), "buildLogErgonomicsModel")
+}
+
+func TestArtifactLogErgonomicsIncludesLineNumbers(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-log-ergonomics.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "renderLineNumberedText")
+	require.Contains(t, rec.Body.String(), "lineNumber")
+}
+
+func TestArtifactLogErgonomicsIncludesCollapsedTeaserLogic(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-log-ergonomics.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "sliceCollapsedTeaser")
+	require.Contains(t, rec.Body.String(), "hiddenLineCount")
+	require.Contains(t, rec.Body.String(), "expandAllState")
+}
+
+func TestArtifactLogErgonomicsIncludesSummaryAnchorExtraction(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-log-ergonomics.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "extractSummaryAnchors")
+	require.Contains(t, rec.Body.String(), "failed to connect")
+	require.Contains(t, rec.Body.String(), "$ ")
+}
+
+func TestArtifactLogErgonomicsHonorsStructuredRendererPrecedence(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-log-ergonomics.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "previewResult.renderer !== \"text\"")
+	require.Contains(t, rec.Body.String(), "previewResult.output !== \"text\"")
+}
+
 func TestRunWorkbenchJavaScriptLinksLinkedArtifactsToArtifactWorkbench(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
