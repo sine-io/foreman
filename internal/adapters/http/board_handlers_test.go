@@ -168,7 +168,7 @@ func TestTaskWorkbenchJavaScriptUsesProjectAndTaskURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"project_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"task_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"project_id\", projectId || \"demo\")")
@@ -183,7 +183,7 @@ func TestRunWorkbenchJavaScriptUsesRunIDURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"run_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"run_id\", runId)")
 }
@@ -487,7 +487,7 @@ func TestApprovalWorkbenchJavaScriptUsesApprovalIDURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"approval_id\", approvalId)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"approval_id\")")
 }
