@@ -190,6 +190,39 @@ Expected outcomes:
 - `GET /board/runs/<run-id>` redirects to `/board/runs/workbench?run_id=<run-id>`
 - the task workbench now links to the canonical run workbench route instead of the legacy run page
 
+## Artifact Workbench Smoke
+
+With `foreman serve` running, verify the artifact workbench detail, raw-content, and board routes:
+
+1. Use an artifact linked from the run workbench smoke and copy its `artifact_id` from the run workbench response or board UI.
+
+2. Read the manager artifact workbench detail.
+
+```bash
+curl http://localhost:8080/api/manager/artifacts/<artifact-id>/workbench
+```
+
+3. Stream the raw artifact content and inspect the response headers.
+
+```bash
+curl -i http://localhost:8080/api/manager/artifacts/<artifact-id>/content
+```
+
+4. Load the canonical board artifact workbench page.
+
+```bash
+curl http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>
+```
+
+5. In the board UI, follow the run workbench artifact link and confirm it lands on the canonical artifact workbench route while legacy run-page artifact anchors still work as a fallback.
+
+Expected outcomes:
+
+- `GET /api/manager/artifacts/<artifact-id>/workbench` returns the artifact workbench view for that artifact
+- `GET /api/manager/artifacts/<artifact-id>/content` streams the raw artifact content with safe response headers
+- `GET /board/artifacts/workbench?artifact_id=<artifact-id>` serves the canonical artifact workbench page
+- the run workbench links linked artifacts to the canonical artifact workbench route and legacy run-page artifact anchors remain available as a fallback
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:
@@ -262,3 +295,5 @@ It intentionally excludes the previous shell-runtime and skill-packaging line. I
 - Task-detail workbench plan: [docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-29-foreman-phase-2-task-detail-workbench.md)
 - Run-detail workbench spec: [docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md)
 - Run-detail workbench plan: [docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md)
+- Artifact workbench spec: [docs/superpowers/specs/2026-03-31-foreman-artifact-workbench-design.md](/root/link/repo/docs/superpowers/specs/2026-03-31-foreman-artifact-workbench-design.md)
+- Artifact workbench plan: [docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md)

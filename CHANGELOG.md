@@ -73,6 +73,16 @@
 - Recorded that the task page links to approval workbench and run detail
 - Recorded the no-approval task workbench state with disabled approval-workbench link reason `No approval history`
 
+## 2026-03-31
+
+### Phase 2 Artifact Workbench
+
+- Linked the artifact workbench spec and execution plan from the main docs
+- Documented the run workbench -> artifact workbench operator flow
+- Added artifact workbench smoke coverage for `GET /api/manager/artifacts/:id/workbench`, raw-content coverage for `GET /api/manager/artifacts/:id/content`, and the board route at `/board/artifacts/workbench?artifact_id=<artifact-id>`
+- Recorded that run workbench deep-links linked artifacts into artifact workbench while legacy run-page artifact anchors remain as a fallback
+- Recorded that raw artifact content now streams with safe response headers
+
 ## 2026-03-30
 
 ### Phase 2 Run Workbench
