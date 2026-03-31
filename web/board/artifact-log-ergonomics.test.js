@@ -54,6 +54,29 @@ test('sliceCollapsedTeaser returns a first-screen teaser and hidden count', () =
   );
 });
 
+test('buildLogErgonomicsModel collapses long single-line previews with a character teaser', () => {
+  const preview = '0123456789'.repeat(90);
+  const detail = {
+    content_type: 'text/plain',
+    kind: 'artifact',
+    path: 'stdout.log',
+    preview,
+    preview_truncated: false,
+  };
+  const previewResult = renderers.renderPreview(detail, detail.preview);
+  const model = buildLogErgonomicsModel(detail, previewResult, { teaserCharacters: 120 });
+
+  assert.equal(model.eligible, true);
+  assert.equal(model.teaser.collapsed, true);
+  assert.equal(model.teaser.hiddenLineCount, 0);
+  assert.equal(model.teaser.hiddenCharacterCount > 0, true);
+  assert.equal(model.expansion.canExpand, true);
+  assert.equal(model.expansion.expanded, false);
+  assert.equal(model.teaser.visibleLines.length, 1);
+  assert.equal(model.teaser.visibleLines[0].text.length, 120);
+  assert.equal(model.teaser.visibleLines[0].text, preview.slice(0, 120));
+});
+
 test('expand-all state helpers transition from collapsed to expanded without mutation', () => {
   const initialState = createExpansionState({ eligible: true });
   const expandedState = expandAllState(initialState);
@@ -136,4 +159,27 @@ test('buildLogErgonomicsModel allows structured artifacts that already fell back
   assert.equal(model.eligible, true);
   assert.equal(model.lines.length, 16);
   assert.equal(model.teaser.collapsed, true);
+});
+
+test('buildLogErgonomicsModel requires a valid generic previewResult contract before applying ergonomics', () => {
+  const detail = {
+    content_type: 'application/json',
+    kind: 'report',
+    path: 'report.json',
+    preview: 'x'.repeat(900),
+    preview_truncated: false,
+  };
+
+  const missingPreviewResultModel = buildLogErgonomicsModel(detail);
+  assert.equal(missingPreviewResultModel.eligible, false);
+  assert.equal(missingPreviewResultModel.expansion.canExpand, false);
+
+  const invalidPreviewResultModel = buildLogErgonomicsModel(detail, { renderer: 'text' });
+  assert.equal(invalidPreviewResultModel.eligible, false);
+  assert.equal(invalidPreviewResultModel.expansion.canExpand, false);
+
+  const fallbackPreviewResult = renderers.renderPreview(detail, detail.preview);
+  assert.equal(fallbackPreviewResult.fallback, true);
+  const fallbackModel = buildLogErgonomicsModel(detail, fallbackPreviewResult);
+  assert.equal(fallbackModel.eligible, true);
 });

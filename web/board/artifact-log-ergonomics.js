@@ -2,6 +2,7 @@
   const DEFAULT_MAX_ANCHORS = 5;
   const DEFAULT_MIN_LONG_TEXT_CHARACTERS = 600;
   const DEFAULT_MIN_LONG_TEXT_LINES = 12;
+  const DEFAULT_TEASER_CHARACTERS = 400;
   const DEFAULT_TEASER_LINE_COUNT = 8;
   const ERROR_KEYWORDS = [
     "error",
@@ -34,9 +35,28 @@
     return normalizeNewlines(normalizedDetail.preview);
   };
 
-  const isGenericTextPath = (previewResult) => {
+  const hasValidPreviewResultContract = (previewResult) => {
     if (!previewResult || typeof previewResult !== "object") {
-      return true;
+      return false;
+    }
+    if (typeof previewResult.renderer !== "string" || typeof previewResult.output !== "string") {
+      return false;
+    }
+    switch (previewResult.output) {
+      case "text":
+        return typeof previewResult.text === "string";
+      case "html":
+        return typeof previewResult.html === "string";
+      case "lines":
+        return Array.isArray(previewResult.lines);
+      default:
+        return false;
+    }
+  };
+
+  const isGenericTextPath = (previewResult) => {
+    if (!hasValidPreviewResultContract(previewResult)) {
+      return false;
     }
     if (previewResult.renderer !== "text") {
       return false;
@@ -109,10 +129,27 @@
   const sliceCollapsedTeaserUnsafe = (lines, options = {}) => {
     const normalizedLines = Array.isArray(lines) ? lines.slice() : renderLineNumberedTextUnsafe(lines);
     const teaserLineCount = safeInteger(options.teaserLineCount, DEFAULT_TEASER_LINE_COUNT);
-    const visibleLines = normalizedLines.slice(0, teaserLineCount);
+    const teaserCharacters = safeInteger(options.teaserCharacters, DEFAULT_TEASER_CHARACTERS);
+    let visibleLines = normalizedLines.slice(0, teaserLineCount);
     const hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
+    let hiddenCharacterCount = 0;
+
+    if (hiddenLineCount === 0 && normalizedLines.length === 1) {
+      const firstLine = normalizedLines[0];
+      if (firstLine.text.length > teaserCharacters) {
+        visibleLines = [
+          {
+            ...firstLine,
+            text: firstLine.text.slice(0, teaserCharacters),
+          },
+        ];
+        hiddenCharacterCount = firstLine.text.length - teaserCharacters;
+      }
+    }
+
     return {
-      collapsed: hiddenLineCount > 0,
+      collapsed: hiddenLineCount > 0 || hiddenCharacterCount > 0,
+      hiddenCharacterCount,
       hiddenLineCount,
       visibleLines,
     };
@@ -124,6 +161,7 @@
     } catch (_error) {
       return {
         collapsed: false,
+        hiddenCharacterCount: 0,
         hiddenLineCount: 0,
         visibleLines: [],
       };
@@ -251,10 +289,11 @@
       ? sliceCollapsedTeaserUnsafe(lines, options)
       : {
           collapsed: false,
+          hiddenCharacterCount: 0,
           hiddenLineCount: 0,
           visibleLines: lines,
         };
-    const expansion = createExpansionStateUnsafe({ canExpand: teaser.hiddenLineCount > 0 });
+    const expansion = createExpansionStateUnsafe({ canExpand: teaser.collapsed });
     const summary = normalizeDetail(detail).summary;
     const navigation = eligible ? extractSummaryAnchorsUnsafe(summary, text, options) : { anchors: [] };
 
@@ -282,6 +321,7 @@
         navigation: { anchors: [] },
         teaser: {
           collapsed: false,
+          hiddenCharacterCount: 0,
           hiddenLineCount: 0,
           visibleLines: [],
         },
