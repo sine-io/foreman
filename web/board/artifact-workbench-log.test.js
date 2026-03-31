@@ -306,6 +306,29 @@ test('summary navigation renders anchors for long text and auto-expands hidden t
   );
 });
 
+test('summary navigation keeps collapsed teaser when the requested line is already visible', async () => {
+  await withWorkbenchHarness(
+    {
+      'artifact-1': buildArtifactDetail('artifact-1'),
+    },
+    async ({ detailRoot }) => {
+      assert.match(detailRoot.innerHTML, /data-line-number="2"/);
+      assert.match(detailRoot.innerHTML, /data-expanded="false"/);
+      assert.doesNotMatch(detailRoot.innerHTML, /id="artifact-preview-line-12"/);
+
+      detailRoot.dispatch('click', {
+        target: createActionTarget('jump-to-line', { lineNumber: '2' }),
+      });
+      await flushPromises();
+
+      assert.match(detailRoot.innerHTML, /data-expanded="false"/);
+      assert.match(detailRoot.innerHTML, /Expand all/);
+      assert.doesNotMatch(detailRoot.innerHTML, /id="artifact-preview-line-12"/);
+      assert.match(detailRoot.innerHTML, /artifact-preview-log-line is-targeted" id="artifact-preview-line-2"/);
+    },
+  );
+});
+
 test('switching to a different artifact resets long-text previews to collapsed mode', async () => {
   await withWorkbenchHarness(
     {

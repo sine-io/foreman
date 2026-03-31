@@ -415,6 +415,7 @@
     notice: "",
     noticeTone: "info",
     previewExpansion: null,
+    previewModel: null,
     previewTargetLineNumber: 0,
     requestToken: 0,
   };
@@ -504,18 +505,21 @@
 
   const renderDetail = () => {
     if (state.detailState === "idle") {
+      state.previewModel = null;
       detailRoot.innerHTML = '<p class="empty-state">Enter an artifact_id to load artifact detail.</p>';
       metadataRoot.innerHTML = '<p class="empty-state">Artifact metadata will appear here.</p>';
       return;
     }
 
     if (state.detailState === "loading") {
+      state.previewModel = null;
       detailRoot.innerHTML = '<p class="empty-state">Loading artifact detail...</p>';
       metadataRoot.innerHTML = '<p class="empty-state">Loading artifact metadata...</p>';
       return;
     }
 
     if (state.detailState === "not_found") {
+      state.previewModel = null;
       detailRoot.innerHTML = `
         <article class="approval-detail-card">
           <p class="detail-title">Artifact not found</p>
@@ -527,6 +531,7 @@
     }
 
     if (state.detailState === "conflict") {
+      state.previewModel = null;
       detailRoot.innerHTML = `
         <article class="approval-detail-card">
           <p class="detail-title">Artifact is not linked to one exact run</p>
@@ -538,6 +543,7 @@
     }
 
     if (state.detailState === "error") {
+      state.previewModel = null;
       detailRoot.innerHTML = `
         <article class="approval-detail-card">
           <p class="detail-title">Unable to load artifact detail</p>
@@ -559,6 +565,7 @@
     });
     const previewMarkup = previewViewModel.markup;
     state.previewExpansion = previewViewModel.previewModel ? previewViewModel.previewModel.expansion : null;
+    state.previewModel = previewViewModel.previewModel || null;
     if (!previewViewModel.previewModel) {
       state.previewTargetLineNumber = 0;
     }
@@ -645,6 +652,26 @@
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
 
+  const lineVisibleInCollapsedTeaser = (lineNumber) => {
+    const parsedLineNumber = parseLineNumber(lineNumber);
+    if (!parsedLineNumber) {
+      return false;
+    }
+
+    if (!state.previewExpansion || !state.previewExpansion.canExpand || state.previewExpansion.expanded) {
+      return true;
+    }
+
+    const visibleLines =
+      state.previewModel &&
+      state.previewModel.teaser &&
+      Array.isArray(state.previewModel.teaser.visibleLines)
+        ? state.previewModel.teaser.visibleLines
+        : [];
+
+    return visibleLines.some((line) => parseLineNumber(line && line.lineNumber) === parsedLineNumber);
+  };
+
   const scrollToPreviewLine = (lineNumber) => {
     const parsedLineNumber = parseLineNumber(lineNumber);
     if (!parsedLineNumber) {
@@ -715,6 +742,7 @@
         state.detail = null;
         state.detailState = "not_found";
         state.previewExpansion = null;
+        state.previewModel = null;
         state.previewTargetLineNumber = 0;
         renderWorkbench();
         setStatus(`Artifact ${requestedArtifactId} not found.`, "danger");
@@ -726,6 +754,7 @@
         state.detailState = "conflict";
         state.notice = detail.message || "Artifact is not linked to one exact run.";
         state.previewExpansion = null;
+        state.previewModel = null;
         state.previewTargetLineNumber = 0;
         renderWorkbench();
         setStatus(`Artifact ${requestedArtifactId} is not linked to one exact run.`, "warning");
@@ -735,6 +764,7 @@
       state.detail = detail;
       state.detailState = "ready";
       state.previewExpansion = null;
+      state.previewModel = null;
       state.previewTargetLineNumber = 0;
       renderWorkbench();
       setStatus(`Loaded ${requestedArtifactId}.`);
@@ -749,6 +779,7 @@
       state.notice = error.message || "Failed to load artifact workbench.";
       state.noticeTone = "danger";
       state.previewExpansion = null;
+      state.previewModel = null;
       state.previewTargetLineNumber = 0;
       renderWorkbench();
       setStatus(`Failed to load ${requestedArtifactId}.`, "danger");
@@ -804,7 +835,12 @@
       }
 
       state.previewTargetLineNumber = lineNumber;
-      if (state.previewExpansion && state.previewExpansion.canExpand && !state.previewExpansion.expanded) {
+      if (
+        state.previewExpansion &&
+        state.previewExpansion.canExpand &&
+        !state.previewExpansion.expanded &&
+        !lineVisibleInCollapsedTeaser(lineNumber)
+      ) {
         const logErgonomics = currentLogErgonomics();
         state.previewExpansion =
           logErgonomics && typeof logErgonomics.expandAllState === "function"
