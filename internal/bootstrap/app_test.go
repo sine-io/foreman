@@ -421,6 +421,90 @@ func TestServeExposesRunWorkbenchAPI(t *testing.T) {
 	require.NoError(t, <-errCh)
 }
 
+func TestServeExposesArtifactWorkbenchAPI(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	resp, err := stdhttp.Post(
+		"http://"+cfg.HTTPAddr+"/api/manager/commands",
+		"application/json",
+		strings.NewReader(`{"kind":"create_task","summary":"Inspect repo state"}`),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, resp.StatusCode)
+
+	var created struct {
+		TaskID string `json:"task_id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	require.NotEmpty(t, created.TaskID)
+
+	taskWorkbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/tasks/" + created.TaskID + "/workbench?project_id=demo")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = taskWorkbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, taskWorkbenchResp.StatusCode)
+
+	var taskWorkbenchPayload struct {
+		LatestRunID string `json:"latest_run_id"`
+	}
+	require.NoError(t, json.NewDecoder(taskWorkbenchResp.Body).Decode(&taskWorkbenchPayload))
+	require.NotEmpty(t, taskWorkbenchPayload.LatestRunID)
+
+	runWorkbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/runs/" + taskWorkbenchPayload.LatestRunID + "/workbench")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = runWorkbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, runWorkbenchResp.StatusCode)
+
+	var runWorkbenchPayload struct {
+		Artifacts []struct {
+			ID string `json:"id"`
+		} `json:"artifacts"`
+	}
+	require.NoError(t, json.NewDecoder(runWorkbenchResp.Body).Decode(&runWorkbenchPayload))
+	require.Len(t, runWorkbenchPayload.Artifacts, 1)
+	artifactID := runWorkbenchPayload.Artifacts[0].ID
+	require.NotEmpty(t, artifactID)
+
+	artifactWorkbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/artifacts/" + artifactID + "/workbench")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = artifactWorkbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, artifactWorkbenchResp.StatusCode)
+
+	var artifactWorkbenchPayload struct {
+		ArtifactID      string `json:"artifact_id"`
+		RunID           string `json:"run_id"`
+		RawContentURL   string `json:"raw_content_url"`
+		RunWorkbenchURL string `json:"run_workbench_url"`
+	}
+	require.NoError(t, json.NewDecoder(artifactWorkbenchResp.Body).Decode(&artifactWorkbenchPayload))
+	require.Equal(t, artifactID, artifactWorkbenchPayload.ArtifactID)
+	require.Equal(t, taskWorkbenchPayload.LatestRunID, artifactWorkbenchPayload.RunID)
+	require.Equal(t, "/api/manager/artifacts/"+artifactID+"/content", artifactWorkbenchPayload.RawContentURL)
+	require.Equal(t, "/board/runs/workbench?run_id="+taskWorkbenchPayload.LatestRunID, artifactWorkbenchPayload.RunWorkbenchURL)
+
+	contentResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/artifacts/" + artifactID + "/content")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = contentResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, contentResp.StatusCode)
+	require.Equal(t, "nosniff", contentResp.Header.Get("X-Content-Type-Options"))
+	require.Equal(t, "text/plain; charset=utf-8", contentResp.Header.Get("Content-Type"))
+	require.Contains(t, contentResp.Header.Get("Content-Disposition"), "inline;")
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
 func testConfig(t *testing.T) Config {
 	t.Helper()
 

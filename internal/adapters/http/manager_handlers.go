@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"mime"
 	nethttp "net/http"
+	"os"
+	"path"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -12,10 +15,18 @@ import (
 	"github.com/sine-io/foreman/internal/app/manageragent"
 )
 
+type ManagerArtifactContent struct {
+	Path        string
+	ContentType string
+	Content     []byte
+}
+
 type ManagerApp interface {
 	Handle(context.Context, manageragent.Request) (manageragent.Response, error)
 	TaskStatus(context.Context, string, string) (manageragent.TaskStatusView, error)
 	RunWorkbench(context.Context, string) (manageragent.RunWorkbenchView, error)
+	ArtifactWorkbench(context.Context, string) (manageragent.ArtifactWorkbenchView, error)
+	ArtifactContent(context.Context, string) (ManagerArtifactContent, error)
 	TaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchView, error)
 	DispatchTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
 	RetryTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
@@ -138,6 +149,33 @@ func (h *ManagerHandlers) ManagerRunWorkbench(c *gin.Context) {
 	}
 
 	c.JSON(nethttp.StatusOK, resp)
+}
+
+func (h *ManagerHandlers) ManagerArtifactWorkbench(c *gin.Context) {
+	view, err := h.app.ArtifactWorkbench(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerError(c, err)
+		return
+	}
+
+	c.JSON(nethttp.StatusOK, artifactWorkbenchResponseDTO(view))
+}
+
+func (h *ManagerHandlers) ManagerArtifactContent(c *gin.Context) {
+	content, err := h.app.ArtifactContent(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondManagerArtifactContentError(c, err)
+		return
+	}
+
+	contentType := content.ContentType
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/octet-stream"
+	}
+
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Disposition", artifactContentDisposition(content.Path, contentType))
+	c.Data(nethttp.StatusOK, contentType, content.Content)
 }
 
 func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
@@ -326,6 +364,10 @@ func respondManagerError(c *gin.Context, err error) {
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, manageragent.ErrTaskActionConflict):
 		c.JSON(nethttp.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, manageragent.ErrArtifactWorkbenchNotFound):
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, manageragent.ErrArtifactWorkbenchConflict):
+		c.JSON(nethttp.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionNotFound):
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionConflict):
@@ -337,6 +379,15 @@ func respondManagerError(c *gin.Context, err error) {
 	default:
 		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
+}
+
+func respondManagerArtifactContentError(c *gin.Context, err error) {
+	if errors.Is(err, os.ErrNotExist) {
+		c.JSON(nethttp.StatusGone, gin.H{"error": err.Error()})
+		return
+	}
+
+	respondManagerError(c, err)
 }
 
 func isManagerClientError(err error) bool {
@@ -372,6 +423,66 @@ func taskWorkbenchActionResponseDTO(resp manageragent.TaskWorkbenchActionRespons
 		LatestApprovalState: resp.LatestApprovalState,
 		RefreshRequired:     resp.RefreshRequired,
 		Message:             resp.Message,
+	}
+}
+
+func artifactWorkbenchResponseDTO(view manageragent.ArtifactWorkbenchView) managerArtifactWorkbenchResponse {
+	resp := managerArtifactWorkbenchResponse{
+		ArtifactID:       view.ArtifactID,
+		RunID:            view.RunID,
+		TaskID:           view.TaskID,
+		ProjectID:        view.ProjectID,
+		ModuleID:         view.ModuleID,
+		Kind:             view.Kind,
+		Summary:          view.Summary,
+		Path:             view.Path,
+		ContentType:      view.ContentType,
+		Preview:          view.Preview,
+		PreviewTruncated: view.PreviewTruncated,
+		RunWorkbenchURL:  view.RunWorkbenchURL,
+		RawContentURL:    view.RawContentURL,
+		Siblings:         make([]managerArtifactWorkbenchSiblingResponse, 0, len(view.Siblings)),
+	}
+	for _, sibling := range view.Siblings {
+		resp.Siblings = append(resp.Siblings, managerArtifactWorkbenchSiblingResponse{
+			ArtifactID: sibling.ArtifactID,
+			Kind:       sibling.Kind,
+			Summary:    sibling.Summary,
+			Selected:   sibling.Selected,
+		})
+	}
+	return resp
+}
+
+func artifactContentDisposition(artifactPath, contentType string) string {
+	dispositionType := "attachment"
+	if safeInlineArtifactContentType(contentType) {
+		dispositionType = "inline"
+	}
+
+	filename := path.Base(strings.ReplaceAll(artifactPath, "\\", "/"))
+	if filename == "." || filename == "/" || filename == "" {
+		filename = "artifact"
+	}
+
+	return mime.FormatMediaType(dispositionType, map[string]string{"filename": filename})
+}
+
+func safeInlineArtifactContentType(contentType string) bool {
+	if strings.TrimSpace(contentType) == "" {
+		return false
+	}
+
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mediaType = strings.TrimSpace(strings.Split(contentType, ";")[0])
+	}
+
+	switch mediaType {
+	case "text/plain", "text/markdown", "text/csv", "application/json", "application/xml", "application/x-yaml":
+		return true
+	default:
+		return false
 	}
 }
 

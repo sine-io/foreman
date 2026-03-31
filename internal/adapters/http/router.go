@@ -51,6 +51,8 @@ func NewRouter(app App) *gin.Engine {
 		router.POST("/api/manager/commands", managerHandlers.ManagerCommand)
 		router.GET("/api/manager/tasks/:id", managerHandlers.ManagerTaskStatus)
 		router.GET("/api/manager/runs/:id/workbench", managerHandlers.ManagerRunWorkbench)
+		router.GET("/api/manager/artifacts/:id/workbench", managerHandlers.ManagerArtifactWorkbench)
+		router.GET("/api/manager/artifacts/:id/content", managerHandlers.ManagerArtifactContent)
 		router.GET("/api/manager/tasks/:id/workbench", managerHandlers.ManagerTaskWorkbench)
 		router.POST("/api/manager/tasks/:id/dispatch", managerHandlers.DispatchTaskWorkbench)
 		router.POST("/api/manager/tasks/:id/retry", managerHandlers.RetryTaskWorkbench)

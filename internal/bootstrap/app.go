@@ -6,6 +6,7 @@ import (
 	"errors"
 	stdhttp "net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/sine-io/foreman/internal/adapters/gateway/openclaw"
@@ -19,6 +20,7 @@ import (
 	projectpkg "github.com/sine-io/foreman/internal/domain/project"
 	"github.com/sine-io/foreman/internal/infrastructure/store/artifactfs"
 	"github.com/sine-io/foreman/internal/infrastructure/store/sqlite"
+	"github.com/sine-io/foreman/internal/ports"
 )
 
 type App interface {
@@ -40,6 +42,7 @@ type app struct {
 	repoRoot        string
 	router          stdhttp.Handler
 	openclaw        *openclaw.Handler
+	artifactStore   ports.ArtifactStore
 	projects        *sqlite.ProjectRepository
 	modules         *sqlite.ModuleRepository
 	tasks           *sqlite.TaskRepository
@@ -93,6 +96,7 @@ func BuildApp(cfg Config) (App, error) {
 		Config:        cfg,
 		db:            db,
 		repoRoot:      repoRoot,
+		artifactStore: artifactStore,
 		projects:      projects,
 		modules:       modules,
 		tasks:         tasks,
@@ -122,6 +126,7 @@ func BuildApp(cfg Config) (App, error) {
 	instance.rejectApproval = command.NewRejectApprovalHandler(transactor, approvals, tasks)
 	instance.retryApproval = command.NewRetryApprovalDispatchHandler(approvals, tasks, instance.dispatchTask)
 	runWorkbenchQuery := query.NewRunWorkbenchQuery(board)
+	artifactWorkbenchQuery := query.NewArtifactWorkbenchQuery(board, artifactStore)
 	taskWorkbenchQuery := query.NewTaskWorkbenchQuery(board)
 	approvalWorkbenchQueue := query.NewApprovalWorkbenchQueueQuery(board)
 	approvalWorkbenchDetail := query.NewApprovalWorkbenchDetailQuery(board)
@@ -143,6 +148,7 @@ func BuildApp(cfg Config) (App, error) {
 		ReprioritizeTask:             instance.reprioritize,
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(tasks, modules, runs, approvals),
 		QueryRunWorkbench:            runWorkbenchQuery,
+		QueryArtifactWorkbench:       artifactWorkbenchQuery,
 		QueryTaskWorkbench:           taskWorkbenchQuery,
 		QueryModuleBoard:             query.NewModuleBoardQuery(board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(board),
@@ -229,6 +235,52 @@ func (a *app) TaskStatus(ctx context.Context, projectID, taskID string) (appmana
 
 func (a *app) RunWorkbench(ctx context.Context, runID string) (appmanageragent.RunWorkbenchView, error) {
 	return a.manager.RunWorkbench(ctx, runID)
+}
+
+func (a *app) ArtifactWorkbench(ctx context.Context, artifactID string) (appmanageragent.ArtifactWorkbenchView, error) {
+	return a.manager.ArtifactWorkbench(ctx, artifactID)
+}
+
+func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapter.ManagerArtifactContent, error) {
+	view, err := a.manager.ArtifactWorkbench(ctx, artifactID)
+	if err != nil {
+		return httpadapter.ManagerArtifactContent{}, err
+	}
+
+	record, err := a.artifacts.Get(artifactID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return httpadapter.ManagerArtifactContent{}, err
+		}
+		return httpadapter.ManagerArtifactContent{}, err
+	}
+
+	storagePath := record.StoragePath
+	if storagePath == "" {
+		storagePath = record.Path
+	}
+
+	displayPath, err := a.artifactStore.ResolveDisplayPath(storagePath)
+	if err != nil {
+		return httpadapter.ManagerArtifactContent{}, err
+	}
+
+	fullPath := filepath.Join(a.Config.ArtifactRoot, filepath.FromSlash(displayPath))
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return httpadapter.ManagerArtifactContent{}, err
+	}
+
+	artifactPath := view.Path
+	if artifactPath == "" {
+		artifactPath = displayPath
+	}
+
+	return httpadapter.ManagerArtifactContent{
+		Path:        artifactPath,
+		ContentType: view.ContentType,
+		Content:     content,
+	}, nil
 }
 
 func (a *app) TaskWorkbench(ctx context.Context, projectID, taskID string) (appmanageragent.TaskWorkbenchView, error) {

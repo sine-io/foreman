@@ -8,7 +8,9 @@ import (
 	"fmt"
 	stdhttp "net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/sine-io/foreman/internal/app/command"
@@ -123,6 +125,122 @@ func TestManagerRunWorkbenchEndpointMapsBrokenTaskLinkageTo500(t *testing.T) {
 
 	require.Equal(t, stdhttp.StatusInternalServerError, rec.Code)
 	require.Contains(t, rec.Body.String(), "broken run-to-task linkage")
+}
+
+func TestManagerArtifactWorkbenchEndpointReturnsDetailView(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-1/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	var resp manageragent.ArtifactWorkbenchView
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "artifact-1", resp.ArtifactID)
+	require.Equal(t, "run-1", resp.RunID)
+	require.Equal(t, "task-1", resp.TaskID)
+	require.Equal(t, "project-1", resp.ProjectID)
+	require.Equal(t, "module-1", resp.ModuleID)
+	require.Equal(t, "assistant_summary", resp.Kind)
+	require.Equal(t, "tasks/task-1/assistant_summary.txt", resp.Path)
+	require.Equal(t, "text/plain; charset=utf-8", resp.ContentType)
+	require.Equal(t, "Artifact preview content", resp.Preview)
+	require.True(t, resp.PreviewTruncated)
+	require.Equal(t, "/board/runs/workbench?run_id=run-1", resp.RunWorkbenchURL)
+	require.Equal(t, "/api/manager/artifacts/artifact-1/content", resp.RawContentURL)
+	require.Len(t, resp.Siblings, 2)
+	require.Equal(t, "artifact-1", resp.Siblings[0].ArtifactID)
+	require.True(t, resp.Siblings[0].Selected)
+	require.Equal(t, "artifact-2", resp.Siblings[1].ArtifactID)
+	require.False(t, resp.Siblings[1].Selected)
+}
+
+func TestManagerArtifactWorkbenchEndpointMapsMissingArtifactTo404(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/missing/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusNotFound, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+	require.Contains(t, rec.Body.String(), "artifact missing not found")
+}
+
+func TestManagerArtifactWorkbenchEndpointMapsLegacyArtifactTo409(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-legacy/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusConflict, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact-legacy is not linked to one exact run")
+}
+
+func TestManagerArtifactWorkbenchEndpointMapsBrokenLinkageTo500(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/broken-link/workbench", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusInternalServerError, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact points to missing run")
+}
+
+func TestManagerArtifactContentEndpointReturnsSafeHeaders(t *testing.T) {
+	cases := []struct {
+		name                    string
+		artifactID              string
+		wantContentType         string
+		wantDispositionFragment string
+		wantBody                string
+	}{
+		{
+			name:                    "safe text stays inline",
+			artifactID:              "artifact-1",
+			wantContentType:         "text/plain; charset=utf-8",
+			wantDispositionFragment: "inline;",
+			wantBody:                "Artifact preview content",
+		},
+		{
+			name:                    "active html downloads as attachment",
+			artifactID:              "artifact-html",
+			wantContentType:         "text/html; charset=utf-8",
+			wantDispositionFragment: "attachment;",
+			wantBody:                "<html><body>unsafe</body></html>",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(newFakeManagerHTTPApp())
+
+			req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/"+tc.artifactID+"/content", nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, stdhttp.StatusOK, rec.Code)
+			require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+			require.Equal(t, tc.wantContentType, rec.Header().Get("Content-Type"))
+			require.Contains(t, rec.Header().Get("Content-Disposition"), tc.wantDispositionFragment)
+			require.Equal(t, tc.wantBody, rec.Body.String())
+		})
+	}
+}
+
+func TestManagerArtifactContentEndpointMapsMissingFileTo410(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-missing-file/content", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusGone, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+	require.Contains(t, rec.Body.String(), "no such file or directory")
 }
 
 func TestLegacyBoardRunRouteRedirectsToWorkbench(t *testing.T) {
@@ -618,6 +736,79 @@ func (a *fakeManagerHTTPApp) RunWorkbench(ctx context.Context, runID string) (ma
 			Artifacts: []manageragent.RunWorkbenchArtifact{
 				{ID: "artifact-1", Kind: "assistant_summary", Path: "artifacts/run-1/summary.md", Summary: "Created board view"},
 			},
+		}, nil
+	}
+}
+
+func (a *fakeManagerHTTPApp) ArtifactWorkbench(ctx context.Context, artifactID string) (manageragent.ArtifactWorkbenchView, error) {
+	switch artifactID {
+	case "missing":
+		return manageragent.ArtifactWorkbenchView{}, fmt.Errorf("%w: artifact missing not found", manageragent.ErrArtifactWorkbenchNotFound)
+	case "artifact-legacy":
+		return manageragent.ArtifactWorkbenchView{}, fmt.Errorf("%w: artifact-legacy is not linked to one exact run", manageragent.ErrArtifactWorkbenchConflict)
+	case "broken-link":
+		return manageragent.ArtifactWorkbenchView{}, errors.New("artifact points to missing run")
+	case "artifact-html":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-html",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "html_report",
+			Summary:         "Generated HTML report",
+			Path:            "tasks/task-1/report.html",
+			ContentType:     "text/html; charset=utf-8",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-html/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-html", Kind: "html_report", Summary: "Generated HTML report", Selected: true},
+			},
+		}, nil
+	default:
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:       artifactID,
+			RunID:            "run-1",
+			TaskID:           "task-1",
+			ProjectID:        "project-1",
+			ModuleID:         "module-1",
+			Kind:             "assistant_summary",
+			Summary:          "Created board view",
+			Path:             "tasks/task-1/assistant_summary.txt",
+			ContentType:      "text/plain; charset=utf-8",
+			Preview:          "Artifact preview content",
+			PreviewTruncated: true,
+			RunWorkbenchURL:  "/board/runs/workbench?run_id=run-1",
+			RawContentURL:    "/api/manager/artifacts/" + artifactID + "/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-1", Kind: "assistant_summary", Summary: "Created board view", Selected: artifactID == "artifact-1"},
+				{ArtifactID: "artifact-2", Kind: "command_result", Summary: "go test ./...", Selected: artifactID == "artifact-2"},
+			},
+		}, nil
+	}
+}
+
+func (a *fakeManagerHTTPApp) ArtifactContent(ctx context.Context, artifactID string) (ManagerArtifactContent, error) {
+	switch artifactID {
+	case "missing":
+		return ManagerArtifactContent{}, fmt.Errorf("%w: artifact missing not found", manageragent.ErrArtifactWorkbenchNotFound)
+	case "artifact-legacy":
+		return ManagerArtifactContent{}, fmt.Errorf("%w: artifact-legacy is not linked to one exact run", manageragent.ErrArtifactWorkbenchConflict)
+	case "broken-link":
+		return ManagerArtifactContent{}, errors.New("artifact points to missing run")
+	case "artifact-missing-file":
+		return ManagerArtifactContent{}, &os.PathError{Op: "open", Path: "tasks/task-1/missing.txt", Err: syscall.ENOENT}
+	case "artifact-html":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/report.html",
+			ContentType: "text/html; charset=utf-8",
+			Content:     []byte("<html><body>unsafe</body></html>"),
+		}, nil
+	default:
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/assistant_summary.txt",
+			ContentType: "text/plain; charset=utf-8",
+			Content:     []byte("Artifact preview content"),
 		}, nil
 	}
 }

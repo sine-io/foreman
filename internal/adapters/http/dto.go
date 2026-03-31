@@ -52,18 +52,18 @@ type managerTaskWorkbenchReprioritizeRequest struct {
 }
 
 type managerRunWorkbenchResponse struct {
-	RunID              string                                 `json:"run_id"`
-	TaskID             string                                 `json:"task_id"`
-	ProjectID          string                                 `json:"project_id"`
-	ModuleID           string                                 `json:"module_id"`
-	TaskSummary        string                                 `json:"task_summary"`
-	RunState           string                                 `json:"run_state"`
-	RunnerKind         string                                 `json:"runner_kind"`
-	PrimarySummary     string                                 `json:"primary_summary"`
-	RunCreatedAt       string                                 `json:"run_created_at,omitempty"`
-	TaskWorkbenchURL   string                                 `json:"task_workbench_url"`
-	RunWorkbenchURL    string                                 `json:"run_workbench_url"`
-	ArtifactTargetURLs map[string]string                      `json:"artifact_target_urls"`
+	RunID              string                                `json:"run_id"`
+	TaskID             string                                `json:"task_id"`
+	ProjectID          string                                `json:"project_id"`
+	ModuleID           string                                `json:"module_id"`
+	TaskSummary        string                                `json:"task_summary"`
+	RunState           string                                `json:"run_state"`
+	RunnerKind         string                                `json:"runner_kind"`
+	PrimarySummary     string                                `json:"primary_summary"`
+	RunCreatedAt       string                                `json:"run_created_at,omitempty"`
+	TaskWorkbenchURL   string                                `json:"task_workbench_url"`
+	RunWorkbenchURL    string                                `json:"run_workbench_url"`
+	ArtifactTargetURLs map[string]string                     `json:"artifact_target_urls"`
 	Artifacts          []managerRunWorkbenchArtifactResponse `json:"artifacts"`
 }
 
@@ -72,6 +72,30 @@ type managerRunWorkbenchArtifactResponse struct {
 	Kind    string `json:"kind"`
 	Path    string `json:"path"`
 	Summary string `json:"summary"`
+}
+
+type managerArtifactWorkbenchResponse struct {
+	ArtifactID       string                                    `json:"artifact_id"`
+	RunID            string                                    `json:"run_id"`
+	TaskID           string                                    `json:"task_id"`
+	ProjectID        string                                    `json:"project_id"`
+	ModuleID         string                                    `json:"module_id"`
+	Kind             string                                    `json:"kind"`
+	Summary          string                                    `json:"summary"`
+	Path             string                                    `json:"path"`
+	ContentType      string                                    `json:"content_type,omitempty"`
+	Preview          string                                    `json:"preview,omitempty"`
+	PreviewTruncated bool                                      `json:"preview_truncated"`
+	RunWorkbenchURL  string                                    `json:"run_workbench_url"`
+	RawContentURL    string                                    `json:"raw_content_url"`
+	Siblings         []managerArtifactWorkbenchSiblingResponse `json:"siblings"`
+}
+
+type managerArtifactWorkbenchSiblingResponse struct {
+	ArtifactID string `json:"artifact_id"`
+	Kind       string `json:"kind"`
+	Summary    string `json:"summary"`
+	Selected   bool   `json:"selected"`
 }
 
 type managerTaskWorkbenchActionResponse struct {
