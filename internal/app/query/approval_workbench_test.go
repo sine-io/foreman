@@ -131,7 +131,7 @@ func (f fakeApprovalWorkbenchRepo) GetArtifactWorkbench(artifactID string) (port
 	return ports.ArtifactWorkbenchRow{}, nil
 }
 
-func (f fakeApprovalWorkbenchRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+func (f fakeApprovalWorkbenchRepo) GetArtifactCompare(artifactID string, previousArtifactID string) (ports.ArtifactCompareRow, error) {
 	return ports.ArtifactCompareRow{}, nil
 }
 

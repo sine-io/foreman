@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
 	"github.com/sine-io/foreman/internal/ports"
@@ -219,15 +220,23 @@ func (r *BoardQueryRepository) GetArtifactWorkbench(artifactID string) (ports.Ar
 	return row, nil
 }
 
-func (r *BoardQueryRepository) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+func (r *BoardQueryRepository) GetArtifactCompare(artifactID string, previousArtifactID string) (ports.ArtifactCompareRow, error) {
 	current, err := r.artifactCompareArtifact(artifactID)
 	if err != nil {
 		return ports.ArtifactCompareRow{}, err
 	}
 
-	previousID, err := r.previousArtifactCompareID(current)
+	history, err := r.recentArtifactCompareHistory(current, 5)
 	if err != nil {
 		return ports.ArtifactCompareRow{}, err
+	}
+
+	previousID := strings.TrimSpace(previousArtifactID)
+	if previousID == "" && len(history) > 0 {
+		previousID = history[0].ArtifactID
+	}
+	if previousID != "" && !artifactCompareHistoryContains(history, previousID) {
+		return ports.ArtifactCompareRow{}, fmt.Errorf("%w: %s is not inside the bounded recent history for %s", ports.ErrArtifactCompareSelectionInvalid, previousID, current.ArtifactID)
 	}
 
 	var previous *ports.ArtifactCompareArtifactRow
@@ -242,6 +251,7 @@ func (r *BoardQueryRepository) GetArtifactCompare(artifactID string) (ports.Arti
 	return ports.ArtifactCompareRow{
 		Current:  current,
 		Previous: previous,
+		History:  history,
 	}, nil
 }
 
@@ -541,7 +551,7 @@ func (r *BoardQueryRepository) artifactCompareArtifact(artifactID string) (ports
 	var storagePath sql.NullString
 
 	err := r.db.QueryRow(
-		`select id, task_id, run_id, kind, path, nullif(storage_path, ''), created_at
+		`select id, task_id, run_id, kind, path, nullif(storage_path, ''), summary, created_at
 		 from artifacts
 		 where id = ?`,
 		artifactID,
@@ -552,6 +562,7 @@ func (r *BoardQueryRepository) artifactCompareArtifact(artifactID string) (ports
 		&row.Kind,
 		&row.Path,
 		&storagePath,
+		&row.Summary,
 		&row.CreatedAt,
 	)
 	if err != nil {
@@ -575,30 +586,56 @@ func (r *BoardQueryRepository) artifactCompareArtifact(artifactID string) (ports
 	return row, nil
 }
 
-func (r *BoardQueryRepository) previousArtifactCompareID(current ports.ArtifactCompareArtifactRow) (string, error) {
-	var artifactID string
-	err := r.db.QueryRow(
-		`select id
+func (r *BoardQueryRepository) recentArtifactCompareHistory(current ports.ArtifactCompareArtifactRow, limit int) ([]ports.ArtifactCompareHistoryItemRow, error) {
+	rows, err := r.db.Query(
+		`select id, run_id, created_at, summary
 		 from artifacts
 		 where task_id = ?
 		   and kind = ?
 		   and (created_at < ? or (created_at = ? and id < ?))
-		 order by created_at desc, id desc
-		 limit 1`,
+		 order by created_at desc, id desc`,
 		current.TaskID,
 		current.Kind,
 		current.CreatedAt,
 		current.CreatedAt,
 		current.ArtifactID,
-	).Scan(&artifactID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
+	)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	defer rows.Close()
+
+	history := make([]ports.ArtifactCompareHistoryItemRow, 0, limit)
+	for rows.Next() {
+		if len(history) >= limit {
+			break
+		}
+
+		var item ports.ArtifactCompareHistoryItemRow
+		var runID sql.NullString
+		if err := rows.Scan(&item.ArtifactID, &runID, &item.CreatedAt, &item.Summary); err != nil {
+			return nil, err
+		}
+		if !runID.Valid || runID.String == "" {
+			continue
+		}
+		item.RunID = runID.String
+		if err := r.ensureArtifactTaskLinkage(item.ArtifactID, current.TaskID, item.RunID); err != nil {
+			continue
+		}
+		history = append(history, item)
 	}
 
-	return artifactID, nil
+	return history, rows.Err()
+}
+
+func artifactCompareHistoryContains(history []ports.ArtifactCompareHistoryItemRow, artifactID string) bool {
+	for _, item := range history {
+		if item.ArtifactID == artifactID {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *BoardQueryRepository) ensureArtifactTaskLinkage(artifactID, taskID, runID string) error {

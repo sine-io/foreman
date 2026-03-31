@@ -606,10 +606,22 @@ func TestServeArtifactCompareExposesLiveCompareRoute(t *testing.T) {
 	require.NoError(t, err)
 
 	previousPath := filepath.ToSlash(filepath.Join("tasks", taskDTO.ID, "assistant_summary-previous.txt"))
+	olderPath := filepath.ToSlash(filepath.Join("tasks", taskDTO.ID, "assistant_summary-older.txt"))
 	currentPath := filepath.ToSlash(filepath.Join("tasks", taskDTO.ID, "assistant_summary-current.txt"))
 	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(previousPath))), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(previousPath)), []byte("previous artifact\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(olderPath)), []byte("older artifact\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(currentPath)), []byte("current artifact\n"), 0o644))
+
+	require.NoError(t, appImpl.runs.Save(ports.Run{
+		ID:         "run-compare-0",
+		TaskID:     taskDTO.ID,
+		RunnerKind: "codex",
+		State:      "completed",
+		CreatedAt:  "2026-04-01T08:00:00.000000000Z",
+	}))
+	olderID, err := appImpl.artifacts.Create(taskDTO.ID, "run-compare-0", "assistant_summary", olderPath)
+	require.NoError(t, err)
 
 	require.NoError(t, appImpl.runs.Save(ports.Run{
 		ID:         "run-compare-1",
@@ -670,6 +682,13 @@ func TestServeArtifactCompareExposesLiveCompareRoute(t *testing.T) {
 			PreviousWorkbenchURL string `json:"previous_workbench_url"`
 			BackToRunURL         string `json:"back_to_run_url"`
 		} `json:"navigation"`
+		History []struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+			Summary    string `json:"summary"`
+			Selected   bool   `json:"selected"`
+			CompareURL string `json:"compare_url"`
+		} `json:"history"`
 	}
 	require.NoError(t, json.NewDecoder(compareResp.Body).Decode(&comparePayload))
 	require.Equal(t, "ready", comparePayload.Status)
@@ -688,6 +707,55 @@ func TestServeArtifactCompareExposesLiveCompareRoute(t *testing.T) {
 	require.Equal(t, "/board/artifacts/workbench?artifact_id="+currentID, comparePayload.Navigation.CurrentWorkbenchURL)
 	require.Equal(t, "/board/artifacts/workbench?artifact_id="+previousID, comparePayload.Navigation.PreviousWorkbenchURL)
 	require.Equal(t, "/board/runs/workbench?run_id=run-compare-2", comparePayload.Navigation.BackToRunURL)
+	require.Len(t, comparePayload.History, 2)
+	require.Equal(t, previousID, comparePayload.History[0].ArtifactID)
+	require.True(t, comparePayload.History[0].Selected)
+	require.Contains(t, comparePayload.History[0].CompareURL, "artifact_id="+currentID)
+	require.Contains(t, comparePayload.History[0].CompareURL, "previous_artifact_id="+previousID)
+	require.Equal(t, olderID, comparePayload.History[1].ArtifactID)
+	require.False(t, comparePayload.History[1].Selected)
+
+	compareResp, err = stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/artifacts/" + currentID + "/compare?previous_artifact_id=" + olderID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = compareResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, compareResp.StatusCode)
+	comparePayload = struct {
+		Status   string `json:"status"`
+		Current  struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+			TaskID     string `json:"task_id"`
+			Kind       string `json:"kind"`
+		} `json:"current"`
+		Previous *struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+		} `json:"previous"`
+		Diff *struct {
+			Format  string `json:"format"`
+			Content string `json:"content"`
+		} `json:"diff"`
+		Limits struct {
+			MaxCompareBytes int `json:"max_compare_bytes"`
+		} `json:"limits"`
+		Navigation struct {
+			CurrentWorkbenchURL  string `json:"current_workbench_url"`
+			PreviousWorkbenchURL string `json:"previous_workbench_url"`
+			BackToRunURL         string `json:"back_to_run_url"`
+		} `json:"navigation"`
+		History []struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+			Summary    string `json:"summary"`
+			Selected   bool   `json:"selected"`
+			CompareURL string `json:"compare_url"`
+		} `json:"history"`
+	}{}
+	require.NoError(t, json.NewDecoder(compareResp.Body).Decode(&comparePayload))
+	require.NotNil(t, comparePayload.Previous)
+	require.Equal(t, olderID, comparePayload.Previous.ArtifactID)
+	require.True(t, comparePayload.History[1].Selected)
+	require.False(t, comparePayload.History[0].Selected)
 
 	cancel()
 	require.NoError(t, <-errCh)

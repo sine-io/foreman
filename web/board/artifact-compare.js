@@ -21,6 +21,17 @@
     return `/board/artifacts/compare?artifact_id=${encodeURIComponent(artifactId)}`;
   };
 
+  const compareFetchURL = (artifactId, previousArtifactId) => {
+    const searchParams = new URLSearchParams();
+    if (previousArtifactId) {
+      searchParams.set("previous_artifact_id", previousArtifactId);
+    }
+    const query = searchParams.toString();
+    return query
+      ? `/api/manager/artifacts/${encodeURIComponent(artifactId)}/compare?${query}`
+      : `/api/manager/artifacts/${encodeURIComponent(artifactId)}/compare`;
+  };
+
   const metadataBlock = (label, value) => `
     <article class="detail-block">
       <p class="detail-label">${escapeHTML(label)}</p>
@@ -31,6 +42,7 @@
   const composeArtifactCompareView = (detail) => {
     const current = detail && detail.current ? detail.current : {};
     const previous = detail && detail.previous ? detail.previous : null;
+    const history = detail && Array.isArray(detail.history) ? detail.history : [];
     const navigation = detail && detail.navigation ? detail.navigation : {};
     const messages = detail && detail.messages ? detail.messages : {};
     const diff = detail && detail.diff ? detail.diff : null;
@@ -48,20 +60,53 @@
       </article>
     `;
 
-    const previousMarkup = previous
+    const historyMarkup = history.length
       ? `
-        <article class="approval-detail-card">
-          <section class="detail-grid detail-grid-secondary artifact-compare-metadata-grid">
-            ${metadataBlock("Artifact ID", previous.artifact_id)}
-            ${metadataBlock("Run ID", previous.run_id)}
-            ${metadataBlock("Task ID", previous.task_id)}
-            ${metadataBlock("Kind", previous.kind)}
-            ${metadataBlock("Content Type", previous.content_type)}
-            ${metadataBlock("Created At", previous.created_at)}
-          </section>
-        </article>
+        <section class="detail-block detail-block-wide artifact-compare-history-block">
+          <p class="detail-label">Recent History</p>
+          <div class="artifact-compare-history-list">
+            ${history
+              .map((item) => {
+                const selectedClass = item.selected ? " is-selected" : "";
+                return `
+                  <a class="artifact-compare-history-item${selectedClass}" href="${escapeHTML(item.compare_url || "")}">
+                    <strong>${escapeHTML(item.summary || item.artifact_id || "Artifact")}</strong>
+                    <p class="detail-copy">${escapeHTML(item.artifact_id || "")}</p>
+                    <p class="detail-copy">${escapeHTML(item.run_id || "")}</p>
+                    <p class="detail-copy">${escapeHTML(item.created_at || "")}</p>
+                  </a>
+                `;
+              })
+              .join("")}
+          </div>
+        </section>
+      `
+      : `
+        <section class="detail-block detail-block-wide artifact-compare-history-block">
+          <p class="detail-label">Recent History</p>
+          <p class="empty-state">No recent history is available for this compare view.</p>
+        </section>
+      `;
+
+    const previousMetadataMarkup = previous
+      ? `
+        <section class="detail-grid detail-grid-secondary artifact-compare-metadata-grid">
+          ${metadataBlock("Artifact ID", previous.artifact_id)}
+          ${metadataBlock("Run ID", previous.run_id)}
+          ${metadataBlock("Task ID", previous.task_id)}
+          ${metadataBlock("Kind", previous.kind)}
+          ${metadataBlock("Content Type", previous.content_type)}
+          ${metadataBlock("Created At", previous.created_at)}
+        </section>
       `
       : '<p class="empty-state">No previous artifact is available for this compare view.</p>';
+
+    const previousMarkup = `
+      <article class="approval-detail-card">
+        ${previousMetadataMarkup}
+        ${historyMarkup}
+      </article>
+    `;
 
     const currentWorkbenchLink = navigation.current_workbench_url
       ? `<a class="board-link" href="${escapeHTML(navigation.current_workbench_url)}">Back to current artifact</a>`
@@ -148,6 +193,11 @@
     return searchParams.get("artifact_id") || "";
   };
 
+  const readPreviousArtifactID = () => {
+    const searchParams = new URLSearchParams(currentLocation().search);
+    return searchParams.get("previous_artifact_id") || "";
+  };
+
   const setStatus = (message, tone = "info") => {
     statusNode.textContent = message;
     statusNode.dataset.tone = tone;
@@ -183,6 +233,10 @@
     if (response.status === 404) {
       return { notFound: true };
     }
+    if (response.status === 400) {
+      const payload = await response.json();
+      return { clientError: true, message: payload.error || "Invalid compare selection." };
+    }
     if (!response.ok) {
       const payload = await response.json();
       throw new Error(payload.error || `Request failed with status ${response.status}`);
@@ -192,6 +246,7 @@
 
   const loadCompare = async () => {
     const requestedArtifactId = readArtifactID();
+    const requestedPreviousArtifactId = readPreviousArtifactID();
     const requestToken = ++state.requestToken;
     state.artifactId = requestedArtifactId;
 
@@ -211,8 +266,16 @@
     setStatus(`Loading compare for ${requestedArtifactId}...`);
 
     try {
-      const detail = await fetchJSON(`/api/manager/artifacts/${encodeURIComponent(requestedArtifactId)}/compare`);
+      const detail = await fetchJSON(compareFetchURL(requestedArtifactId, requestedPreviousArtifactId));
       if (requestToken !== state.requestToken) {
+        return;
+      }
+      if (detail.clientError) {
+        state.detail = null;
+        state.loading = false;
+        state.notice = detail.message || "Selected compare target is no longer available.";
+        renderCompare();
+        setStatus(`Failed to load ${requestedArtifactId}.`, "danger");
         return;
       }
       if (detail.notFound) {

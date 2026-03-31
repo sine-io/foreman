@@ -107,6 +107,15 @@ type managerArtifactCompareArtifactResponse struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type managerArtifactCompareHistoryItemResponse struct {
+	ArtifactID string `json:"artifact_id"`
+	RunID      string `json:"run_id"`
+	CreatedAt  string `json:"created_at"`
+	Summary    string `json:"summary"`
+	Selected   bool   `json:"selected"`
+	CompareURL string `json:"compare_url"`
+}
+
 type managerArtifactCompareDiffResponse struct {
 	Format  string `json:"format"`
 	Content string `json:"content"`
@@ -135,6 +144,7 @@ type managerArtifactCompareResponse struct {
 	Limits     managerArtifactCompareLimitsResponse     `json:"limits"`
 	Messages   managerArtifactCompareMessagesResponse   `json:"messages"`
 	Navigation managerArtifactCompareNavigationResponse `json:"navigation"`
+	History    []managerArtifactCompareHistoryItemResponse `json:"history"`
 }
 
 type managerTaskWorkbenchActionResponse struct {

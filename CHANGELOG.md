@@ -107,6 +107,12 @@
 - Recorded that compare is read-only and limited to the current artifact versus the immediately previous same-task same-kind text artifact
 - Added an optional browser-only compare smoke path that covers `ready`, `no_previous`, and `unsupported` style outcomes without introducing manual history selection
 
+### Phase 2 Artifact Compare History
+
+- Documented bounded compare-history selection through optional `previous_artifact_id` on the existing compare page and compare API
+- Recorded that compare history stays limited to the five most recent earlier same-task same-kind artifacts instead of becoming a full history browser
+- Added compare-history smoke guidance covering `history[]`, explicit history target selection, and `400` behavior for invalid or aged-out `previous_artifact_id`
+
 ## 2026-03-30
 
 ### Phase 2 Run Workbench

@@ -13,6 +13,7 @@ var ErrPendingApprovalConflict = errors.New("pending approval already exists")
 
 var ErrArtifactRunLinkageConflict = errors.New("artifact run linkage conflict")
 var ErrArtifactBrokenLinkage = errors.New("artifact broken linkage")
+var ErrArtifactCompareSelectionInvalid = errors.New("artifact compare selection invalid")
 
 type ProjectRepository interface {
 	Save(project.Project) error
@@ -124,12 +125,21 @@ type ArtifactCompareArtifactRow struct {
 	Kind        string
 	Path        string
 	StoragePath string
+	Summary     string
 	CreatedAt   string
+}
+
+type ArtifactCompareHistoryItemRow struct {
+	ArtifactID string
+	RunID      string
+	CreatedAt  string
+	Summary    string
 }
 
 type ArtifactCompareRow struct {
 	Current  ArtifactCompareArtifactRow
 	Previous *ArtifactCompareArtifactRow
+	History  []ArtifactCompareHistoryItemRow
 }
 
 type ApprovalQueueRow struct {
@@ -196,7 +206,7 @@ type BoardQueryRepository interface {
 	GetRunDetail(runID string) (RunDetailRecord, error)
 	GetRunWorkbench(runID string) (RunWorkbenchRow, error)
 	GetArtifactWorkbench(artifactID string) (ArtifactWorkbenchRow, error)
-	GetArtifactCompare(artifactID string) (ArtifactCompareRow, error)
+	GetArtifactCompare(artifactID string, previousArtifactID string) (ArtifactCompareRow, error)
 	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
 	ListApprovalWorkbenchQueue(projectID string) ([]ApprovalWorkbenchQueueRow, error)
 	GetApprovalWorkbenchDetail(approvalID string) (ApprovalWorkbenchDetailRow, error)

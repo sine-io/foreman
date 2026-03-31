@@ -231,12 +231,12 @@ func (s *Service) ArtifactWorkbench(ctx context.Context, artifactID string) (Art
 	return view, nil
 }
 
-func (s *Service) ArtifactCompare(ctx context.Context, artifactID string) (ArtifactCompareView, error) {
+func (s *Service) ArtifactCompare(ctx context.Context, artifactID, previousArtifactID string) (ArtifactCompareView, error) {
 	if err := ctxErr(ctx); err != nil {
 		return ArtifactCompareView{}, err
 	}
 
-	view, err := s.QueryArtifactCompare.Execute(artifactID)
+	view, err := s.QueryArtifactCompare.Execute(artifactID, previousArtifactID)
 	if err != nil {
 		return ArtifactCompareView{}, normalizeArtifactCompareError(artifactID, err)
 	}
@@ -612,8 +612,13 @@ func normalizeArtifactCompareError(artifactID string, err error) error {
 	switch {
 	case errors.Is(err, ErrArtifactCompareNotFound):
 		return err
+	case errors.Is(err, ErrArtifactCompareSelection):
+		return err
 	case errors.Is(err, sql.ErrNoRows):
 		return fmt.Errorf("%w: artifact %s not found", ErrArtifactCompareNotFound, artifactID)
+	case errors.Is(err, ports.ErrArtifactCompareSelectionInvalid):
+		msg := strings.TrimPrefix(err.Error(), ports.ErrArtifactCompareSelectionInvalid.Error()+": ")
+		return fmt.Errorf("%w: %s", ErrArtifactCompareSelection, msg)
 	default:
 		return err
 	}

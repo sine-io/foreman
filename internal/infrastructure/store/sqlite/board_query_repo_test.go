@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/sine-io/foreman/internal/ports"
@@ -80,7 +81,7 @@ func TestArtifactCompareBoardQueryRepositoryReturnsPreviousArtifactByCreatedAtAn
 		CreatedAt: "2026-03-31T10:00:00.000000000Z",
 	})
 
-	row, err := repo.GetArtifactCompare("artifact-0003")
+	row, err := repo.GetArtifactCompare("artifact-0003", "")
 	require.NoError(t, err)
 	require.Equal(t, "artifact-0003", row.Current.ArtifactID)
 	require.Equal(t, "run-2", row.Current.RunID)
@@ -92,6 +93,9 @@ func TestArtifactCompareBoardQueryRepositoryReturnsPreviousArtifactByCreatedAtAn
 	require.Equal(t, taskID, row.Previous.TaskID)
 	require.Equal(t, "assistant_summary", row.Previous.Kind)
 	require.Equal(t, "2026-03-31T10:00:00.000000000Z", row.Previous.CreatedAt)
+	require.Len(t, row.History, 2)
+	require.Equal(t, "artifact-0002", row.History[0].ArtifactID)
+	require.Equal(t, "artifact-0001", row.History[1].ArtifactID)
 }
 
 func TestArtifactCompareBoardQueryRepositoryReturnsNoPreviousArtifactWhenCurrentIsFirst(t *testing.T) {
@@ -127,10 +131,176 @@ func TestArtifactCompareBoardQueryRepositoryReturnsNoPreviousArtifactWhenCurrent
 		CreatedAt: "2026-03-31T08:59:00.000000000Z",
 	})
 
-	row, err := repo.GetArtifactCompare("artifact-first")
+	row, err := repo.GetArtifactCompare("artifact-first", "")
 	require.NoError(t, err)
 	require.Equal(t, "artifact-first", row.Current.ArtifactID)
 	require.Nil(t, row.Previous)
+	require.Empty(t, row.History)
+}
+
+func TestArtifactCompareBoardQueryRepositorySelectsExplicitPreviousArtifactWithinHistoryWindow(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	saveRunRow(t, db, testRun("run-1", taskID), "2026-03-31T09:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-2", taskID), "2026-03-31T10:00:00.000000000Z")
+
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-0001",
+		TaskID:    taskID,
+		RunID:     "run-1",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-0001.txt",
+		Summary:   "oldest",
+		CreatedAt: "2026-03-31T09:01:00.000000000Z",
+	})
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-0002",
+		TaskID:    taskID,
+		RunID:     "run-1",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-0002.txt",
+		Summary:   "selected",
+		CreatedAt: "2026-03-31T09:30:00.000000000Z",
+	})
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-0003",
+		TaskID:    taskID,
+		RunID:     "run-2",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/current.txt",
+		Summary:   "current",
+		CreatedAt: "2026-03-31T10:00:00.000000000Z",
+	})
+
+	row, err := repo.GetArtifactCompare("artifact-0003", "artifact-0001")
+	require.NoError(t, err)
+	require.NotNil(t, row.Previous)
+	require.Equal(t, "artifact-0001", row.Previous.ArtifactID)
+	require.Len(t, row.History, 2)
+}
+
+func TestArtifactCompareBoardQueryRepositoryRejectsExplicitPreviousArtifactOutsideHistoryWindow(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	saveRunRow(t, db, testRun("run-1", taskID), "2026-03-31T09:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-2", taskID), "2026-03-31T10:00:00.000000000Z")
+
+	for i := 0; i < 7; i++ {
+		id := fmt.Sprintf("artifact-%04d", i+1)
+		runID := "run-1"
+		if i == 6 {
+			runID = "run-2"
+		}
+		saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+			ID:        id,
+			TaskID:    taskID,
+			RunID:     runID,
+			Kind:      "assistant_summary",
+			Path:      fmt.Sprintf("tasks/task-1/%s.txt", id),
+			Summary:   id,
+			CreatedAt: fmt.Sprintf("2026-03-31T09:%02d:00.000000000Z", i),
+		})
+	}
+
+	_, err := repo.GetArtifactCompare("artifact-0007", "artifact-0001")
+	require.ErrorIs(t, err, ports.ErrArtifactCompareSelectionInvalid)
+}
+
+func TestArtifactCompareBoardQueryRepositoryReturnsHistoryItemSummaryFields(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	saveRunRow(t, db, testRun("run-1", taskID), "2026-03-31T09:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-2", taskID), "2026-03-31T10:00:00.000000000Z")
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-prev",
+		TaskID:    taskID,
+		RunID:     "run-1",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/previous.txt",
+		Summary:   "Previous summary",
+		CreatedAt: "2026-03-31T09:30:00.000000000Z",
+	})
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-current",
+		TaskID:    taskID,
+		RunID:     "run-2",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/current.txt",
+		Summary:   "Current summary",
+		CreatedAt: "2026-03-31T10:00:00.000000000Z",
+	})
+
+	row, err := repo.GetArtifactCompare("artifact-current", "")
+	require.NoError(t, err)
+	require.Len(t, row.History, 1)
+	require.Equal(t, "artifact-prev", row.History[0].ArtifactID)
+	require.Equal(t, "run-1", row.History[0].RunID)
+	require.Equal(t, "Previous summary", row.History[0].Summary)
+	require.Equal(t, "2026-03-31T09:30:00.000000000Z", row.History[0].CreatedAt)
+}
+
+func TestArtifactCompareBoardQueryRepositorySkipsBrokenHistoryCandidates(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	saveRunRow(t, db, testRun("run-1", taskID), "2026-03-31T09:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-2", taskID), "2026-03-31T10:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-3", taskID), "2026-03-31T10:30:00.000000000Z")
+
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-valid-1",
+		TaskID:    taskID,
+		RunID:     "run-1",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-valid-1.txt",
+		Summary:   "Valid previous 1",
+		CreatedAt: "2026-03-31T09:15:00.000000000Z",
+	})
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, run_id, kind, path, storage_path, summary, created_at) values (?, ?, null, ?, ?, ?, ?, ?)`,
+		"artifact-legacy",
+		taskID,
+		"assistant_summary",
+		"tasks/task-1/assistant-legacy.txt",
+		"tasks/task-1/assistant-legacy.txt",
+		"Legacy history row",
+		"2026-03-31T10:20:00.000000000Z",
+	)
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-valid-2",
+		TaskID:    taskID,
+		RunID:     "run-2",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-valid-2.txt",
+		Summary:   "Valid previous 2",
+		CreatedAt: "2026-03-31T10:10:00.000000000Z",
+	})
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-current",
+		TaskID:    taskID,
+		RunID:     "run-3",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-current.txt",
+		Summary:   "Current artifact",
+		CreatedAt: "2026-03-31T10:40:00.000000000Z",
+	})
+
+	row, err := repo.GetArtifactCompare("artifact-current", "")
+	require.NoError(t, err)
+	require.NotNil(t, row.Previous)
+	require.Equal(t, "artifact-valid-2", row.Previous.ArtifactID)
+	require.Len(t, row.History, 2)
+	require.Equal(t, "artifact-valid-2", row.History[0].ArtifactID)
+	require.Equal(t, "artifact-valid-1", row.History[1].ArtifactID)
 }
 
 type artifactCompareRepoSeed struct {
@@ -140,6 +310,7 @@ type artifactCompareRepoSeed struct {
 	Kind        string
 	Path        string
 	StoragePath string
+	Summary     string
 	CreatedAt   string
 }
 
@@ -159,10 +330,17 @@ func saveArtifactCompareSeed(t *testing.T, db *sql.DB, artifact artifactCompareR
 		artifact.Kind,
 		artifact.Path,
 		storagePath,
-		artifact.ID,
+		repoSeedSummary(artifact),
 		artifact.CreatedAt,
 	)
 	require.NoError(t, err)
+}
+
+func repoSeedSummary(artifact artifactCompareRepoSeed) string {
+	if artifact.Summary != "" {
+		return artifact.Summary
+	}
+	return artifact.ID
 }
 
 func testRun(runID, taskID string) ports.Run {

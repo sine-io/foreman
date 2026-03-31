@@ -35,6 +35,7 @@ type ArtifactWorkbenchView = query.ArtifactWorkbenchView
 type ArtifactWorkbenchSibling = query.ArtifactWorkbenchSibling
 type ArtifactCompareView = query.ArtifactCompareView
 type ArtifactCompareArtifact = query.ArtifactCompareArtifact
+type ArtifactCompareHistoryItem = query.ArtifactCompareHistoryItem
 type ArtifactCompareDiff = query.ArtifactCompareDiff
 type ArtifactCompareLimits = query.ArtifactCompareLimits
 type ArtifactCompareMessages = query.ArtifactCompareMessages
@@ -73,6 +74,7 @@ var (
 	ErrArtifactWorkbenchNotFound = errors.New("artifact workbench not found")
 	ErrArtifactWorkbenchConflict = errors.New("artifact workbench conflict")
 	ErrArtifactCompareNotFound   = errors.New("artifact compare not found")
+	ErrArtifactCompareSelection  = errors.New("artifact compare selection invalid")
 )
 
 type ModuleSnapshot struct {
