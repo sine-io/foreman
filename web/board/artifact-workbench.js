@@ -676,13 +676,14 @@
       return false;
     }
 
-    const hiddenCharacterCount =
-      Number(state.previewModel && state.previewModel.teaser && state.previewModel.teaser.hiddenCharacterCount) || 0;
-    if (hiddenCharacterCount > 0 && visibleLines.length === 1) {
+    const fullLines =
+      state.previewModel && Array.isArray(state.previewModel.lines) ? state.previewModel.lines : [];
+    const fullLine = fullLines.find((line) => parseLineNumber(line && line.lineNumber) === parsedLineNumber);
+    if (!fullLine) {
       return false;
     }
 
-    return true;
+    return normalizeText(visibleLine.text) === normalizeText(fullLine.text);
   };
 
   const scrollToPreviewLine = (lineNumber) => {

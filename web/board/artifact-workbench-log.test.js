@@ -358,6 +358,39 @@ test('summary navigation expands single-line previews when the anchor target sit
   );
 });
 
+test('summary navigation expands when a visible teaser line is itself character-truncated', async () => {
+  const summaryTarget = 'line two anchor marker';
+  const hiddenPreviewTail = 'preview hidden multi tail marker';
+  const preview = [
+    'a'.repeat(260),
+    `${'b'.repeat(165)} ${hiddenPreviewTail} ${summaryTarget} ${'c'.repeat(40)}`,
+    'd'.repeat(260),
+  ].join('\n');
+
+  await withWorkbenchHarness(
+    {
+      'artifact-1': buildArtifactDetail('artifact-1', {
+        summary: summaryTarget,
+        preview,
+      }),
+    },
+    async ({ detailRoot }) => {
+      assert.match(detailRoot.innerHTML, /data-line-number="2"/);
+      assert.match(detailRoot.innerHTML, /data-expanded="false"/);
+      assert.doesNotMatch(detailRoot.innerHTML, /preview hidden multi tail marker/);
+
+      detailRoot.dispatch('click', {
+        target: createActionTarget('jump-to-line', { lineNumber: '2' }),
+      });
+      await flushPromises();
+
+      assert.match(detailRoot.innerHTML, /data-expanded="true"/);
+      assert.match(detailRoot.innerHTML, /preview hidden multi tail marker/);
+      assert.match(detailRoot.innerHTML, /artifact-preview-log-line is-targeted" id="artifact-preview-line-2"/);
+    },
+  );
+});
+
 test('switching to a different artifact resets long-text previews to collapsed mode', async () => {
   await withWorkbenchHarness(
     {
