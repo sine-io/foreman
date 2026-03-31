@@ -318,6 +318,39 @@ Expected outcomes:
 - `Back to current artifact` and `Back to run workbench` stay available as the only compare-page navigation links besides `Refresh compare`
 - if no previous comparable artifact exists, or the artifact type is unsupported, the compare page stays read-only and shows the corresponding manager-driven state instead of failing open or allowing manual history selection
 
+## Artifact Compare History Smoke (Optional Browser Check)
+
+With `foreman serve` running, you can manually verify bounded compare-history selection if you already have a current compareable text artifact plus at least two earlier same-task same-kind artifacts.
+
+1. Identify a current artifact and one older history artifact that still sits inside the recent five-item compare history window. Note both IDs.
+
+2. Read the default compare response and inspect the returned `history[]`.
+
+```bash
+curl http://localhost:8080/api/manager/artifacts/<artifact-id>/compare
+```
+
+3. Read the compare response again with an explicit selected history target.
+
+```bash
+curl "http://localhost:8080/api/manager/artifacts/<artifact-id>/compare?previous_artifact_id=<older-artifact-id>"
+```
+
+4. Open the compare page with the explicit selected history target.
+
+```bash
+curl "http://localhost:8080/board/artifacts/compare?artifact_id=<artifact-id>&previous_artifact_id=<older-artifact-id>"
+```
+
+Expected outcomes:
+
+- compare responses now include a stable `history` array, even when compare is not `ready`
+- each `history[]` item includes `artifact_id`, `run_id`, `created_at`, `summary`, `selected`, and `compare_url`
+- when `previous_artifact_id` is omitted, the selected history target defaults to the most recent earlier same-task same-kind artifact
+- when `previous_artifact_id` is valid and still inside the bounded recent-history window, the selected history target changes accordingly
+- if `previous_artifact_id` is invalid or has aged out of the bounded recent-history window, the compare API returns `400`
+- the browser compare page stays read-only and uses the server-provided recent-history links to switch compare targets
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:

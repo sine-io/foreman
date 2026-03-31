@@ -206,11 +206,13 @@ Artifact workbench operator flow:
 - Read the compare manager view with `GET /api/manager/artifacts/<artifact-id>/compare`.
 - Stream raw artifact bytes with `GET /api/manager/artifacts/<artifact-id>/content`, which now returns safe response headers for direct download or preview.
 - Use `Compare with previous` to open `/board/artifacts/compare?artifact_id=<artifact-id>`, which compares the current artifact against the immediately previous same-task same-kind text artifact.
+- The compare page now also supports bounded history selection with optional `previous_artifact_id`, while keeping `artifact_id` as the primary page identity.
 - Renderer polish stays inside this existing artifact workbench page; it does not add a new route.
 - Artifacts whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch now get a more readable structured preview.
 - Approved image preview also stays inside this existing artifact workbench page: `image/png`, `image/jpeg`, `image/gif`, and `image/webp` preview inline, `image/svg+xml` stays best-effort under the current safety policy, and non-image binary artifacts stay on the metadata/download binary fallback path.
 - Long text and log-like artifacts that stay on the generic long-text path now add line numbers, a collapsed first-screen teaser with `Expand all`, and lightweight summary navigation derived from existing summary and preview text.
 - Artifact compare stays read-only: it renders `ready`, `no_previous`, `unsupported`, and `too_large` states from the manager API instead of introducing compare-side write actions or manual history selection.
+- Compare history selection also stays read-only: the page shows at most five earlier same-task same-kind artifacts, uses server-provided `history[].compare_url` links, and returns `400` for invalid or aged-out `previous_artifact_id` selections.
 - Unsupported text-like content, along with JSON previews that fail to parse, still fall back to the generic text preview.
 - Short or otherwise simple text content stays on the simpler preview path without the heavier long-text ergonomics UI.
 
