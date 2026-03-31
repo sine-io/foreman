@@ -12,32 +12,71 @@ const flushPromises = async () => {
   await new Promise((resolve) => setImmediate(resolve));
 };
 
+const listenerUsesCapture = (options) => options === true || Boolean(options && options.capture);
+
 const createElement = (id) => {
   const listeners = new Map();
+  const registeredListeners = (type) => listeners.get(type) || [];
 
-  return {
+  const element = {
     id,
     innerHTML: '',
     textContent: '',
     value: '',
     dataset: {},
-    addEventListener(type, handler) {
-      listeners.set(type, handler);
+    addEventListener(type, handler, options) {
+      listeners.set(type, [
+        ...registeredListeners(type),
+        {
+          capture: listenerUsesCapture(options),
+          handler,
+        },
+      ]);
+    },
+    getEventListeners(type) {
+      return [...registeredListeners(type)];
     },
     dispatch(type, eventInit = {}) {
-      const handler = listeners.get(type);
-      if (!handler) {
-        return undefined;
-      }
-      return handler({
+      const target = eventInit.target || element;
+      const bubbles = eventInit.bubbles !== undefined ? Boolean(eventInit.bubbles) : true;
+      const baseEvent = {
         preventDefault() {},
         stopPropagation() {},
-        currentTarget: this,
-        target: eventInit.target || this,
+        target,
         key: eventInit.key,
-      });
+      };
+      const registrations = registeredListeners(type);
+      const targetIsCurrent = target === element;
+
+      for (const listener of registrations) {
+        if (!listener.capture) {
+          continue;
+        }
+
+        listener.handler({
+          ...baseEvent,
+          currentTarget: element,
+        });
+      }
+
+      if (targetIsCurrent || bubbles) {
+        for (const listener of registrations) {
+          if (listener.capture) {
+            continue;
+          }
+
+          listener.handler({
+            ...baseEvent,
+            currentTarget: element,
+          });
+        }
+      }
+
+      return undefined;
     },
   };
+
+  return element;
 };
 
 const buildLongPreview = (artifactLabel, lineCount = 16) =>
@@ -326,8 +365,13 @@ test('svg preview attempts the raw content url and falls back cleanly when the b
     async ({ detailRoot, metadataRoot }) => {
       assert.match(detailRoot.innerHTML, /artifact-preview-image/);
       assert.match(detailRoot.innerHTML, /\/artifacts\/diagram\.svg/);
+      assert.deepEqual(
+        detailRoot.getEventListeners('error').map((listener) => listener.capture),
+        [true],
+      );
 
       detailRoot.dispatch('error', {
+        bubbles: false,
         target: createClosestTarget('[data-artifact-preview-image]', {
           artifactId: 'artifact-1',
         }),
@@ -389,8 +433,13 @@ test('raster image load failures fall back cleanly without disrupting text and l
     },
     async ({ detailRoot, metadataRoot }) => {
       assert.match(detailRoot.innerHTML, /artifact-preview-image/);
+      assert.deepEqual(
+        detailRoot.getEventListeners('error').map((listener) => listener.capture),
+        [true],
+      );
 
       detailRoot.dispatch('error', {
+        bubbles: false,
         target: createClosestTarget('[data-artifact-preview-image]', {
           artifactId: 'artifact-1',
         }),
