@@ -570,6 +570,104 @@ body {
   line-height: 1.45;
 }
 
+
+.artifact-preview-text,
+.artifact-preview-json {
+  white-space: pre-wrap;
+}
+
+.artifact-preview-json {
+  background: #f7f1e7;
+}
+
+.artifact-preview-rendered {
+  padding: 1rem;
+  overflow: auto;
+}
+
+.artifact-preview-markdown {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.artifact-preview-markdown > :first-child {
+  margin-top: 0;
+}
+
+.artifact-preview-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.artifact-preview-markdown p,
+.artifact-preview-markdown h1,
+.artifact-preview-markdown h2,
+.artifact-preview-markdown h3,
+.artifact-preview-markdown h4,
+.artifact-preview-markdown h5,
+.artifact-preview-markdown h6,
+.artifact-preview-markdown blockquote {
+  margin: 0;
+}
+
+.artifact-preview-markdown ul {
+  margin: 0 0 0 1.25rem;
+  padding: 0;
+}
+
+.artifact-preview-markdown blockquote {
+  padding-left: 1rem;
+  border-left: 3px solid var(--line);
+  color: #6d5e4c;
+}
+
+.artifact-preview-markdown pre {
+  margin: 0;
+  padding: 0.85rem;
+  border-radius: 0.75rem;
+  background: #f5ede1;
+  overflow: auto;
+}
+
+.artifact-preview-markdown code {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  background: #f5ede1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.3rem;
+}
+
+.artifact-preview-diff {
+  padding: 0.5rem 0;
+  white-space: pre;
+}
+
+.artifact-preview-diff-line {
+  display: block;
+  padding: 0.15rem 1rem;
+}
+
+.artifact-preview-diff-line[data-diff-type="meta"] {
+  color: #8a7b66;
+}
+
+.artifact-preview-diff-line[data-diff-type="hunk"] {
+  background: #efe4d4;
+  color: #6d5e4c;
+}
+
+.artifact-preview-diff-line[data-diff-type="add"] {
+  background: #e7f3e2;
+  color: #214f28;
+}
+
+.artifact-preview-diff-line[data-diff-type="remove"] {
+  background: #f8dfd8;
+  color: #7b2717;
+}
+
+.artifact-preview-notice {
+  margin-top: 0.75rem;
+}
+
 .artifact-metadata-grid {
   align-items: stretch;
 }

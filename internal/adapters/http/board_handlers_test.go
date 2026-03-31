@@ -132,6 +132,22 @@ func TestArtifactWorkbenchPageServes(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "Refresh artifact")
 }
 
+func TestArtifactWorkbenchHTMLLoadsRendererHelpers(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/artifacts/workbench?artifact_id=artifact-1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	body := rec.Body.String()
+	renderersIndex := strings.Index(body, "/board/assets/artifact-renderers.js")
+	workbenchIndex := strings.Index(body, "/board/assets/artifact-workbench.js")
+	require.NotEqual(t, -1, renderersIndex)
+	require.NotEqual(t, -1, workbenchIndex)
+	require.Less(t, renderersIndex, workbenchIndex)
+}
+
 func TestRunWorkbenchPageServes(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -152,7 +168,7 @@ func TestTaskWorkbenchJavaScriptUsesProjectAndTaskURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"project_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"task_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"project_id\", projectId || \"demo\")")
@@ -167,7 +183,7 @@ func TestRunWorkbenchJavaScriptUsesRunIDURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"run_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"run_id\", runId)")
 }
@@ -229,7 +245,7 @@ func TestArtifactWorkbenchJavaScriptUsesArtifactIDURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"artifact_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"artifact_id\", artifactId)")
 }
@@ -291,9 +307,9 @@ func TestArtifactWorkbenchJavaScriptTreatsEmptyTextPreviewAsPreviewable(t *testi
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "detail.content_type.startsWith(\"text/\")")
-	require.Contains(t, rec.Body.String(), "const previewContent = detail.preview ?? \"\";")
-	require.Contains(t, rec.Body.String(), "<pre class=\"artifact-preview\">${escapeHTML(previewContent)}</pre>")
+	require.Contains(t, rec.Body.String(), "contentType.startsWith(\"text/\")")
+	require.Contains(t, rec.Body.String(), "const previewContent = normalizedDetail.preview ?? \"\";")
+	require.Contains(t, rec.Body.String(), "artifact-preview artifact-preview-text")
 }
 
 func TestArtifactWorkbenchJavaScriptExtractsJSONErrorMessages(t *testing.T) {
@@ -471,7 +487,7 @@ func TestApprovalWorkbenchJavaScriptUsesApprovalIDURLState(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(currentLocation().search)")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"approval_id\", approvalId)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"approval_id\")")
 }

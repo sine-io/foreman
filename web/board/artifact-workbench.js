@@ -1,11 +1,179 @@
-const artifactInput = document.getElementById("artifact-workbench-artifact-id");
-const refreshButton = document.getElementById("artifact-workbench-refresh");
-const statusNode = document.getElementById("artifact-workbench-status");
-const siblingsRoot = document.getElementById("artifact-workbench-siblings");
-const detailRoot = document.getElementById("artifact-workbench-detail");
-const metadataRoot = document.getElementById("artifact-workbench-metadata");
+(function (globalScope) {
+  const documentRef = globalScope.document || globalThis.document;
+  const previewTruncationFallback = "Preview truncated to the workbench preview limit.";
 
-if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot && metadataRoot) {
+  const normalizeText = (value) => String(value ?? "");
+
+  const escapeHTML = (value) =>
+    normalizeText(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+  const currentLocation = () => globalScope.location || globalThis.location || { search: "", pathname: "" };
+  const currentHistory = () => globalScope.history || globalThis.history;
+  const currentRenderers = () => globalScope.ForemanArtifactRenderers || globalThis.ForemanArtifactRenderers;
+
+  const isPreviewableArtifact = (detail) => {
+    const contentType = normalizeText(detail && detail.content_type);
+    return (
+      contentType.startsWith("text/") ||
+      contentType === "application/json" ||
+      contentType === "application/xml" ||
+      contentType === "application/x-yaml"
+    );
+  };
+
+  const resolveTruncationNotice = (detail, renderers) => {
+    if (!detail || !detail.preview_truncated) {
+      return "";
+    }
+
+    if (renderers && typeof renderers.truncatedNotice === "string" && renderers.truncatedNotice) {
+      return renderers.truncatedNotice;
+    }
+
+    return previewTruncationFallback;
+  };
+
+  const buildRawContentLinkMarkup = (detail) =>
+    detail && detail.raw_content_url
+      ? `<a class="board-link" href="${escapeHTML(detail.raw_content_url)}" target="_blank" rel="noopener noreferrer">Open raw artifact</a>`
+      : '<span class="board-link board-link-disabled" aria-disabled="true">Raw artifact unavailable</span>';
+
+  const wrapPreviewSection = (label, bodyMarkup) => `
+    <section class="detail-block detail-block-wide">
+      <p class="detail-label">${escapeHTML(label)}</p>
+      ${bodyMarkup}
+    </section>
+  `;
+
+  const buildPreviewNoticeMarkup = (notice) =>
+    notice ? `<p class="detail-copy artifact-preview-notice">${escapeHTML(notice)}</p>` : "";
+
+  const buildTextPreviewMarkup = (previewText, options = {}) => {
+    const extraClasses = options.extraClasses || "";
+    const classSuffix = extraClasses ? ` ${extraClasses}` : "";
+    return `
+      <pre class="artifact-preview artifact-preview-text${classSuffix}">${escapeHTML(previewText)}</pre>
+      ${buildPreviewNoticeMarkup(options.truncatedNotice || "")}
+    `;
+  };
+
+  const buildMarkdownPreviewMarkup = (html, truncatedNotice) => `
+    <div class="artifact-preview artifact-preview-rendered artifact-preview-markdown">${html}</div>
+    ${buildPreviewNoticeMarkup(truncatedNotice)}
+  `;
+
+  const buildDiffPreviewMarkup = (lines, truncatedNotice) => `
+    <div class="artifact-preview artifact-preview-rendered artifact-preview-diff">
+      ${lines
+        .map((line) => {
+          const lineType = normalizeText((line && line.type) || "context");
+          const lineText = normalizeText(line && line.text);
+          return `<span class="artifact-preview-diff-line" data-diff-type="${escapeHTML(lineType)}">${escapeHTML(lineText)}</span>`;
+        })
+        .join("")}
+    </div>
+    ${buildPreviewNoticeMarkup(truncatedNotice)}
+  `;
+
+  const composeArtifactPreviewMarkup = (detail, options = {}) => {
+    const normalizedDetail = detail && typeof detail === "object" ? detail : {};
+    const previewContent = normalizedDetail.preview ?? "";
+    const rawContentLink = options.rawContentLinkMarkup || buildRawContentLinkMarkup(normalizedDetail);
+    const renderers = options.renderers || currentRenderers();
+    const genericTruncationNotice = resolveTruncationNotice(normalizedDetail, renderers);
+    const renderGenericPreview = (previewText = previewContent, previewResult = {}) => {
+      const truncatedNotice =
+        typeof previewResult.truncated_notice === "string" && previewResult.truncated_notice
+          ? previewResult.truncated_notice
+          : genericTruncationNotice;
+      const extraClasses = previewResult.renderer === "json" ? "artifact-preview-json" : "";
+      return wrapPreviewSection(
+        "Bounded Preview",
+        buildTextPreviewMarkup(previewText, {
+          extraClasses,
+          truncatedNotice,
+        }),
+      );
+    };
+
+    if (!isPreviewableArtifact(normalizedDetail)) {
+      return wrapPreviewSection(
+        "Preview",
+        `
+          <p class="detail-copy">Inline preview is unavailable for this artifact type. Use the raw artifact link for the original content.</p>
+          ${rawContentLink}
+        `,
+      );
+    }
+
+    try {
+      if (!renderers || typeof renderers.renderPreview !== "function") {
+        return renderGenericPreview();
+      }
+
+      const previewResult = renderers.renderPreview(normalizedDetail, previewContent);
+      if (!previewResult || typeof previewResult !== "object") {
+        return renderGenericPreview();
+      }
+
+      const truncatedNotice =
+        typeof previewResult.truncated_notice === "string" && previewResult.truncated_notice
+          ? previewResult.truncated_notice
+          : genericTruncationNotice;
+
+      if (previewResult.output === "html" && typeof previewResult.html === "string") {
+        return wrapPreviewSection(
+          "Bounded Preview",
+          buildMarkdownPreviewMarkup(previewResult.html, truncatedNotice),
+        );
+      }
+
+      if (previewResult.output === "lines" && Array.isArray(previewResult.lines)) {
+        return wrapPreviewSection(
+          "Bounded Preview",
+          buildDiffPreviewMarkup(previewResult.lines, truncatedNotice),
+        );
+      }
+
+      return renderGenericPreview(
+        typeof previewResult.text === "string" ? previewResult.text : previewContent,
+        previewResult,
+      );
+    } catch (_error) {
+      return renderGenericPreview();
+    }
+  };
+
+  const api = {
+    composeArtifactPreviewMarkup,
+  };
+
+  globalScope.ForemanArtifactWorkbench = api;
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+
+  if (!documentRef) {
+    return;
+  }
+
+  const artifactInput = documentRef.getElementById("artifact-workbench-artifact-id");
+  const refreshButton = documentRef.getElementById("artifact-workbench-refresh");
+  const statusNode = documentRef.getElementById("artifact-workbench-status");
+  const siblingsRoot = documentRef.getElementById("artifact-workbench-siblings");
+  const detailRoot = documentRef.getElementById("artifact-workbench-detail");
+  const metadataRoot = documentRef.getElementById("artifact-workbench-metadata");
+
+  if (!artifactInput || !refreshButton || !statusNode || !siblingsRoot || !detailRoot || !metadataRoot) {
+    return;
+  }
+
   const state = {
     artifactId: "",
     detail: null,
@@ -15,21 +183,13 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
     requestToken: 0,
   };
 
-  const escapeHTML = (value) =>
-    String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-
   const readArtifactID = () => {
-    const searchParams = new URLSearchParams(window.location.search);
+    const searchParams = new URLSearchParams(currentLocation().search);
     return searchParams.get("artifact_id") || "";
   };
 
   const updateURLState = (artifactId) => {
-    const searchParams = new URLSearchParams(window.location.search);
+    const searchParams = new URLSearchParams(currentLocation().search);
     if (artifactId) {
       searchParams.set("artifact_id", artifactId);
     } else {
@@ -37,23 +197,16 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
     }
 
     const query = searchParams.toString();
-    const nextURL = query ? `${window.location.pathname}?${query}` : window.location.pathname;
-    window.history.replaceState({}, "", nextURL);
+    const nextURL = query ? `${currentLocation().pathname}?${query}` : currentLocation().pathname;
+    const historyRef = currentHistory();
+    if (historyRef && typeof historyRef.replaceState === "function") {
+      historyRef.replaceState({}, "", nextURL);
+    }
   };
 
   const setStatus = (message, tone = "info") => {
     statusNode.textContent = message;
     statusNode.dataset.tone = tone;
-  };
-
-  const isPreviewableArtifact = (detail) => {
-    const contentType = detail.content_type || "";
-    return (
-      (detail.content_type && detail.content_type.startsWith("text/")) ||
-      contentType === "application/json" ||
-      contentType === "application/xml" ||
-      contentType === "application/x-yaml"
-    );
   };
 
   const siblingWorkbenchURL = (sibling) =>
@@ -160,25 +313,11 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
     }
 
     const detail = state.detail;
-    const rawContentLink = detail.raw_content_url
-      ? `<a class="board-link" href="${escapeHTML(detail.raw_content_url)}" target="_blank" rel="noopener noreferrer">Open raw artifact</a>`
-      : '<span class="board-link board-link-disabled" aria-disabled="true">Raw artifact unavailable</span>';
-    const previewContent = detail.preview ?? "";
-    const previewMarkup = isPreviewableArtifact(detail)
-      ? `
-        <section class="detail-block detail-block-wide">
-          <p class="detail-label">Bounded Preview</p>
-          <pre class="artifact-preview">${escapeHTML(previewContent)}</pre>
-          ${detail.preview_truncated ? '<p class="detail-copy">Preview truncated to the workbench preview limit.</p>' : ""}
-        </section>
-      `
-      : `
-        <section class="detail-block detail-block-wide">
-          <p class="detail-label">Preview</p>
-          <p class="detail-copy">Inline preview is unavailable for this artifact type. Use the raw artifact link for the original content.</p>
-          ${rawContentLink}
-        </section>
-      `;
+    const rawContentLink = buildRawContentLinkMarkup(detail);
+    const previewMarkup = composeArtifactPreviewMarkup(detail, {
+      rawContentLinkMarkup: rawContentLink,
+      renderers: currentRenderers(),
+    });
 
     detailRoot.innerHTML = `
       <article class="approval-detail-card">
@@ -351,12 +490,15 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
       refreshWorkbench();
     }
   });
-  window.addEventListener("popstate", () => {
-    artifactInput.value = readArtifactID();
-    refreshWorkbench();
-  });
+
+  if (typeof globalScope.addEventListener === "function") {
+    globalScope.addEventListener("popstate", () => {
+      artifactInput.value = readArtifactID();
+      refreshWorkbench();
+    });
+  }
 
   state.artifactId = readArtifactID();
   artifactInput.value = state.artifactId;
   refreshWorkbench();
-}
+})(typeof window !== "undefined" ? window : globalThis);
