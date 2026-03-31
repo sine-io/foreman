@@ -543,6 +543,8 @@ func TestServeArtifactContentPreservesImagePreviewContract(t *testing.T) {
 
 	artifactID, err := appImpl.artifacts.Create(taskDTO.ID, "run-image-preview", "screenshot", artifactPath)
 	require.NoError(t, err)
+	_, err = appImpl.db.Exec(`update artifacts set path = '' where id = ?`, artifactID)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -560,10 +562,12 @@ func TestServeArtifactContentPreservesImagePreviewContract(t *testing.T) {
 
 	var workbenchPayload struct {
 		ContentType   string `json:"content_type"`
+		Preview       string `json:"preview"`
 		RawContentURL string `json:"raw_content_url"`
 	}
 	require.NoError(t, json.NewDecoder(workbenchResp.Body).Decode(&workbenchPayload))
 	require.Equal(t, "image/png", workbenchPayload.ContentType)
+	require.Empty(t, workbenchPayload.Preview)
 	require.Equal(t, "/api/manager/artifacts/"+artifactID+"/content", workbenchPayload.RawContentURL)
 
 	contentResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + workbenchPayload.RawContentURL)

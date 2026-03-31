@@ -200,12 +200,13 @@ func TestArtifactWorkbenchQueryClassifiesApprovedImageTypes(t *testing.T) {
 		name            string
 		artifactID      string
 		path            string
+		storagePath     string
 		wantContentType string
 	}{
 		{
-			name:            "png",
+			name:            "png falls back to storage path when display path is blank",
 			artifactID:      "artifact-png",
-			path:            "tasks/task-1/screenshot.png",
+			storagePath:     "tasks/task-1/screenshot.png",
 			wantContentType: "image/png",
 		},
 		{
@@ -230,14 +231,23 @@ func TestArtifactWorkbenchQueryClassifiesApprovedImageTypes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			harness.writeArtifactFile(t, tc.path, string([]byte{0x00, 0x01, 0x02, 0x03}))
+			artifactFilePath := tc.path
+			if artifactFilePath == "" {
+				artifactFilePath = tc.storagePath
+			}
+			harness.writeArtifactFile(t, artifactFilePath, string([]byte{0x00, 0x01, 0x02, 0x03}))
+
+			storagePath := tc.storagePath
+			if storagePath == "" {
+				storagePath = tc.path
+			}
 			harness.saveArtifact(t, artifactSeed{
 				ID:          tc.artifactID,
 				TaskID:      "task-1",
 				RunID:       "run-1",
 				Kind:        "screenshot",
 				Path:        tc.path,
-				StoragePath: tc.path,
+				StoragePath: storagePath,
 				Summary:     "Previewable image artifact",
 				CreatedAt:   "2026-03-31T09:01:00.000000000Z",
 			})

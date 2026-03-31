@@ -178,8 +178,8 @@ func (h *ManagerHandlers) ManagerArtifactContent(c *gin.Context) {
 		_ = content.Reader.Close()
 	}()
 
-	contentType := content.ContentType
-	if strings.TrimSpace(contentType) == "" {
+	contentType := strings.TrimSpace(content.ContentType)
+	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 

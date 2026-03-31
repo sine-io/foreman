@@ -54,7 +54,7 @@ func (q *ArtifactWorkbenchQuery) Execute(artifactID string) (ArtifactWorkbenchVi
 		return ArtifactWorkbenchView{}, err
 	}
 
-	contentType := artifactWorkbenchContentType(row.Kind, row.Path)
+	contentType := artifactWorkbenchContentType(row.Kind, artifactWorkbenchContentTypePath(row.Path, row.StoragePath))
 	view := ArtifactWorkbenchView{
 		ArtifactID:      row.ArtifactID,
 		RunID:           row.RunID,
@@ -92,6 +92,13 @@ func (q *ArtifactWorkbenchQuery) Execute(artifactID string) (ArtifactWorkbenchVi
 	}
 
 	return view, nil
+}
+
+func artifactWorkbenchContentTypePath(path, storagePath string) string {
+	if trimmedPath := strings.TrimSpace(path); trimmedPath != "" {
+		return trimmedPath
+	}
+	return strings.TrimSpace(storagePath)
 }
 
 func artifactWorkbenchContentType(kind, path string) string {

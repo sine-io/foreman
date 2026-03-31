@@ -191,17 +191,53 @@ func TestManagerArtifactWorkbenchEndpointMapsBrokenLinkageTo500(t *testing.T) {
 }
 
 func TestManagerArtifactContentEndpointKeepsRasterImagesInline(t *testing.T) {
-	router := NewRouter(newFakeManagerHTTPApp())
+	cases := []struct {
+		name        string
+		artifactID  string
+		contentType string
+		body        []byte
+	}{
+		{
+			name:        "png",
+			artifactID:  "artifact-png",
+			contentType: "image/png",
+			body:        []byte{0x89, 0x50, 0x4e, 0x47},
+		},
+		{
+			name:        "jpeg",
+			artifactID:  "artifact-jpeg",
+			contentType: "image/jpeg",
+			body:        []byte{0xff, 0xd8, 0xff, 0xdb},
+		},
+		{
+			name:        "gif",
+			artifactID:  "artifact-gif",
+			contentType: "image/gif",
+			body:        []byte("GIF89a"),
+		},
+		{
+			name:        "webp",
+			artifactID:  "artifact-webp",
+			contentType: "image/webp",
+			body:        []byte("RIFFWEBP"),
+		},
+	}
 
-	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-png/content", nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(newFakeManagerHTTPApp())
 
-	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
-	require.Equal(t, "image/png", rec.Header().Get("Content-Type"))
-	require.Contains(t, rec.Header().Get("Content-Disposition"), "inline;")
-	require.Equal(t, []byte{0x89, 0x50, 0x4e, 0x47}, rec.Body.Bytes())
+			req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/"+tc.artifactID+"/content", nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, stdhttp.StatusOK, rec.Code)
+			require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+			require.Equal(t, tc.contentType, rec.Header().Get("Content-Type"))
+			require.Contains(t, rec.Header().Get("Content-Disposition"), "inline;")
+			require.Equal(t, tc.body, rec.Body.Bytes())
+		})
+	}
 }
 
 func TestManagerArtifactContentEndpointKeepsBinaryArtifactsAsAttachment(t *testing.T) {
@@ -845,6 +881,57 @@ func (a *fakeManagerHTTPApp) ArtifactWorkbench(ctx context.Context, artifactID s
 				{ArtifactID: "artifact-png", Kind: "screenshot", Summary: "PNG screenshot artifact", Selected: true},
 			},
 		}, nil
+	case "artifact-jpeg":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-jpeg",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "screenshot",
+			Summary:         "JPEG screenshot artifact",
+			Path:            "tasks/task-1/photo.jpg",
+			ContentType:     "image/jpeg",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-jpeg/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-jpeg", Kind: "screenshot", Summary: "JPEG screenshot artifact", Selected: true},
+			},
+		}, nil
+	case "artifact-gif":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-gif",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "screenshot",
+			Summary:         "GIF screenshot artifact",
+			Path:            "tasks/task-1/animation.gif",
+			ContentType:     "image/gif",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-gif/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-gif", Kind: "screenshot", Summary: "GIF screenshot artifact", Selected: true},
+			},
+		}, nil
+	case "artifact-webp":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-webp",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "screenshot",
+			Summary:         "WebP screenshot artifact",
+			Path:            "tasks/task-1/preview.webp",
+			ContentType:     "image/webp",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-webp/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-webp", Kind: "screenshot", Summary: "WebP screenshot artifact", Selected: true},
+			},
+		}, nil
 	case "artifact-binary":
 		return manageragent.ArtifactWorkbenchView{
 			ArtifactID:      "artifact-binary",
@@ -925,6 +1012,27 @@ func (a *fakeManagerHTTPApp) ArtifactContent(ctx context.Context, artifactID str
 			ContentType: "image/png",
 			Size:        4,
 			Reader:      &trackedReadCloser{Reader: strings.NewReader(string([]byte{0x89, 0x50, 0x4e, 0x47}))},
+		}, nil
+	case "artifact-jpeg":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/photo.jpg",
+			ContentType: "image/jpeg",
+			Size:        4,
+			Reader:      &trackedReadCloser{Reader: strings.NewReader(string([]byte{0xff, 0xd8, 0xff, 0xdb}))},
+		}, nil
+	case "artifact-gif":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/animation.gif",
+			ContentType: "image/gif",
+			Size:        int64(len("GIF89a")),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader("GIF89a")},
+		}, nil
+	case "artifact-webp":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/preview.webp",
+			ContentType: "image/webp",
+			Size:        int64(len("RIFFWEBP")),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader("RIFFWEBP")},
 		}, nil
 	case "artifact-binary":
 		return ManagerArtifactContent{

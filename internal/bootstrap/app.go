@@ -285,9 +285,11 @@ func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapt
 		artifactPath = displayPath
 	}
 
+	contentType := strings.TrimSpace(view.ContentType)
+
 	return httpadapter.ManagerArtifactContent{
 		Path:        artifactPath,
-		ContentType: view.ContentType,
+		ContentType: contentType,
 		Size:        info.Size(),
 		Reader:      file,
 	}, nil
