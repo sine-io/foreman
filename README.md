@@ -83,6 +83,7 @@ These stay in outer layers. Domain and application code should not depend on fra
 - [`docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md): fifth Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md): sixth Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-renderer-polish.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-renderer-polish.md): seventh Phase 2 execution plan
+- [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-binary-preview.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-binary-preview.md): eighth Phase 2 execution plan
 
 ## Quick Start
 
