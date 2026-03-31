@@ -247,6 +247,28 @@ Expected outcomes:
 - unsupported content, and renderer fallback cases such as JSON parse failures, still use the generic text preview
 - truncation warnings remain visible when the preview is partial
 
+## Artifact Binary/Media Preview Smoke (Optional Browser Check)
+
+With `foreman serve` running, you can manually verify browser-only image preview and binary fallback behavior inside the existing artifact workbench if you already have a suitable artifact. The documented clean-repo smoke above does not guarantee creation of an approved image artifact or another binary artifact.
+
+1. If you already have an artifact whose `content_type` is `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, or another non-image binary type, note its `artifact_id`. If you want to confirm both the image-preview and binary-fallback paths, use one approved image artifact plus one non-image binary artifact. Otherwise, skip this optional check.
+
+2. Read the manager artifact workbench detail and note the authoritative `content_type` plus the existing metadata and raw-artifact actions.
+
+```bash
+curl http://localhost:8080/api/manager/artifacts/<artifact-id>/workbench
+```
+
+3. Open `http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>` in a web browser and inspect the preview there. This smoke is browser-only UI behavior inside the existing artifact workbench, so `curl` against the board route only verifies the static shell, not the rendered image preview or binary fallback.
+
+Expected outcomes:
+
+- binary/media preview stays inside `/board/artifacts/workbench?artifact_id=<artifact-id>` and does not add a new route or new manager API fields
+- approved raster image preview renders inline for `image/png`, `image/jpeg`, `image/gif`, and `image/webp`
+- `image/svg+xml` is best-effort under the current safety policy and may still fall back to the metadata/download binary fallback path
+- non-image binary artifacts stay on the metadata/download binary fallback path with clear not-previewed-inline behavior and raw artifact actions still visible
+- this smoke assumes a suitable existing artifact already exists and is optional/browser-only
+
 ## Artifact Long-Text Ergonomics Smoke (Optional Browser Check)
 
 With `foreman serve` running, you can manually verify long-text ergonomics inside the existing artifact workbench if you already have a suitable artifact. This is browser-only UI behavior on the generic long-text path, so `curl` against the board route only verifies the shell, not the line-numbered collapsed preview.

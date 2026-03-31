@@ -95,6 +95,12 @@
 - Added an optional browser-only long-text ergonomics smoke path for existing `run_log`, `command_result`, and other long `text/plain` artifacts
 - Recorded that JSON, Markdown, and diff / patch structured-renderer success paths remain separate while short or unsupported content still uses the simpler preview path
 
+### Phase 2 Artifact Binary/Media Preview
+
+- Documented browser-only image preview and binary fallback guidance inside the existing artifact workbench
+- Recorded that approved raster image types preview inline for `image/png`, `image/jpeg`, `image/gif`, and `image/webp`
+- Recorded that `image/svg+xml` remains best-effort under the current safety policy while non-image binary artifacts stay on the metadata/download fallback path
+
 ## 2026-03-30
 
 ### Phase 2 Run Workbench
