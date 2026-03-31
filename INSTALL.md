@@ -194,7 +194,7 @@ Expected outcomes:
 
 With `foreman serve` running, verify the artifact workbench detail, raw-content, and board routes:
 
-1. Use an artifact linked from the run workbench smoke and copy its `artifact_id` from the run workbench response or board UI.
+1. Use a run from the run workbench smoke and copy one artifact ID from the manager run workbench response `artifacts[].id` field.
 
 2. Read the manager artifact workbench detail.
 
@@ -214,14 +214,16 @@ curl -i http://localhost:8080/api/manager/artifacts/<artifact-id>/content
 curl http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>
 ```
 
-5. In the board UI, follow the run workbench artifact link and confirm it lands on the canonical artifact workbench route while legacy run-page artifact anchors still work as a fallback.
+5. In the board UI, follow the run workbench artifact link and confirm it lands on the canonical artifact workbench route.
 
 Expected outcomes:
 
 - `GET /api/manager/artifacts/<artifact-id>/workbench` returns the artifact workbench view for that artifact
 - `GET /api/manager/artifacts/<artifact-id>/content` streams the raw artifact content with safe response headers
 - `GET /board/artifacts/workbench?artifact_id=<artifact-id>` serves the canonical artifact workbench page
-- the run workbench links linked artifacts to the canonical artifact workbench route and legacy run-page artifact anchors remain available as a fallback
+- the run workbench links linked artifacts to the canonical artifact workbench route
+
+Legacy `#artifact-...` run-page anchors remain as a compatibility fallback for older unlinked artifacts, but that behavior is not part of the normal reproducible smoke because newly created artifacts are linked.
 
 ## Control-Plane Hardening Smoke
 
