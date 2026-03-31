@@ -171,6 +171,13 @@ Ordering should be:
 
 That means the first list item remains the default compare target when no explicit `previous_artifact_id` is provided.
 
+The recent-history list is also the authoritative selection window for this slice.
+
+That means:
+
+- explicit `previous_artifact_id` selection is only valid when the target artifact is inside this bounded recent-history set
+- older artifacts outside the recent five-item window are out of scope for this slice, even if they otherwise match `task_id`, `kind`, and earlier-ordering rules
+
 ## Explicit `previous_artifact_id` Validation
 
 When `previous_artifact_id` is provided, the server must validate that it:
@@ -220,6 +227,14 @@ Each `history` item should contain:
 `compare_url` means:
 
 - the exact compare page URL for selecting this item, including both `artifact_id` and `previous_artifact_id`
+
+`history` should always be present in successful compare responses.
+
+Rules:
+
+- `history` is an array in all successful responses
+- `history` is empty when there is no recent history to show
+- `history` remains present for `ready`, `no_previous`, `unsupported`, and `too_large`
 
 ## Page Layout
 
@@ -289,6 +304,8 @@ This means:
 
 - invalid explicit history target is a client error
 - absence of a default history target is still a normal compare business state
+
+For the compare page, `400` should continue to use normal transport-error handling rather than introducing a fifth compare business state. The page should stay read-only and surface the invalid-selection error through its existing API-error path.
 
 ## Testing Expectations
 
