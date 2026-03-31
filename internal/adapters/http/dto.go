@@ -129,9 +129,9 @@ type managerArtifactCompareNavigationResponse struct {
 
 type managerArtifactCompareResponse struct {
 	Current    managerArtifactCompareArtifactResponse   `json:"current"`
-	Previous   *managerArtifactCompareArtifactResponse  `json:"previous,omitempty"`
+	Previous   *managerArtifactCompareArtifactResponse  `json:"previous"`
 	Status     string                                   `json:"status"`
-	Diff       *managerArtifactCompareDiffResponse      `json:"diff,omitempty"`
+	Diff       *managerArtifactCompareDiffResponse      `json:"diff"`
 	Limits     managerArtifactCompareLimitsResponse     `json:"limits"`
 	Messages   managerArtifactCompareMessagesResponse   `json:"messages"`
 	Navigation managerArtifactCompareNavigationResponse `json:"navigation"`

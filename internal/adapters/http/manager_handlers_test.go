@@ -267,6 +267,26 @@ func TestManagerArtifactCompareEndpointMapsBrokenLinkageTo500(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "artifact compare points to missing run")
 }
 
+func TestManagerArtifactCompareEndpointKeepsNullableFieldsForNoPreviousState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/no-previous-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, "no_previous", payload["status"])
+	previous, previousExists := payload["previous"]
+	diff, diffExists := payload["diff"]
+	require.True(t, previousExists)
+	require.True(t, diffExists)
+	require.Nil(t, previous)
+	require.Nil(t, diff)
+}
+
 func TestManagerArtifactContentEndpointKeepsRasterImagesInline(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -1072,6 +1092,27 @@ func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID str
 		return manageragent.ArtifactCompareView{}, fmt.Errorf("%w: artifact missing-compare not found", manageragent.ErrArtifactCompareNotFound)
 	case "broken-compare":
 		return manageragent.ArtifactCompareView{}, errors.New("artifact compare points to missing run")
+	case "no-previous-compare":
+		return manageragent.ArtifactCompareView{
+			Current: manageragent.ArtifactCompareArtifact{
+				ArtifactID:  artifactID,
+				RunID:       "run-2",
+				TaskID:      "task-1",
+				Kind:        "assistant_summary",
+				ContentType: "text/plain; charset=utf-8",
+				CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+			},
+			Status: "no_previous",
+			Limits: manageragent.ArtifactCompareLimits{MaxCompareBytes: 64 * 1024},
+			Messages: manageragent.ArtifactCompareMessages{
+				Title:  "No previous artifact",
+				Detail: "No earlier artifact with the same task and kind is available for compare.",
+			},
+			Navigation: manageragent.ArtifactCompareNavigation{
+				CurrentWorkbenchURL: "/board/artifacts/workbench?artifact_id=" + artifactID,
+				BackToRunURL:        "/board/runs/workbench?run_id=run-2",
+			},
+		}, nil
 	default:
 		return manageragent.ArtifactCompareView{
 			Current: manageragent.ArtifactCompareArtifact{
