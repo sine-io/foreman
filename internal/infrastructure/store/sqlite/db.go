@@ -22,6 +22,9 @@ var createdAtBackfillSchema string
 //go:embed migrations/004_approval_workbench.sql
 var approvalWorkbenchSchema string
 
+//go:embed migrations/005_artifact_run_linkage.sql
+var artifactRunLinkageSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -32,6 +35,7 @@ var migrations = []migration{
 	{version: "002_control_plane_hardening.sql", sql: controlPlaneHardeningSchema},
 	{version: "003_created_at_backfill.sql", sql: createdAtBackfillSchema},
 	{version: "004_approval_workbench.sql", sql: approvalWorkbenchSchema},
+	{version: "005_artifact_run_linkage.sql", sql: artifactRunLinkageSchema},
 }
 
 func Open(path string) (*sql.DB, error) {

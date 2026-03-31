@@ -29,6 +29,14 @@ func TestOpenAppliesAllMigrationsInOrder(t *testing.T) {
 	requireColumn(t, db, "approvals", "policy_rule")
 	requireColumn(t, db, "approvals", "rejection_reason")
 	requireColumn(t, db, "artifacts", "created_at")
+	requireColumn(t, db, "artifacts", "run_id")
+}
+
+func TestOpenRegistersArtifactRunLinkageMigration(t *testing.T) {
+	db := OpenTestDB(t)
+
+	requireColumn(t, db, "artifacts", "run_id")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql", "005_artifact_run_linkage.sql")
 }
 
 func TestOpenIsIdempotentAcrossRepeatedBoots(t *testing.T) {
@@ -40,7 +48,7 @@ func TestOpenIsIdempotentAcrossRepeatedBoots(t *testing.T) {
 
 	db, err = Open(path)
 	require.NoError(t, err)
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql", "005_artifact_run_linkage.sql")
 	require.NoError(t, db.Close())
 }
 
@@ -66,7 +74,8 @@ func TestOpenUpgradesLegacyDatabaseAndRecordsMigrations(t *testing.T) {
 	requireColumn(t, db, "approvals", "policy_rule")
 	requireColumn(t, db, "approvals", "rejection_reason")
 	requireColumn(t, db, "artifacts", "created_at")
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql")
+	requireColumn(t, db, "artifacts", "run_id")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql", "005_artifact_run_linkage.sql")
 }
 
 func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
@@ -100,7 +109,7 @@ func TestOpenIsSafeUnderConcurrentBoots(t *testing.T) {
 	db, err := Open(path)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, db.Close()) }()
-	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql")
+	requireMigrationVersions(t, db, "001_init.sql", "002_control_plane_hardening.sql", "003_created_at_backfill.sql", "004_approval_workbench.sql", "005_artifact_run_linkage.sql")
 }
 
 func TestOpenDoesNotNeedWriteLockWhenDatabaseIsAlreadyMigrated(t *testing.T) {

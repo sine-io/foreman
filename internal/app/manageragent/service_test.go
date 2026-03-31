@@ -903,7 +903,7 @@ func (f *fakeRunRepo) FindByTask(taskID string) (ports.Run, error) {
 
 type fakeArtifactRepo struct{}
 
-func (f *fakeArtifactRepo) Create(taskID, kind, path string) (string, error) {
+func (f *fakeArtifactRepo) Create(taskID, runID, kind, path string) (string, error) {
 	return "artifact-1", nil
 }
 

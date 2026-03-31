@@ -135,7 +135,7 @@ func (h *DispatchTaskHandler) Handle(cmd DispatchTaskCommand) (DispatchTaskResul
 			return err
 		}
 
-		artifactID, err := repos.Artifacts.Create(repoTask.ID, "assistant_summary", run.AssistantSummaryPath)
+		artifactID, err := repos.Artifacts.Create(repoTask.ID, run.ID, "assistant_summary", run.AssistantSummaryPath)
 		if err != nil {
 			return err
 		}

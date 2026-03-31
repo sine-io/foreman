@@ -27,14 +27,69 @@ func TestArtifactIndexRoundTrip(t *testing.T) {
 	taskID := seedTaskGraph(t, db)
 	repo := NewArtifactRepository(db)
 
-	id, err := repo.Create(taskID, "assistant_summary", "artifacts/tasks/task-1/assistant.txt")
+	id, err := repo.Create(taskID, "", "assistant_summary", "artifacts/tasks/task-1/assistant.txt")
 	require.NoError(t, err)
 
 	row, err := repo.Get(id)
 	require.NoError(t, err)
 	require.Equal(t, "assistant_summary", row.Kind)
 	require.Equal(t, taskID, row.TaskID)
-	require.Equal(t, "artifacts/tasks/task-1/assistant.txt", row.Path)
+	require.Equal(t, "tasks/task-1/assistant.txt", row.Path)
+	require.Equal(t, "artifacts/tasks/task-1/assistant.txt", row.StoragePath)
+}
+
+func TestArtifactRepositoryCreatePersistsRunID(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewArtifactRepository(db)
+
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-1",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T09:00:00.000000000Z")
+
+	id, err := repo.Create(taskID, "run-1", "assistant_summary", "/tmp/foreman/artifacts/tasks/task-1/assistant.txt")
+	require.NoError(t, err)
+
+	var runID string
+	err = db.QueryRow(`select run_id from artifacts where id = ?`, id).Scan(&runID)
+	require.NoError(t, err)
+	require.Equal(t, "run-1", runID)
+}
+
+func TestArtifactRepositoryGetRoundTripsRunID(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewArtifactRepository(db)
+
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-1",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T09:00:00.000000000Z")
+
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, run_id, kind, path, storage_path, summary, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"artifact-1",
+		taskID,
+		"run-1",
+		"assistant_summary",
+		"tasks/task-1/assistant.txt",
+		"/tmp/foreman/artifacts/tasks/task-1/assistant.txt",
+		"summary",
+		"2026-03-31T09:01:00.000000000Z",
+	)
+
+	row, err := repo.Get("artifact-1")
+	require.NoError(t, err)
+	require.Equal(t, "run-1", row.RunID)
+	require.Equal(t, "tasks/task-1/assistant.txt", row.Path)
+	require.Equal(t, "/tmp/foreman/artifacts/tasks/task-1/assistant.txt", row.StoragePath)
 }
 
 func TestRunRepositoryFindByTaskUsesCreatedAtOrdering(t *testing.T) {

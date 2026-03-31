@@ -42,15 +42,17 @@ type RunRepository interface {
 }
 
 type ArtifactRecord struct {
-	ID      string
-	TaskID  string
-	Kind    string
-	Path    string
-	Summary string
+	ID          string
+	TaskID      string
+	RunID       string
+	Kind        string
+	Path        string
+	StoragePath string
+	Summary     string
 }
 
 type ArtifactRepository interface {
-	Create(taskID, kind, path string) (string, error)
+	Create(taskID, runID, kind, path string) (string, error)
 	Get(id string) (ArtifactRecord, error)
 }
 

@@ -280,6 +280,32 @@ func TestDispatchIndexesAssistantSummaryArtifact(t *testing.T) {
 	require.NotEmpty(t, out.ArtifactIDs)
 }
 
+func TestDispatchPersistsArtifactLinkedToRun(t *testing.T) {
+	tasks := newFakeTaskRepo()
+	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
+	require.NoError(t, tasks.Save(repoTask))
+
+	runs := &fakeRunRepo{}
+	artifacts := &fakeArtifactRepo{}
+	tx := newFakeTransactor(tasks, &fakeApprovalRepo{}, runs, artifacts)
+	handler := NewDispatchTaskHandler(
+		tx,
+		tasks,
+		&fakeLeaseRepo{},
+		fakePolicy{decision: domainpolicy.Decision{}},
+		&fakeRunner{},
+		tx.approvals,
+		runs,
+		artifacts,
+	)
+
+	out, err := handler.Handle(DispatchTaskCommand{TaskID: "task-1"})
+	require.NoError(t, err)
+	require.NotEmpty(t, out.ArtifactIDs)
+	require.Len(t, artifacts.created, 1)
+	require.Equal(t, "run-1", artifacts.created[0].RunID)
+}
+
 func TestDispatchReleasesLeaseIfPersistenceFailsAfterRunnerReturns(t *testing.T) {
 	tasks := newFakeTaskRepo()
 	repoTask := task.NewTask("task-1", "module-1", task.TaskTypeWrite, "Implement board query", "repo:project-1")
@@ -659,7 +685,7 @@ type fakeArtifactRepo struct {
 	createErr error
 }
 
-func (f *fakeArtifactRepo) Create(taskID, kind, path string) (string, error) {
+func (f *fakeArtifactRepo) Create(taskID, runID, kind, path string) (string, error) {
 	if f.createErr != nil {
 		return "", f.createErr
 	}
@@ -667,10 +693,12 @@ func (f *fakeArtifactRepo) Create(taskID, kind, path string) (string, error) {
 		f.nextID = "artifact-1"
 	}
 	f.created = append(f.created, ports.ArtifactRecord{
-		ID:     f.nextID,
-		TaskID: taskID,
-		Kind:   kind,
-		Path:   path,
+		ID:          f.nextID,
+		TaskID:      taskID,
+		RunID:       runID,
+		Kind:        kind,
+		Path:        path,
+		StoragePath: path,
 	})
 	return f.nextID, nil
 }
