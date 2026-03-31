@@ -17,6 +17,7 @@ import (
 	modulepkg "github.com/sine-io/foreman/internal/domain/module"
 	domainpolicy "github.com/sine-io/foreman/internal/domain/policy"
 	projectpkg "github.com/sine-io/foreman/internal/domain/project"
+	"github.com/sine-io/foreman/internal/infrastructure/store/artifactfs"
 	"github.com/sine-io/foreman/internal/infrastructure/store/sqlite"
 )
 
@@ -77,15 +78,16 @@ func BuildApp(cfg Config) (App, error) {
 		return nil, err
 	}
 
+	artifactStore := artifactfs.New(cfg.ArtifactRoot)
 	projects := sqlite.NewProjectRepository(db)
 	modules := sqlite.NewModuleRepository(db)
 	tasks := sqlite.NewTaskRepository(db)
 	runs := sqlite.NewRunRepository(db)
-	artifacts := sqlite.NewArtifactRepository(db)
+	artifacts := sqlite.NewArtifactRepository(db, artifactStore)
 	approvals := sqlite.NewApprovalRepository(db)
 	leases := sqlite.NewLeaseRepository(db)
 	board := sqlite.NewBoardQueryRepository(db)
-	transactor := sqlite.NewTransactor(db)
+	transactor := sqlite.NewTransactor(db, artifactStore)
 
 	instance := &app{
 		Config:        cfg,

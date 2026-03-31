@@ -8,11 +8,12 @@ import (
 )
 
 type Transactor struct {
-	db *sql.DB
+	db    *sql.DB
+	store ports.ArtifactStore
 }
 
-func NewTransactor(db *sql.DB) *Transactor {
-	return &Transactor{db: db}
+func NewTransactor(db *sql.DB, store ports.ArtifactStore) *Transactor {
+	return &Transactor{db: db, store: store}
 }
 
 func (t *Transactor) WithinTransaction(
@@ -30,7 +31,7 @@ func (t *Transactor) WithinTransaction(
 		Tasks:     newTaskRepository(tx),
 		Runs:      newRunRepository(tx),
 		Approvals: newApprovalRepository(tx),
-		Artifacts: newArtifactRepository(tx),
+		Artifacts: newArtifactRepository(tx, t.store),
 		Leases:    newLeaseRepository(tx),
 	}
 

@@ -100,17 +100,82 @@ func (s Store) resolvePath(path string) (string, error) {
 		return "", err
 	}
 
-	relativePath, err := filepath.Rel(rootPath, candidate)
+	if err := ensureWithinRoot(rootPath, candidate, path); err != nil {
+		return "", err
+	}
+
+	resolvedCandidate, err := resolveExistingPath(candidate)
 	if err != nil {
 		return "", err
 	}
-	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("artifact path %q escapes root %q", path, rootPath)
+
+	resolvedRootPath, err := s.resolvedRootPath()
+	if err != nil {
+		return "", err
 	}
 
-	return candidate, nil
+	if err := ensureWithinRoot(resolvedRootPath, resolvedCandidate, path); err != nil {
+		return "", err
+	}
+
+	return resolvedCandidate, nil
 }
 
 func (s Store) rootPath() (string, error) {
 	return filepath.Abs(filepath.Clean(s.root))
+}
+
+func (s Store) resolvedRootPath() (string, error) {
+	rootPath, err := s.rootPath()
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := os.Lstat(rootPath); err != nil {
+		if os.IsNotExist(err) {
+			return rootPath, nil
+		}
+		return "", err
+	}
+
+	return filepath.EvalSymlinks(rootPath)
+}
+
+func resolveExistingPath(path string) (string, error) {
+	current := path
+	var suffix []string
+
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			resolvedCurrent, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolvedCurrent = filepath.Join(resolvedCurrent, suffix[i])
+			}
+			return filepath.Clean(resolvedCurrent), nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("resolve artifact path %q: no existing parent", path)
+		}
+
+		suffix = append(suffix, filepath.Base(current))
+		current = parent
+	}
+}
+
+func ensureWithinRoot(rootPath, candidate, original string) error {
+	relativePath, err := filepath.Rel(rootPath, candidate)
+	if err != nil {
+		return err
+	}
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("artifact path %q escapes root %q", original, rootPath)
+	}
+	return nil
 }

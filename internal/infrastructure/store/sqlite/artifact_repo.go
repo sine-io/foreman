@@ -3,36 +3,39 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/sine-io/foreman/internal/ports"
 )
 
 type ArtifactRepository struct {
-	db dbtx
+	db    dbtx
+	store ports.ArtifactStore
 }
 
-func NewArtifactRepository(db *sql.DB) *ArtifactRepository {
-	return newArtifactRepository(db)
+func NewArtifactRepository(db *sql.DB, store ports.ArtifactStore) *ArtifactRepository {
+	return newArtifactRepository(db, store)
 }
 
-func newArtifactRepository(db dbtx) *ArtifactRepository {
-	return &ArtifactRepository{db: db}
+func newArtifactRepository(db dbtx, store ports.ArtifactStore) *ArtifactRepository {
+	return &ArtifactRepository{db: db, store: store}
 }
 
 func (r *ArtifactRepository) Create(taskID, runID, kind, path string) (string, error) {
+	displayPath, err := r.store.ResolveDisplayPath(path)
+	if err != nil {
+		return "", err
+	}
+
 	id := fmt.Sprintf("artifact-%d", time.Now().UnixNano())
 	createdAt := sortableTimestamp(time.Now())
-	displayPath := sanitizeArtifactDisplayPath(path)
 
 	var runRef any
 	if runID != "" {
 		runRef = runID
 	}
 
-	_, err := r.db.Exec(
+	_, err = r.db.Exec(
 		`insert into artifacts (id, task_id, run_id, kind, path, storage_path, summary, created_at) values (?, ?, ?, ?, ?, ?, '', ?)`,
 		id,
 		taskID,
@@ -66,18 +69,4 @@ func (r *ArtifactRepository) Get(id string) (ports.ArtifactRecord, error) {
 		row.StoragePath = row.Path
 	}
 	return row, err
-}
-
-func sanitizeArtifactDisplayPath(path string) string {
-	cleaned := filepath.ToSlash(filepath.Clean(path))
-	if cleaned == "." {
-		return ""
-	}
-	if idx := strings.Index(cleaned, "/tasks/"); idx >= 0 {
-		return strings.TrimPrefix(cleaned[idx+1:], "/")
-	}
-	if idx := strings.Index(cleaned, "tasks/"); idx >= 0 {
-		return cleaned[idx:]
-	}
-	return strings.TrimLeft(cleaned, "/")
 }

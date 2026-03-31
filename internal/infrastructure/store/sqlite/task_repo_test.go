@@ -2,10 +2,12 @@ package sqlite
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/sine-io/foreman/internal/domain/approval"
+	"github.com/sine-io/foreman/internal/infrastructure/store/artifactfs"
 	"github.com/sine-io/foreman/internal/ports"
 	"github.com/stretchr/testify/require"
 )
@@ -25,9 +27,14 @@ func TestOnlyOneActiveLeaseCanExistForScope(t *testing.T) {
 func TestArtifactIndexRoundTrip(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
-	repo := NewArtifactRepository(db)
+	repo, root := newTestArtifactRepository(t, db)
 
-	id, err := repo.Create(taskID, "", "assistant_summary", "artifacts/tasks/task-1/assistant.txt")
+	id, err := repo.Create(
+		taskID,
+		"",
+		"assistant_summary",
+		filepath.Join(root, "tasks", "task-1", "assistant.txt"),
+	)
 	require.NoError(t, err)
 
 	row, err := repo.Get(id)
@@ -35,13 +42,13 @@ func TestArtifactIndexRoundTrip(t *testing.T) {
 	require.Equal(t, "assistant_summary", row.Kind)
 	require.Equal(t, taskID, row.TaskID)
 	require.Equal(t, "tasks/task-1/assistant.txt", row.Path)
-	require.Equal(t, "artifacts/tasks/task-1/assistant.txt", row.StoragePath)
+	require.Equal(t, filepath.Join(root, "tasks", "task-1", "assistant.txt"), row.StoragePath)
 }
 
 func TestArtifactRepositoryCreatePersistsRunID(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
-	repo := NewArtifactRepository(db)
+	repo, root := newTestArtifactRepository(t, db)
 
 	saveRunRow(t, db, ports.Run{
 		ID:         "run-1",
@@ -50,7 +57,12 @@ func TestArtifactRepositoryCreatePersistsRunID(t *testing.T) {
 		State:      "completed",
 	}, "2026-03-31T09:00:00.000000000Z")
 
-	id, err := repo.Create(taskID, "run-1", "assistant_summary", "/tmp/foreman/artifacts/tasks/task-1/assistant.txt")
+	id, err := repo.Create(
+		taskID,
+		"run-1",
+		"assistant_summary",
+		filepath.Join(root, "tasks", "task-1", "assistant.txt"),
+	)
 	require.NoError(t, err)
 
 	var runID string
@@ -59,10 +71,29 @@ func TestArtifactRepositoryCreatePersistsRunID(t *testing.T) {
 	require.Equal(t, "run-1", runID)
 }
 
+func TestArtifactRepositoryCreateUsesArtifactRootForDisplayPath(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo, root := newTestArtifactRepository(t, db)
+
+	id, err := repo.Create(
+		taskID,
+		"",
+		"assistant_summary",
+		filepath.Join(root, "assistant_summary.txt"),
+	)
+	require.NoError(t, err)
+
+	row, err := repo.Get(id)
+	require.NoError(t, err)
+	require.Equal(t, "assistant_summary.txt", row.Path)
+	require.Equal(t, filepath.Join(root, "assistant_summary.txt"), row.StoragePath)
+}
+
 func TestArtifactRepositoryGetRoundTripsRunID(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
-	repo := NewArtifactRepository(db)
+	repo, root := newTestArtifactRepository(t, db)
 
 	saveRunRow(t, db, ports.Run{
 		ID:         "run-1",
@@ -80,7 +111,7 @@ func TestArtifactRepositoryGetRoundTripsRunID(t *testing.T) {
 		"run-1",
 		"assistant_summary",
 		"tasks/task-1/assistant.txt",
-		"/tmp/foreman/artifacts/tasks/task-1/assistant.txt",
+		filepath.Join(root, "tasks", "task-1", "assistant.txt"),
 		"summary",
 		"2026-03-31T09:01:00.000000000Z",
 	)
@@ -89,7 +120,7 @@ func TestArtifactRepositoryGetRoundTripsRunID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "run-1", row.RunID)
 	require.Equal(t, "tasks/task-1/assistant.txt", row.Path)
-	require.Equal(t, "/tmp/foreman/artifacts/tasks/task-1/assistant.txt", row.StoragePath)
+	require.Equal(t, filepath.Join(root, "tasks", "task-1", "assistant.txt"), row.StoragePath)
 }
 
 func TestRunRepositoryFindByTaskUsesCreatedAtOrdering(t *testing.T) {
@@ -507,4 +538,13 @@ func readCreatedAt(t *testing.T, db *sql.DB, table, id string) string {
 	require.NoError(t, err)
 
 	return createdAt
+}
+
+func newTestArtifactRepository(t *testing.T, db *sql.DB) (*ArtifactRepository, string) {
+	t.Helper()
+
+	root := filepath.Join(t.TempDir(), "runtime-artifacts")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+
+	return NewArtifactRepository(db, artifactfs.New(root)), root
 }
