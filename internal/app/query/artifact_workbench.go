@@ -95,7 +95,8 @@ func (q *ArtifactWorkbenchQuery) Execute(artifactID string) (ArtifactWorkbenchVi
 }
 
 func artifactWorkbenchContentType(kind, path string) string {
-	switch ext := strings.ToLower(filepath.Ext(path)); ext {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
 	case ".txt", ".log", ".diff", ".patch":
 		return "text/plain; charset=utf-8"
 	case ".md":
@@ -110,7 +111,11 @@ func artifactWorkbenchContentType(kind, path string) string {
 		return "text/csv; charset=utf-8"
 	}
 
-	if contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); contentType != "" {
+	if contentType := approvedWorkbenchImageContentType(ext); contentType != "" {
+		return contentType
+	}
+
+	if contentType := mime.TypeByExtension(ext); contentType != "" {
 		return contentType
 	}
 
@@ -122,10 +127,21 @@ func artifactWorkbenchContentType(kind, path string) string {
 }
 
 func artifactWorkbenchPreviewable(contentType string) bool {
-	return strings.HasPrefix(contentType, "text/") ||
-		contentType == "application/json" ||
-		contentType == "application/xml" ||
-		contentType == "application/x-yaml"
+	mediaType := normalizedArtifactWorkbenchMediaType(contentType)
+	return strings.HasPrefix(mediaType, "text/") ||
+		mediaType == "application/json" ||
+		mediaType == "application/xml" ||
+		mediaType == "application/x-yaml"
+}
+
+func ArtifactWorkbenchAllowsInlineRawContent(contentType string) bool {
+	switch normalizedArtifactWorkbenchMediaType(contentType) {
+	case "text/plain", "text/markdown", "text/csv", "application/json", "application/x-yaml",
+		"image/png", "image/jpeg", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
 }
 
 func isTextLikeArtifactKind(kind string) bool {
@@ -138,6 +154,35 @@ func isTextLikeArtifactKind(kind string) bool {
 	default:
 		return false
 	}
+}
+
+func approvedWorkbenchImageContentType(ext string) string {
+	switch ext {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	default:
+		return ""
+	}
+}
+
+func normalizedArtifactWorkbenchMediaType(contentType string) string {
+	if strings.TrimSpace(contentType) == "" {
+		return ""
+	}
+
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mediaType = strings.TrimSpace(strings.Split(contentType, ";")[0])
+	}
+	return strings.ToLower(strings.TrimSpace(mediaType))
 }
 
 func artifactWorkbenchURL(artifactID string) string {

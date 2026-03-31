@@ -190,6 +190,48 @@ func TestManagerArtifactWorkbenchEndpointMapsBrokenLinkageTo500(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "artifact points to missing run")
 }
 
+func TestManagerArtifactContentEndpointKeepsRasterImagesInline(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-png/content", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "image/png", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Header().Get("Content-Disposition"), "inline;")
+	require.Equal(t, []byte{0x89, 0x50, 0x4e, 0x47}, rec.Body.Bytes())
+}
+
+func TestManagerArtifactContentEndpointKeepsBinaryArtifactsAsAttachment(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-binary/content", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "application/pdf", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Header().Get("Content-Disposition"), "attachment;")
+	require.Equal(t, "%PDF", rec.Body.String())
+}
+
+func TestManagerArtifactContentEndpointKeepsSVGAsAttachmentUnderCurrentPolicy(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-svg/content", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "image/svg+xml", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Header().Get("Content-Disposition"), "attachment;")
+	require.Equal(t, `<svg viewBox="0 0 10 10"></svg>`, rec.Body.String())
+}
+
 func TestManagerArtifactContentEndpointReturnsSafeHeaders(t *testing.T) {
 	cases := []struct {
 		name                    string
@@ -786,6 +828,57 @@ func (a *fakeManagerHTTPApp) ArtifactWorkbench(ctx context.Context, artifactID s
 				{ArtifactID: "artifact-html", Kind: "html_report", Summary: "Generated HTML report", Selected: true},
 			},
 		}, nil
+	case "artifact-png":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-png",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "screenshot",
+			Summary:         "PNG screenshot artifact",
+			Path:            "tasks/task-1/screenshot.png",
+			ContentType:     "image/png",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-png/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-png", Kind: "screenshot", Summary: "PNG screenshot artifact", Selected: true},
+			},
+		}, nil
+	case "artifact-binary":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-binary",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "report",
+			Summary:         "Binary PDF report",
+			Path:            "tasks/task-1/report.pdf",
+			ContentType:     "application/pdf",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-binary/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-binary", Kind: "report", Summary: "Binary PDF report", Selected: true},
+			},
+		}, nil
+	case "artifact-svg":
+		return manageragent.ArtifactWorkbenchView{
+			ArtifactID:      "artifact-svg",
+			RunID:           "run-1",
+			TaskID:          "task-1",
+			ProjectID:       "project-1",
+			ModuleID:        "module-1",
+			Kind:            "diagram",
+			Summary:         "SVG diagram artifact",
+			Path:            "tasks/task-1/diagram.svg",
+			ContentType:     "image/svg+xml",
+			RunWorkbenchURL: "/board/runs/workbench?run_id=run-1",
+			RawContentURL:   "/api/manager/artifacts/artifact-svg/content",
+			Siblings: []manageragent.ArtifactWorkbenchSibling{
+				{ArtifactID: "artifact-svg", Kind: "diagram", Summary: "SVG diagram artifact", Selected: true},
+			},
+		}, nil
 	default:
 		return manageragent.ArtifactWorkbenchView{
 			ArtifactID:       artifactID,
@@ -825,6 +918,27 @@ func (a *fakeManagerHTTPApp) ArtifactContent(ctx context.Context, artifactID str
 			ContentType: "text/html; charset=utf-8",
 			Size:        int64(len("<html><body>unsafe</body></html>")),
 			Reader:      &trackedReadCloser{Reader: strings.NewReader("<html><body>unsafe</body></html>")},
+		}, nil
+	case "artifact-png":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/screenshot.png",
+			ContentType: "image/png",
+			Size:        4,
+			Reader:      &trackedReadCloser{Reader: strings.NewReader(string([]byte{0x89, 0x50, 0x4e, 0x47}))},
+		}, nil
+	case "artifact-binary":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/report.pdf",
+			ContentType: "application/pdf",
+			Size:        int64(len("%PDF")),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader("%PDF")},
+		}, nil
+	case "artifact-svg":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/diagram.svg",
+			ContentType: "image/svg+xml",
+			Size:        int64(len(`<svg viewBox="0 0 10 10"></svg>`)),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader(`<svg viewBox="0 0 10 10"></svg>`)},
 		}, nil
 	case "artifact-xml":
 		return ManagerArtifactContent{

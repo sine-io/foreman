@@ -7,6 +7,7 @@ import (
 	stdhttp "net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sine-io/foreman/internal/adapters/gateway/openclaw"
@@ -276,7 +277,10 @@ func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapt
 		return httpadapter.ManagerArtifactContent{}, err
 	}
 
-	artifactPath := view.Path
+	artifactPath := strings.TrimSpace(view.Path)
+	if artifactPath == "" {
+		artifactPath = strings.TrimSpace(record.Path)
+	}
 	if artifactPath == "" {
 		artifactPath = displayPath
 	}

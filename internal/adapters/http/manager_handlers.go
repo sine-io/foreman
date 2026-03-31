@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sine-io/foreman/internal/app/command"
 	"github.com/sine-io/foreman/internal/app/manageragent"
+	"github.com/sine-io/foreman/internal/app/query"
 )
 
 type ManagerArtifactContent struct {
@@ -479,21 +480,7 @@ func artifactContentDisposition(artifactPath, contentType string) string {
 }
 
 func safeInlineArtifactContentType(contentType string) bool {
-	if strings.TrimSpace(contentType) == "" {
-		return false
-	}
-
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		mediaType = strings.TrimSpace(strings.Split(contentType, ";")[0])
-	}
-
-	switch mediaType {
-	case "text/plain", "text/markdown", "text/csv", "application/json", "application/x-yaml":
-		return true
-	default:
-		return false
-	}
+	return query.ArtifactWorkbenchAllowsInlineRawContent(contentType)
 }
 
 func runWorkbenchURL(runID string) string {
