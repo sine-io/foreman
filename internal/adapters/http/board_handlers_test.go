@@ -156,6 +156,18 @@ func TestArtifactCompareHTMLLoadsCompareAsset(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "/board/assets/artifact-compare.js")
 }
 
+func TestArtifactCompareJavaScriptUsesPreviousArtifactIDURLState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-compare.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "searchParams.get(\"previous_artifact_id\")")
+	require.Contains(t, rec.Body.String(), "searchParams.set(\"previous_artifact_id\", previousArtifactId)")
+}
+
 func TestArtifactWorkbenchHTMLLoadsRendererHelpers(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
