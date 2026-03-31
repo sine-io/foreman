@@ -310,6 +310,81 @@ func TestArtifactWorkbenchJavaScriptExtractsJSONErrorMessages(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "throw new Error(payload.error || `Request failed with status ${response.status}`);")
 }
 
+func TestArtifactRendererHelpersAssetServes(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-renderers.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "ForemanArtifactRenderers")
+	require.Contains(t, rec.Body.String(), "renderPreview")
+}
+
+func TestArtifactRendererHelpersIncludeJSONPrettyPrintPath(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-renderers.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "JSON.parse")
+	require.Contains(t, rec.Body.String(), "JSON.stringify(parsedPreview, null, 2)")
+}
+
+func TestArtifactRendererHelpersIncludeMarkdownRenderPath(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-renderers.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "renderMarkdownPreview")
+	require.Contains(t, rec.Body.String(), "text/markdown")
+}
+
+func TestArtifactRendererHelpersIncludeDiffDetectionByKindOrPath(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-renderers.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), ".diff")
+	require.Contains(t, rec.Body.String(), ".patch")
+	require.Contains(t, rec.Body.String(), "kind.includes(\"diff\")")
+}
+
+func TestArtifactRendererHelpersKeepMarkdownInert(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-renderers.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "escapeHTML")
+	require.Contains(t, rec.Body.String(), "<pre><code>")
+	require.NotContains(t, rec.Body.String(), "document.createElement(\"img\")")
+}
+
+func TestArtifactRendererHelpersRespectPreviewTruncation(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-renderers.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "preview_truncated")
+	require.Contains(t, rec.Body.String(), "truncated_preview")
+	require.Contains(t, rec.Body.String(), "Preview truncated to the workbench preview limit.")
+}
+
 func TestRunWorkbenchJavaScriptLinksLinkedArtifactsToArtifactWorkbench(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
