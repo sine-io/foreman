@@ -15,6 +15,8 @@
   const currentLocation = () => globalScope.location || globalThis.location || { search: "", pathname: "" };
   const currentHistory = () => globalScope.history || globalThis.history;
   const currentRenderers = () => globalScope.ForemanArtifactRenderers || globalThis.ForemanArtifactRenderers;
+  const currentLogErgonomics = () =>
+    globalScope.ForemanArtifactLogErgonomics || globalThis.ForemanArtifactLogErgonomics;
 
   const isPreviewableArtifact = (detail) => {
     const contentType = normalizeText(detail && detail.content_type);
@@ -80,11 +82,153 @@
     ${buildPreviewNoticeMarkup(truncatedNotice)}
   `;
 
-  const composeArtifactPreviewMarkup = (detail, options = {}) => {
+  const isStructuredRendererSuccess = (previewResult) => {
+    if (!previewResult || typeof previewResult !== "object") {
+      return false;
+    }
+
+    if (previewResult.output !== "text") {
+      if (previewResult.output === "html" && typeof previewResult.html === "string") {
+        return true;
+      }
+      return previewResult.output === "lines" && Array.isArray(previewResult.lines);
+    }
+
+    if (typeof previewResult.text !== "string") {
+      return false;
+    }
+
+    return previewResult.renderer !== "text";
+  };
+
+  const normalizePreviewExpansion = (previewExpansion, previewModel) => {
+    const canExpand = Boolean(
+      (previewModel && previewModel.expansion && previewModel.expansion.canExpand) ||
+        (previewModel && previewModel.teaser && previewModel.teaser.collapsed),
+    );
+
+    if (!previewExpansion || typeof previewExpansion !== "object") {
+      return {
+        canExpand,
+        expanded: canExpand
+          ? Boolean(previewModel && previewModel.expansion && previewModel.expansion.expanded)
+          : true,
+      };
+    }
+
+    return {
+      canExpand,
+      expanded: canExpand ? Boolean(previewExpansion.expanded) : true,
+    };
+  };
+
+  const previewLineElementID = (lineNumber) => `artifact-preview-line-${lineNumber}`;
+
+  const buildCollapsedTeaserCopy = (previewModel) => {
+    const visibleLineCount =
+      previewModel && previewModel.teaser && Array.isArray(previewModel.teaser.visibleLines)
+        ? previewModel.teaser.visibleLines.length
+        : 0;
+    const totalLineCount = Array.isArray(previewModel && previewModel.lines) ? previewModel.lines.length : 0;
+    const hiddenLineCount = Number(previewModel && previewModel.teaser && previewModel.teaser.hiddenLineCount) || 0;
+    const hiddenCharacterCount =
+      Number(previewModel && previewModel.teaser && previewModel.teaser.hiddenCharacterCount) || 0;
+
+    if (hiddenLineCount > 0) {
+      return `Showing first ${visibleLineCount} of ${totalLineCount} lines. Expand all to reveal ${hiddenLineCount} more lines from the bounded preview.`;
+    }
+
+    if (hiddenCharacterCount > 0) {
+      return `Showing the first ${visibleLineCount} line. Expand all to reveal ${hiddenCharacterCount} more characters from the bounded preview.`;
+    }
+
+    return "Expand all to inspect the full bounded preview.";
+  };
+
+  const buildSummaryNavigationMarkup = (previewModel) => {
+    const anchors =
+      previewModel &&
+      previewModel.navigation &&
+      Array.isArray(previewModel.navigation.anchors)
+        ? previewModel.navigation.anchors
+        : [];
+
+    if (!anchors.length) {
+      return "";
+    }
+
+    return `
+      <nav class="artifact-preview-summary-nav" aria-label="Preview navigation">
+        ${previewModel.navigation.anchors
+          .map((anchor) => {
+            const lineNumber = escapeHTML(String(anchor.lineNumber || ""));
+            return `
+              <button
+                type="button"
+                class="board-button board-button-secondary artifact-preview-nav-button"
+                data-artifact-preview-action="jump-to-line"
+                data-line-number="${lineNumber}"
+              >
+                Line ${lineNumber} · ${escapeHTML(anchor.label || "")}
+              </button>
+            `;
+          })
+          .join("")}
+      </nav>
+    `;
+  };
+
+  const buildLogLineMarkup = (line, targetLineNumber) => {
+    const lineNumber = Number.parseInt(line && line.lineNumber, 10);
+    const lineText = normalizeText(line && line.text);
+    const isTargeted = Number.isFinite(targetLineNumber) && targetLineNumber > 0 && lineNumber === targetLineNumber;
+    const targetedClass = isTargeted ? " is-targeted" : "";
+    return `
+      <div class="artifact-preview-log-line${targetedClass}" id="${escapeHTML(previewLineElementID(lineNumber))}">
+        <span class="artifact-preview-line-number">${escapeHTML(String(lineNumber))}</span>
+        <span class="artifact-preview-line-text">${lineText ? escapeHTML(lineText) : "&nbsp;"}</span>
+      </div>
+    `;
+  };
+
+  const buildLongTextPreviewMarkup = (previewModel, options = {}) => {
+    const visibleLines = previewModel.expansion.expanded ? previewModel.lines : previewModel.teaser.visibleLines;
+    const teaserMarkup =
+      previewModel.expansion.canExpand && !previewModel.expansion.expanded
+        ? `<p class="detail-copy artifact-preview-teaser-note">${escapeHTML(buildCollapsedTeaserCopy(previewModel))}</p>`
+        : "";
+    const expandControlMarkup =
+      previewModel.expansion.canExpand && !previewModel.expansion.expanded
+        ? `
+          <div class="artifact-preview-controls">
+            <button
+              type="button"
+              class="board-button board-button-secondary artifact-preview-expand-button"
+              data-artifact-preview-action="expand-all"
+            >
+              Expand all
+            </button>
+          </div>
+        `
+        : "";
+
+    return `
+      ${buildSummaryNavigationMarkup(previewModel)}
+      ${teaserMarkup}
+      ${expandControlMarkup}
+      <div class="artifact-preview artifact-preview-log" data-expanded="${previewModel.expansion.expanded ? "true" : "false"}">
+        ${visibleLines.map((line) => buildLogLineMarkup(line, options.targetLineNumber)).join("")}
+      </div>
+      ${buildPreviewNoticeMarkup(options.truncatedNotice || "")}
+    `;
+  };
+
+  const buildArtifactPreviewViewModel = (detail, options = {}) => {
     const normalizedDetail = detail && typeof detail === "object" ? detail : {};
     const previewContent = normalizedDetail.preview ?? "";
     const rawContentLink = options.rawContentLinkMarkup || buildRawContentLinkMarkup(normalizedDetail);
     const renderers = options.renderers || currentRenderers();
+    const logErgonomics = options.logErgonomics || currentLogErgonomics();
     const genericTruncationNotice = resolveTruncationNotice(normalizedDetail, renderers);
     const renderGenericPreview = (previewText = previewContent, previewResult = {}) => {
       const truncatedNotice =
@@ -92,23 +236,88 @@
           ? previewResult.truncated_notice
           : genericTruncationNotice;
       const extraClasses = previewResult.renderer === "json" ? "artifact-preview-json" : "";
-      return wrapPreviewSection(
-        "Bounded Preview",
-        buildTextPreviewMarkup(previewText, {
-          extraClasses,
-          truncatedNotice,
-        }),
-      );
+
+      if (
+        previewResult.output === "text" &&
+        typeof previewResult.text === "string" &&
+        previewResult.renderer === "text"
+      ) {
+        try {
+          if (logErgonomics && typeof logErgonomics.buildLogErgonomicsModel === "function") {
+            const previewModel = logErgonomics.buildLogErgonomicsModel(normalizedDetail, previewResult);
+            if (previewModel && typeof previewModel === "object" && previewModel.eligible) {
+              const numberedLines =
+                Array.isArray(previewModel.lines) && previewModel.lines.length
+                  ? previewModel.lines
+                  : typeof logErgonomics.renderLineNumberedText === "function"
+                    ? logErgonomics.renderLineNumberedText(previewText)
+                    : [];
+              const teaser =
+                previewModel.teaser &&
+                typeof previewModel.teaser === "object" &&
+                Array.isArray(previewModel.teaser.visibleLines)
+                  ? previewModel.teaser
+                  : typeof logErgonomics.sliceCollapsedTeaser === "function"
+                    ? logErgonomics.sliceCollapsedTeaser(numberedLines)
+                    : {
+                        collapsed: false,
+                        hiddenCharacterCount: 0,
+                        hiddenLineCount: 0,
+                        visibleLines: numberedLines,
+                      };
+              const longTextPreviewModel = {
+                ...previewModel,
+                expansion: normalizePreviewExpansion(options.previewExpansion, {
+                  ...previewModel,
+                  teaser,
+                }),
+                lines: numberedLines,
+                teaser,
+              };
+
+              return {
+                markup: wrapPreviewSection(
+                  "Bounded Preview",
+                  buildLongTextPreviewMarkup(longTextPreviewModel, {
+                    targetLineNumber: options.targetLineNumber,
+                    truncatedNotice,
+                  }),
+                ),
+                previewModel: longTextPreviewModel,
+                previewResult,
+              };
+            }
+          }
+        } catch (_error) {
+          // Fall through to the existing generic text rendering when ergonomics fail.
+        }
+      }
+
+      return {
+        markup: wrapPreviewSection(
+          "Bounded Preview",
+          buildTextPreviewMarkup(previewText, {
+            extraClasses,
+            truncatedNotice,
+          }),
+        ),
+        previewModel: null,
+        previewResult,
+      };
     };
 
     if (!isPreviewableArtifact(normalizedDetail)) {
-      return wrapPreviewSection(
-        "Preview",
-        `
-          <p class="detail-copy">Inline preview is unavailable for this artifact type. Use the raw artifact link for the original content.</p>
-          ${rawContentLink}
-        `,
-      );
+      return {
+        markup: wrapPreviewSection(
+          "Preview",
+          `
+            <p class="detail-copy">Inline preview is unavailable for this artifact type. Use the raw artifact link for the original content.</p>
+            ${rawContentLink}
+          `,
+        ),
+        previewModel: null,
+        previewResult: null,
+      };
     }
 
     try {
@@ -126,18 +335,40 @@
           ? previewResult.truncated_notice
           : genericTruncationNotice;
 
-      if (previewResult.output === "html" && typeof previewResult.html === "string") {
-        return wrapPreviewSection(
-          "Bounded Preview",
-          buildMarkdownPreviewMarkup(previewResult.html, truncatedNotice),
-        );
-      }
+      if (isStructuredRendererSuccess(previewResult)) {
+        if (previewResult.output === "html" && typeof previewResult.html === "string") {
+          return {
+            markup: wrapPreviewSection(
+              "Bounded Preview",
+              buildMarkdownPreviewMarkup(previewResult.html, truncatedNotice),
+            ),
+            previewModel: null,
+            previewResult,
+          };
+        }
 
-      if (previewResult.output === "lines" && Array.isArray(previewResult.lines)) {
-        return wrapPreviewSection(
-          "Bounded Preview",
-          buildDiffPreviewMarkup(previewResult.lines, truncatedNotice),
-        );
+        if (previewResult.output === "lines" && Array.isArray(previewResult.lines)) {
+          return {
+            markup: wrapPreviewSection(
+              "Bounded Preview",
+              buildDiffPreviewMarkup(previewResult.lines, truncatedNotice),
+            ),
+            previewModel: null,
+            previewResult,
+          };
+        }
+
+        return {
+          markup: wrapPreviewSection(
+            "Bounded Preview",
+            buildTextPreviewMarkup(previewResult.text, {
+              extraClasses: previewResult.renderer === "json" ? "artifact-preview-json" : "",
+              truncatedNotice,
+            }),
+          ),
+          previewModel: null,
+          previewResult,
+        };
       }
 
       return renderGenericPreview(
@@ -148,6 +379,9 @@
       return renderGenericPreview();
     }
   };
+
+  const composeArtifactPreviewMarkup = (detail, options = {}) =>
+    buildArtifactPreviewViewModel(detail, options).markup;
 
   const api = {
     composeArtifactPreviewMarkup,
@@ -180,6 +414,8 @@
     detailState: "idle",
     notice: "",
     noticeTone: "info",
+    previewExpansion: null,
+    previewTargetLineNumber: 0,
     requestToken: 0,
   };
 
@@ -314,10 +550,18 @@
 
     const detail = state.detail;
     const rawContentLink = buildRawContentLinkMarkup(detail);
-    const previewMarkup = composeArtifactPreviewMarkup(detail, {
+    const previewViewModel = buildArtifactPreviewViewModel(detail, {
       rawContentLinkMarkup: rawContentLink,
       renderers: currentRenderers(),
+      logErgonomics: currentLogErgonomics(),
+      previewExpansion: state.previewExpansion,
+      targetLineNumber: state.previewTargetLineNumber,
     });
+    const previewMarkup = previewViewModel.markup;
+    state.previewExpansion = previewViewModel.previewModel ? previewViewModel.previewModel.expansion : null;
+    if (!previewViewModel.previewModel) {
+      state.previewTargetLineNumber = 0;
+    }
 
     detailRoot.innerHTML = `
       <article class="approval-detail-card">
@@ -396,6 +640,32 @@
     renderDetail();
   };
 
+  const parseLineNumber = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+
+  const scrollToPreviewLine = (lineNumber) => {
+    const parsedLineNumber = parseLineNumber(lineNumber);
+    if (!parsedLineNumber) {
+      return;
+    }
+
+    const targetNode = documentRef.getElementById(previewLineElementID(parsedLineNumber));
+    if (!targetNode || typeof targetNode.scrollIntoView !== "function") {
+      return;
+    }
+
+    const requestAnimationFrameRef =
+      globalScope.requestAnimationFrame || globalThis.requestAnimationFrame || null;
+    if (typeof requestAnimationFrameRef === "function") {
+      requestAnimationFrameRef(() => targetNode.scrollIntoView({ block: "center" }));
+      return;
+    }
+
+    targetNode.scrollIntoView({ block: "center" });
+  };
+
   const fetchJSON = async (url, options) => {
     const response = await fetch(url, options);
     if (response.status === 404) {
@@ -444,6 +714,8 @@
       if (detail.notFound) {
         state.detail = null;
         state.detailState = "not_found";
+        state.previewExpansion = null;
+        state.previewTargetLineNumber = 0;
         renderWorkbench();
         setStatus(`Artifact ${requestedArtifactId} not found.`, "danger");
         return;
@@ -453,6 +725,8 @@
         state.detail = null;
         state.detailState = "conflict";
         state.notice = detail.message || "Artifact is not linked to one exact run.";
+        state.previewExpansion = null;
+        state.previewTargetLineNumber = 0;
         renderWorkbench();
         setStatus(`Artifact ${requestedArtifactId} is not linked to one exact run.`, "warning");
         return;
@@ -460,6 +734,8 @@
 
       state.detail = detail;
       state.detailState = "ready";
+      state.previewExpansion = null;
+      state.previewTargetLineNumber = 0;
       renderWorkbench();
       setStatus(`Loaded ${requestedArtifactId}.`);
     } catch (error) {
@@ -472,6 +748,8 @@
       state.detailState = "error";
       state.notice = error.message || "Failed to load artifact workbench.";
       state.noticeTone = "danger";
+      state.previewExpansion = null;
+      state.previewTargetLineNumber = 0;
       renderWorkbench();
       setStatus(`Failed to load ${requestedArtifactId}.`, "danger");
     }
@@ -488,6 +766,56 @@
   artifactInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       refreshWorkbench();
+    }
+  });
+  detailRoot.addEventListener("click", (event) => {
+    const target = event && event.target;
+    const actionNode =
+      target && typeof target.closest === "function"
+        ? target.closest("[data-artifact-preview-action]")
+        : null;
+
+    if (!actionNode || !actionNode.dataset) {
+      return;
+    }
+
+    if (typeof event.preventDefault === "function") {
+      event.preventDefault();
+    }
+
+    const action = actionNode.dataset.artifactPreviewAction;
+    if (action === "expand-all" && state.previewExpansion && state.previewExpansion.canExpand) {
+      const logErgonomics = currentLogErgonomics();
+      state.previewExpansion =
+        logErgonomics && typeof logErgonomics.expandAllState === "function"
+          ? logErgonomics.expandAllState(state.previewExpansion)
+          : {
+              ...state.previewExpansion,
+              expanded: true,
+            };
+      renderDetail();
+      return;
+    }
+
+    if (action === "jump-to-line") {
+      const lineNumber = parseLineNumber(actionNode.dataset.lineNumber);
+      if (!lineNumber) {
+        return;
+      }
+
+      state.previewTargetLineNumber = lineNumber;
+      if (state.previewExpansion && state.previewExpansion.canExpand && !state.previewExpansion.expanded) {
+        const logErgonomics = currentLogErgonomics();
+        state.previewExpansion =
+          logErgonomics && typeof logErgonomics.expandAllState === "function"
+            ? logErgonomics.expandAllState(state.previewExpansion)
+            : {
+                ...state.previewExpansion,
+                expanded: true,
+              };
+      }
+      renderDetail();
+      scrollToPreviewLine(lineNumber);
     }
   });
 

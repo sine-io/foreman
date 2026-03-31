@@ -148,6 +148,22 @@ func TestArtifactWorkbenchHTMLLoadsRendererHelpers(t *testing.T) {
 	require.Less(t, renderersIndex, workbenchIndex)
 }
 
+func TestArtifactWorkbenchHTMLLoadsLogErgonomicsHelpers(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/artifacts/workbench?artifact_id=artifact-1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	body := rec.Body.String()
+	logErgonomicsIndex := strings.Index(body, "/board/assets/artifact-log-ergonomics.js")
+	workbenchIndex := strings.Index(body, "/board/assets/artifact-workbench.js")
+	require.NotEqual(t, -1, logErgonomicsIndex)
+	require.NotEqual(t, -1, workbenchIndex)
+	require.Less(t, logErgonomicsIndex, workbenchIndex)
+}
+
 func TestRunWorkbenchPageServes(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -324,6 +340,89 @@ func TestArtifactWorkbenchJavaScriptExtractsJSONErrorMessages(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "payload.error")
 	require.Contains(t, rec.Body.String(), "return { conflict: true, message: payload.error || \"Artifact is not linked to one exact run.\" };")
 	require.Contains(t, rec.Body.String(), "throw new Error(payload.error || `Request failed with status ${response.status}`);")
+}
+
+func TestArtifactWorkbenchJavaScriptUsesLineNumberRenderingForLongText(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "renderLineNumberedText")
+	require.Contains(t, rec.Body.String(), "artifact-preview-line-number")
+}
+
+func TestArtifactWorkbenchJavaScriptUsesCollapsedTeaserForLongText(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "previewModel.teaser.visibleLines")
+	require.Contains(t, rec.Body.String(), "hiddenLineCount")
+}
+
+func TestArtifactWorkbenchJavaScriptShowsExpandAllControl(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Expand all")
+	require.Contains(t, rec.Body.String(), "data-artifact-preview-action=\"expand-all\"")
+}
+
+func TestArtifactWorkbenchJavaScriptShowsSummaryNavigationForLongText(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact-preview-summary-nav")
+	require.Contains(t, rec.Body.String(), "previewModel.navigation.anchors")
+}
+
+func TestArtifactWorkbenchJavaScriptResetsCollapsedStateOnSiblingChange(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "state.previewExpansion = null;")
+}
+
+func TestArtifactWorkbenchJavaScriptKeepsStructuredRendererPrecedence(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "previewResult.renderer !== \"text\"")
+	require.Contains(t, rec.Body.String(), "previewResult.output !== \"text\"")
+}
+
+func TestArtifactWorkbenchJavaScriptKeepsTruncationWarningVisibleWhenExpanded(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact-preview-notice")
+	require.Contains(t, rec.Body.String(), "buildPreviewNoticeMarkup(truncatedNotice)")
 }
 
 func TestArtifactRendererHelpersAssetServes(t *testing.T) {

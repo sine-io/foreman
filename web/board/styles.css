@@ -576,6 +576,67 @@ body {
   white-space: pre-wrap;
 }
 
+.artifact-preview-summary-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.artifact-preview-nav-button {
+  min-height: 0;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.artifact-preview-controls {
+  display: flex;
+  margin-bottom: 0.85rem;
+}
+
+.artifact-preview-expand-button {
+  min-height: 0;
+}
+
+.artifact-preview-teaser-note {
+  margin-bottom: 0.6rem;
+  color: #6d5e4c;
+}
+
+.artifact-preview-log {
+  display: grid;
+  gap: 0;
+  padding: 0.35rem 0;
+  max-height: none;
+  overflow: visible;
+  white-space: normal;
+}
+
+.artifact-preview-log-line {
+  display: grid;
+  grid-template-columns: minmax(2.7rem, max-content) minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+  padding: 0.12rem 1rem;
+}
+
+.artifact-preview-log-line.is-targeted {
+  background: #efe4d4;
+}
+
+.artifact-preview-line-number {
+  color: #8a7b66;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.artifact-preview-line-text {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .artifact-preview-json {
   background: #f7f1e7;
 }
