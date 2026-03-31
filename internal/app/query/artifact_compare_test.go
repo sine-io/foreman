@@ -267,6 +267,55 @@ func TestArtifactCompareReturnsUnsupportedForBinaryArtifactKinds(t *testing.T) {
 	require.NotEmpty(t, view.Messages.Detail)
 }
 
+func TestArtifactCompareReturnsUnsupportedWhenCurrentArtifactHasNoPreviousComparableArtifact(t *testing.T) {
+	harness := newArtifactWorkbenchHarness(t)
+	harness.seedTask(t, "project-1", "module-1", "task-1")
+	harness.saveRun(t, ports.Run{
+		ID:         "run-1",
+		TaskID:     "task-1",
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T09:00:00.000000000Z")
+	harness.saveRun(t, ports.Run{
+		ID:         "run-2",
+		TaskID:     "task-1",
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T10:00:00.000000000Z")
+	harness.writeArtifactFile(t, "tasks/task-1/shot-first.png", string([]byte{0x89, 'P', 'N', 'G'}))
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-later.txt", "later\n")
+	harness.saveArtifact(t, artifactSeed{
+		ID:          "artifact-first",
+		TaskID:      "task-1",
+		RunID:       "run-1",
+		Kind:        "screenshot",
+		Path:        "tasks/task-1/shot-first.png",
+		StoragePath: "tasks/task-1/shot-first.png",
+		Summary:     "First screenshot",
+		CreatedAt:   "2026-03-31T09:01:00.000000000Z",
+	})
+	harness.saveArtifact(t, artifactSeed{
+		ID:          "artifact-later",
+		TaskID:      "task-1",
+		RunID:       "run-2",
+		Kind:        "assistant_summary",
+		Path:        "tasks/task-1/assistant-later.txt",
+		StoragePath: "tasks/task-1/assistant-later.txt",
+		Summary:     "Later summary",
+		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
+	})
+
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-first")
+	require.NoError(t, err)
+	require.Equal(t, "artifact-first", view.Current.ArtifactID)
+	require.Equal(t, "unsupported", view.Status)
+	require.Nil(t, view.Previous)
+	require.Equal(t, "image/png", view.Current.ContentType)
+	require.Nil(t, view.Diff)
+	require.NotEmpty(t, view.Messages.Title)
+	require.NotEmpty(t, view.Messages.Detail)
+}
+
 func TestArtifactCompareReturnsReadyForJSONArtifacts(t *testing.T) {
 	harness := newArtifactWorkbenchHarness(t)
 	harness.seedTask(t, "project-1", "module-1", "task-1")
@@ -316,51 +365,72 @@ func TestArtifactCompareReturnsReadyForJSONArtifacts(t *testing.T) {
 }
 
 func TestArtifactCompareReturnsTooLargeWhenEitherArtifactExceedsLimit(t *testing.T) {
-	harness := newArtifactWorkbenchHarness(t)
-	harness.seedTask(t, "project-1", "module-1", "task-1")
-	harness.saveRun(t, ports.Run{
-		ID:         "run-1",
-		TaskID:     "task-1",
-		RunnerKind: "codex",
-		State:      "completed",
-	}, "2026-03-31T09:00:00.000000000Z")
-	harness.saveRun(t, ports.Run{
-		ID:         "run-2",
-		TaskID:     "task-1",
-		RunnerKind: "codex",
-		State:      "completed",
-	}, "2026-03-31T10:00:00.000000000Z")
-	harness.writeArtifactFile(t, "tasks/task-1/assistant-prev.txt", "small\n")
-	harness.writeArtifactFile(t, "tasks/task-1/assistant-current.txt", strings.Repeat("x", artifactCompareMaxBytes+1))
-	harness.saveArtifact(t, artifactSeed{
-		ID:          "artifact-prev",
-		TaskID:      "task-1",
-		RunID:       "run-1",
-		Kind:        "assistant_summary",
-		Path:        "tasks/task-1/assistant-prev.txt",
-		StoragePath: "tasks/task-1/assistant-prev.txt",
-		Summary:     "Previous summary",
-		CreatedAt:   "2026-03-31T09:01:00.000000000Z",
-	})
-	harness.saveArtifact(t, artifactSeed{
-		ID:          "artifact-current",
-		TaskID:      "task-1",
-		RunID:       "run-2",
-		Kind:        "assistant_summary",
-		Path:        "tasks/task-1/assistant-current.txt",
-		StoragePath: "tasks/task-1/assistant-current.txt",
-		Summary:     "Current summary",
-		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
-	})
+	testCases := []struct {
+		name            string
+		previousContent string
+		currentContent  string
+	}{
+		{
+			name:            "previous artifact exceeds limit",
+			previousContent: strings.Repeat("p", artifactCompareMaxBytes+1),
+			currentContent:  "small\n",
+		},
+		{
+			name:            "current artifact exceeds limit",
+			previousContent: "small\n",
+			currentContent:  strings.Repeat("c", artifactCompareMaxBytes+1),
+		},
+	}
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
-	require.NoError(t, err)
-	require.Equal(t, "too_large", view.Status)
-	require.NotNil(t, view.Previous)
-	require.Nil(t, view.Diff)
-	require.Equal(t, artifactCompareMaxBytes, view.Limits.MaxCompareBytes)
-	require.NotEmpty(t, view.Messages.Title)
-	require.NotEmpty(t, view.Messages.Detail)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			harness := newArtifactWorkbenchHarness(t)
+			harness.seedTask(t, "project-1", "module-1", "task-1")
+			harness.saveRun(t, ports.Run{
+				ID:         "run-1",
+				TaskID:     "task-1",
+				RunnerKind: "codex",
+				State:      "completed",
+			}, "2026-03-31T09:00:00.000000000Z")
+			harness.saveRun(t, ports.Run{
+				ID:         "run-2",
+				TaskID:     "task-1",
+				RunnerKind: "codex",
+				State:      "completed",
+			}, "2026-03-31T10:00:00.000000000Z")
+			harness.writeArtifactFile(t, "tasks/task-1/assistant-prev.txt", tc.previousContent)
+			harness.writeArtifactFile(t, "tasks/task-1/assistant-current.txt", tc.currentContent)
+			harness.saveArtifact(t, artifactSeed{
+				ID:          "artifact-prev",
+				TaskID:      "task-1",
+				RunID:       "run-1",
+				Kind:        "assistant_summary",
+				Path:        "tasks/task-1/assistant-prev.txt",
+				StoragePath: "tasks/task-1/assistant-prev.txt",
+				Summary:     "Previous summary",
+				CreatedAt:   "2026-03-31T09:01:00.000000000Z",
+			})
+			harness.saveArtifact(t, artifactSeed{
+				ID:          "artifact-current",
+				TaskID:      "task-1",
+				RunID:       "run-2",
+				Kind:        "assistant_summary",
+				Path:        "tasks/task-1/assistant-current.txt",
+				StoragePath: "tasks/task-1/assistant-current.txt",
+				Summary:     "Current summary",
+				CreatedAt:   "2026-03-31T10:01:00.000000000Z",
+			})
+
+			view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
+			require.NoError(t, err)
+			require.Equal(t, "too_large", view.Status)
+			require.NotNil(t, view.Previous)
+			require.Nil(t, view.Diff)
+			require.Equal(t, artifactCompareMaxBytes, view.Limits.MaxCompareBytes)
+			require.NotEmpty(t, view.Messages.Title)
+			require.NotEmpty(t, view.Messages.Detail)
+		})
+	}
 }
 
 func TestArtifactCompareIncludesCurrentAndPreviousWorkbenchURLs(t *testing.T) {

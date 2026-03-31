@@ -84,6 +84,9 @@ func (q *ArtifactCompareQuery) Execute(artifactID string) (ArtifactCompareView, 
 	}
 
 	if row.Previous == nil {
+		if !artifactCompareSupported(view.Current.ContentType) {
+			view.Status = artifactCompareStatusUnsupported
+		}
 		view.Messages = artifactCompareMessages(view.Status, artifactCompareMaxBytes)
 		return view, nil
 	}
