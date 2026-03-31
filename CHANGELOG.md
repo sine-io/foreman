@@ -101,6 +101,12 @@
 - Recorded that approved raster image types preview inline for `image/png`, `image/jpeg`, `image/gif`, and `image/webp`
 - Recorded that `image/svg+xml` remains best-effort under the current safety policy while non-image binary artifacts stay on the metadata/download fallback path
 
+### Phase 2 Artifact Compare
+
+- Documented the dedicated compare page at `/board/artifacts/compare?artifact_id=<artifact-id>` and the manager compare API at `GET /api/manager/artifacts/:id/compare`
+- Recorded that compare is read-only and limited to the current artifact versus the immediately previous same-task same-kind text artifact
+- Added an optional browser-only compare smoke path that covers `ready`, `no_previous`, and `unsupported` style outcomes without introducing manual history selection
+
 ## 2026-03-30
 
 ### Phase 2 Run Workbench

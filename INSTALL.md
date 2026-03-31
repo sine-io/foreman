@@ -292,6 +292,32 @@ Expected outcomes:
 - unsupported or short content still uses the simpler preview path
 - truncation warnings remain visible in both collapsed and expanded states
 
+## Artifact Compare Smoke (Optional Browser Check)
+
+With `foreman serve` running, you can manually verify artifact compare if you already have two comparable text artifacts with the same `task_id` and `kind` across different runs. The earlier artifact workbench smokes do not guarantee that this history exists.
+
+1. Identify a current text-like artifact whose immediately previous same-task same-kind artifact also exists. Note the current `artifact_id`. If the artifact is image/binary-only or has no earlier comparable history, this optional check will exercise `unsupported` or `no_previous` instead of the ready diff path.
+
+2. Read the manager compare view.
+
+```bash
+curl http://localhost:8080/api/manager/artifacts/<artifact-id>/compare
+```
+
+3. Open the compare page in a browser.
+
+```bash
+curl http://localhost:8080/board/artifacts/compare?artifact_id=<artifact-id>
+```
+
+Expected outcomes:
+
+- `GET /api/manager/artifacts/<artifact-id>/compare` returns the compare DTO with stable `current`, nullable `previous`, nullable `diff`, `limits`, `messages`, and `navigation`
+- `GET /board/artifacts/compare?artifact_id=<artifact-id>` serves the dedicated compare page shell
+- when a previous comparable text artifact exists, the browser shows a unified diff for the current artifact versus the immediately previous same-task same-kind artifact
+- `Back to current artifact` and `Back to run workbench` stay available as the only compare-page navigation links besides `Refresh compare`
+- if no previous comparable artifact exists, or the artifact type is unsupported, the compare page stays read-only and shows the corresponding manager-driven state instead of failing open or allowing manual history selection
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:
