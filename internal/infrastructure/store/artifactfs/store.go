@@ -68,7 +68,7 @@ func (s Store) ResolveDisplayPath(path string) (string, error) {
 		return "", err
 	}
 
-	rootPath, err := s.rootPath()
+	rootPath, err := s.resolvedRootPath()
 	if err != nil {
 		return "", err
 	}

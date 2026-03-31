@@ -31,6 +31,21 @@ func TestArtifactStoreResolveDisplayPathStripsArtifactRoot(t *testing.T) {
 	require.Equal(t, "tasks/task-1/assistant_summary.txt", displayPath)
 }
 
+func TestArtifactStoreResolveDisplayPathStripsSymlinkedArtifactRoot(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real-runtime-artifacts")
+	rootLink := filepath.Join(parent, "runtime-artifacts")
+	store := New(rootLink)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "tasks", "task-1"), 0o755))
+	require.NoError(t, os.Symlink(realRoot, rootLink))
+
+	displayPath, err := store.ResolveDisplayPath(filepath.Join(rootLink, "tasks", "task-1", "assistant_summary.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "tasks/task-1/assistant_summary.txt", displayPath)
+	require.NotContains(t, displayPath, "..")
+}
+
 func TestArtifactStoreReadPreviewRejectsSymlinkEscape(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "runtime-artifacts")
 	outsideDir := t.TempDir()

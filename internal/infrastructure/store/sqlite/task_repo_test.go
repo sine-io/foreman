@@ -90,6 +90,27 @@ func TestArtifactRepositoryCreateUsesArtifactRootForDisplayPath(t *testing.T) {
 	require.Equal(t, filepath.Join(root, "assistant_summary.txt"), row.StoragePath)
 }
 
+func TestArtifactRepositoryCreateUsesSymlinkedArtifactRootForDisplayPath(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo, rootLink, realRoot := newTestArtifactRepositoryWithSymlinkedRoot(t, db)
+
+	id, err := repo.Create(
+		taskID,
+		"",
+		"assistant_summary",
+		filepath.Join(rootLink, "tasks", "task-1", "assistant_summary.txt"),
+	)
+	require.NoError(t, err)
+
+	row, err := repo.Get(id)
+	require.NoError(t, err)
+	require.Equal(t, "tasks/task-1/assistant_summary.txt", row.Path)
+	require.NotContains(t, row.Path, "..")
+	require.Equal(t, filepath.Join(rootLink, "tasks", "task-1", "assistant_summary.txt"), row.StoragePath)
+	require.NotEqual(t, filepath.Join(realRoot, "tasks", "task-1", "assistant_summary.txt"), row.Path)
+}
+
 func TestArtifactRepositoryGetRoundTripsRunID(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)
@@ -547,4 +568,16 @@ func newTestArtifactRepository(t *testing.T, db *sql.DB) (*ArtifactRepository, s
 	require.NoError(t, os.MkdirAll(root, 0o755))
 
 	return NewArtifactRepository(db, artifactfs.New(root)), root
+}
+
+func newTestArtifactRepositoryWithSymlinkedRoot(t *testing.T, db *sql.DB) (*ArtifactRepository, string, string) {
+	t.Helper()
+
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real-runtime-artifacts")
+	rootLink := filepath.Join(parent, "runtime-artifacts")
+	require.NoError(t, os.MkdirAll(realRoot, 0o755))
+	require.NoError(t, os.Symlink(realRoot, rootLink))
+
+	return NewArtifactRepository(db, artifactfs.New(rootLink)), rootLink, realRoot
 }
