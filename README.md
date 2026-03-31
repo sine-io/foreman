@@ -72,6 +72,7 @@ These stay in outer layers. Domain and application code should not depend on fra
 - [`docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-29-foreman-task-detail-workbench-design.md): task-detail workbench design
 - [`docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-30-foreman-run-detail-workbench-design.md): run-detail workbench design
 - [`docs/superpowers/specs/2026-03-31-foreman-artifact-workbench-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-31-foreman-artifact-workbench-design.md): artifact workbench design
+- [`docs/superpowers/specs/2026-03-31-foreman-artifact-renderer-polish-design.md`](/root/link/repo/docs/superpowers/specs/2026-03-31-foreman-artifact-renderer-polish-design.md): artifact renderer polish design
 - [`docs/superpowers/plans/2026-03-27-foreman-go-phase-1.md`](/root/link/repo/docs/superpowers/plans/2026-03-27-foreman-go-phase-1.md): current implementation plan
 - [`docs/superpowers/plans/2026-03-28-foreman-phase-2-manager-contract.md`](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-manager-contract.md): first Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-28-foreman-phase-2-control-plane-hardening.md`](/root/link/repo/docs/superpowers/plans/2026-03-28-foreman-phase-2-control-plane-hardening.md): second Phase 2 execution plan
