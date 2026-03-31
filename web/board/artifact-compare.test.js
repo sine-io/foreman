@@ -461,10 +461,9 @@ test('boot path fetches compare using previous_artifact_id from URL', async () =
   }
 });
 
-test('invalid previous_artifact_id falls back to default compare target and clears URL state', async () => {
+test('invalid previous_artifact_id stays on the requested URL and shows an error state', async () => {
   const nodes = new Map();
   const listeners = new Map();
-  const historyCalls = [];
   const requests = [];
   const makeNode = () => ({
     innerHTML: '',
@@ -495,13 +494,7 @@ test('invalid previous_artifact_id falls back to default compare target and clea
   };
   global.window = {
     location: { search: '?artifact_id=artifact-current&previous_artifact_id=artifact-stale', pathname: '/board/artifacts/compare' },
-    history: {
-      replaceState(_state, _title, url) {
-        historyCalls.push(url);
-        const parsed = new URL(url, 'http://localhost');
-        global.window.location.search = parsed.search;
-      },
-    },
+    history: { replaceState() {} },
     addEventListener(type, listener) {
       listeners.set(type, listener);
     },
@@ -541,19 +534,18 @@ test('invalid previous_artifact_id falls back to default compare target and clea
     require(compareModulePath);
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(
       requests[0],
       '/api/manager/artifacts/artifact-current/compare?previous_artifact_id=artifact-stale',
     );
+    assert.equal(requests.length, 1);
+    assert.match(nodes.get('artifact-compare-result').innerHTML, /artifact compare selection invalid: stale target/);
+    assert.match(nodes.get('artifact-compare-current').innerHTML, /Artifact metadata will appear here/);
     assert.equal(
-      requests[1],
-      '/api/manager/artifacts/artifact-current/compare',
+      global.window.location.search,
+      '?artifact_id=artifact-current&previous_artifact_id=artifact-stale',
     );
-    assert.match(historyCalls[0], /\?artifact_id=artifact-current$/);
-    assert.match(nodes.get('artifact-compare-current').innerHTML, /artifact-current/);
-    assert.match(nodes.get('artifact-compare-previous').innerHTML, /artifact-default/);
   } finally {
     if (previousDocument === undefined) {
       delete global.document;

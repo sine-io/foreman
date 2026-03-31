@@ -198,27 +198,6 @@
     return searchParams.get("previous_artifact_id") || "";
   };
 
-  const updateURLState = (artifactId, previousArtifactId) => {
-    const searchParams = new URLSearchParams(currentLocation().search);
-    if (artifactId) {
-      searchParams.set("artifact_id", artifactId);
-    } else {
-      searchParams.delete("artifact_id");
-    }
-    if (previousArtifactId) {
-      searchParams.set("previous_artifact_id", previousArtifactId);
-    } else {
-      searchParams.delete("previous_artifact_id");
-    }
-
-    const query = searchParams.toString();
-    const nextURL = query ? `${currentLocation().pathname}?${query}` : currentLocation().pathname;
-    const historyRef = currentHistory();
-    if (historyRef && typeof historyRef.replaceState === "function") {
-      historyRef.replaceState({}, "", nextURL);
-    }
-  };
-
   const setStatus = (message, tone = "info") => {
     statusNode.textContent = message;
     statusNode.dataset.tone = tone;
@@ -291,10 +270,12 @@
       if (requestToken !== state.requestToken) {
         return;
       }
-      if (detail.clientError && requestedPreviousArtifactId) {
-        updateURLState(requestedArtifactId, "");
+      if (detail.clientError) {
+        state.detail = null;
+        state.loading = false;
         state.notice = detail.message || "Selected compare target is no longer available.";
-        loadCompare();
+        renderCompare();
+        setStatus(`Failed to load ${requestedArtifactId}.`, "danger");
         return;
       }
       if (detail.notFound) {
