@@ -593,14 +593,12 @@ func (r *BoardQueryRepository) recentArtifactCompareHistory(current ports.Artifa
 		 where task_id = ?
 		   and kind = ?
 		   and (created_at < ? or (created_at = ? and id < ?))
-		 order by created_at desc, id desc
-		 limit ?`,
+		 order by created_at desc, id desc`,
 		current.TaskID,
 		current.Kind,
 		current.CreatedAt,
 		current.CreatedAt,
 		current.ArtifactID,
-		limit,
 	)
 	if err != nil {
 		return nil, err
@@ -609,9 +607,21 @@ func (r *BoardQueryRepository) recentArtifactCompareHistory(current ports.Artifa
 
 	history := make([]ports.ArtifactCompareHistoryItemRow, 0, limit)
 	for rows.Next() {
+		if len(history) >= limit {
+			break
+		}
+
 		var item ports.ArtifactCompareHistoryItemRow
-		if err := rows.Scan(&item.ArtifactID, &item.RunID, &item.CreatedAt, &item.Summary); err != nil {
+		var runID sql.NullString
+		if err := rows.Scan(&item.ArtifactID, &runID, &item.CreatedAt, &item.Summary); err != nil {
 			return nil, err
+		}
+		if !runID.Valid || runID.String == "" {
+			continue
+		}
+		item.RunID = runID.String
+		if err := r.ensureArtifactTaskLinkage(item.ArtifactID, current.TaskID, item.RunID); err != nil {
+			continue
 		}
 		history = append(history, item)
 	}

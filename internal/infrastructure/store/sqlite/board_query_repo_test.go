@@ -245,6 +245,64 @@ func TestArtifactCompareBoardQueryRepositoryReturnsHistoryItemSummaryFields(t *t
 	require.Equal(t, "2026-03-31T09:30:00.000000000Z", row.History[0].CreatedAt)
 }
 
+func TestArtifactCompareBoardQueryRepositorySkipsBrokenHistoryCandidates(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo := NewBoardQueryRepository(db)
+
+	saveRunRow(t, db, testRun("run-1", taskID), "2026-03-31T09:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-2", taskID), "2026-03-31T10:00:00.000000000Z")
+	saveRunRow(t, db, testRun("run-3", taskID), "2026-03-31T10:30:00.000000000Z")
+
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-valid-1",
+		TaskID:    taskID,
+		RunID:     "run-1",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-valid-1.txt",
+		Summary:   "Valid previous 1",
+		CreatedAt: "2026-03-31T09:15:00.000000000Z",
+	})
+	mustExec(
+		t,
+		db,
+		`insert into artifacts (id, task_id, run_id, kind, path, storage_path, summary, created_at) values (?, ?, null, ?, ?, ?, ?, ?)`,
+		"artifact-legacy",
+		taskID,
+		"assistant_summary",
+		"tasks/task-1/assistant-legacy.txt",
+		"tasks/task-1/assistant-legacy.txt",
+		"Legacy history row",
+		"2026-03-31T10:20:00.000000000Z",
+	)
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-valid-2",
+		TaskID:    taskID,
+		RunID:     "run-2",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-valid-2.txt",
+		Summary:   "Valid previous 2",
+		CreatedAt: "2026-03-31T10:10:00.000000000Z",
+	})
+	saveArtifactCompareSeed(t, db, artifactCompareRepoSeed{
+		ID:        "artifact-current",
+		TaskID:    taskID,
+		RunID:     "run-3",
+		Kind:      "assistant_summary",
+		Path:      "tasks/task-1/assistant-current.txt",
+		Summary:   "Current artifact",
+		CreatedAt: "2026-03-31T10:40:00.000000000Z",
+	})
+
+	row, err := repo.GetArtifactCompare("artifact-current", "")
+	require.NoError(t, err)
+	require.NotNil(t, row.Previous)
+	require.Equal(t, "artifact-valid-2", row.Previous.ArtifactID)
+	require.Len(t, row.History, 2)
+	require.Equal(t, "artifact-valid-2", row.History[0].ArtifactID)
+	require.Equal(t, "artifact-valid-1", row.History[1].ArtifactID)
+}
+
 type artifactCompareRepoSeed struct {
 	ID          string
 	TaskID      string
