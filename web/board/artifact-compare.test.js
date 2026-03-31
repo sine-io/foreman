@@ -100,7 +100,7 @@ test('ready state renders unified diff content and navigation links', () => {
         created_at: '2026-04-01T08:00:00Z',
         summary: 'Older summary',
         selected: false,
-        compare_url: '/board/artifacts/compare?artifact_id=artifact-current&previous_artifact_id=artifact-older',
+        compare_url: '/board/artifacts/compare?artifact_id=artifact-current&previous_artifact_id=artifact-older&server_token=1',
       },
     ],
   });
@@ -112,7 +112,7 @@ test('ready state renders unified diff content and navigation links', () => {
   assert.match(markup, /Back to run workbench/);
   assert.match(markup, /Recent History/);
   assert.match(markup, /artifact-older/);
-  assert.match(markup, /previous_artifact_id=artifact-older/);
+  assert.match(markup, /server_token=1/);
   assert.match(markup, /is-selected/);
 });
 
@@ -431,6 +431,129 @@ test('boot path fetches compare using previous_artifact_id from URL', async () =
       requests[0],
       '/api/manager/artifacts/artifact-current/compare?previous_artifact_id=artifact-older',
     );
+  } finally {
+    if (previousDocument === undefined) {
+      delete global.document;
+    } else {
+      global.document = previousDocument;
+    }
+    if (previousWindow === undefined) {
+      delete global.window;
+    } else {
+      global.window = previousWindow;
+    }
+    if (previousLocation === undefined) {
+      delete global.location;
+    } else {
+      global.location = previousLocation;
+    }
+    if (previousHistory === undefined) {
+      delete global.history;
+    } else {
+      global.history = previousHistory;
+    }
+    if (previousFetch === undefined) {
+      delete global.fetch;
+    } else {
+      global.fetch = previousFetch;
+    }
+    delete require.cache[compareModulePath];
+  }
+});
+
+test('invalid previous_artifact_id falls back to default compare target and clears URL state', async () => {
+  const nodes = new Map();
+  const listeners = new Map();
+  const historyCalls = [];
+  const requests = [];
+  const makeNode = () => ({
+    innerHTML: '',
+    textContent: '',
+    dataset: {},
+    addEventListener() {},
+  });
+  [
+    'artifact-compare-artifact-id',
+    'artifact-compare-refresh',
+    'artifact-compare-status',
+    'artifact-compare-current',
+    'artifact-compare-result',
+    'artifact-compare-previous',
+  ].forEach((id) => nodes.set(id, makeNode()));
+
+  const previousDocument = global.document;
+  const previousWindow = global.window;
+  const previousLocation = global.location;
+  const previousHistory = global.history;
+  const previousFetch = global.fetch;
+
+  let callCount = 0;
+  global.document = {
+    getElementById(id) {
+      return nodes.get(id) || null;
+    },
+  };
+  global.window = {
+    location: { search: '?artifact_id=artifact-current&previous_artifact_id=artifact-stale', pathname: '/board/artifacts/compare' },
+    history: {
+      replaceState(_state, _title, url) {
+        historyCalls.push(url);
+        const parsed = new URL(url, 'http://localhost');
+        global.window.location.search = parsed.search;
+      },
+    },
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+  };
+  global.location = global.window.location;
+  global.history = global.window.history;
+  global.fetch = async (url) => {
+    requests.push(url);
+    callCount += 1;
+    if (callCount === 1) {
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({ error: 'artifact compare selection invalid: stale target' }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        status: 'ready',
+        current: { artifact_id: 'artifact-current', run_id: 'run-2', task_id: 'task-1', kind: 'assistant_summary', content_type: 'text/plain', created_at: '2026-04-01T10:00:00Z' },
+        previous: { artifact_id: 'artifact-default', run_id: 'run-1', task_id: 'task-1', kind: 'assistant_summary', content_type: 'text/plain', created_at: '2026-04-01T09:00:00Z' },
+        diff: { format: 'text/unified-diff', content: 'default compare' },
+        limits: { max_compare_bytes: 65536 },
+        messages: { title: 'Compare ready', detail: 'Showing a unified diff between the current artifact and the previous artifact.' },
+        navigation: { current_workbench_url: '/board/artifacts/workbench?artifact_id=artifact-current', previous_workbench_url: '/board/artifacts/workbench?artifact_id=artifact-default', back_to_run_url: '/board/runs/workbench?run_id=run-2' },
+        history: [
+          { artifact_id: 'artifact-default', run_id: 'run-1', created_at: '2026-04-01T09:00:00Z', summary: 'Default', selected: true, compare_url: '/board/artifacts/compare?artifact_id=artifact-current&previous_artifact_id=artifact-default' },
+        ],
+      }),
+    };
+  };
+
+  delete require.cache[compareModulePath];
+
+  try {
+    require(compareModulePath);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(
+      requests[0],
+      '/api/manager/artifacts/artifact-current/compare?previous_artifact_id=artifact-stale',
+    );
+    assert.equal(
+      requests[1],
+      '/api/manager/artifacts/artifact-current/compare',
+    );
+    assert.match(historyCalls[0], /\?artifact_id=artifact-current$/);
+    assert.match(nodes.get('artifact-compare-current').innerHTML, /artifact-current/);
+    assert.match(nodes.get('artifact-compare-previous').innerHTML, /artifact-default/);
   } finally {
     if (previousDocument === undefined) {
       delete global.document;
