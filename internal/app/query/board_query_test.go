@@ -58,6 +58,9 @@ func TestBoardQueryRepositoryPortExposesRunWorkbenchLookup(t *testing.T) {
 
 	_, err := repo.GetRunWorkbench("run-1")
 	require.NoError(t, err)
+
+	_, err = repo.GetArtifactCompare("artifact-1")
+	require.NoError(t, err)
 }
 
 type fakeBoardReadRepo struct {
@@ -87,6 +90,10 @@ func (f fakeBoardReadRepo) GetRunWorkbench(runID string) (ports.RunWorkbenchRow,
 
 func (f fakeBoardReadRepo) GetArtifactWorkbench(artifactID string) (ports.ArtifactWorkbenchRow, error) {
 	return ports.ArtifactWorkbenchRow{}, nil
+}
+
+func (f fakeBoardReadRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+	return ports.ArtifactCompareRow{}, nil
 }
 
 func (f fakeBoardReadRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {

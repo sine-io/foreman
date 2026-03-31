@@ -1049,6 +1049,10 @@ func (f *fakeBoardQueryRepo) GetArtifactWorkbench(artifactID string) (ports.Arti
 	return f.artifactWorkbench, nil
 }
 
+func (f *fakeBoardQueryRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+	return ports.ArtifactCompareRow{}, nil
+}
+
 func (f *fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return nil, nil
 }

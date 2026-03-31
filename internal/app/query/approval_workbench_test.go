@@ -131,6 +131,10 @@ func (f fakeApprovalWorkbenchRepo) GetArtifactWorkbench(artifactID string) (port
 	return ports.ArtifactWorkbenchRow{}, nil
 }
 
+func (f fakeApprovalWorkbenchRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+	return ports.ArtifactCompareRow{}, nil
+}
+
 func (f fakeApprovalWorkbenchRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return nil, nil
 }

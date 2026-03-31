@@ -192,21 +192,8 @@ func (r *BoardQueryRepository) GetArtifactWorkbench(artifactID string) (ports.Ar
 		row.StoragePath = row.Path
 	}
 
-	var runTaskID string
-	err = r.db.QueryRow(
-		`select task_id
-		 from runs
-		 where id = ?`,
-		row.RunID,
-	).Scan(&runTaskID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ports.ArtifactWorkbenchRow{}, fmt.Errorf("%w: artifact %s references missing run %s", ports.ErrArtifactBrokenLinkage, artifactID, row.RunID)
-	}
-	if err != nil {
+	if err := r.ensureArtifactTaskLinkage(row.ArtifactID, row.TaskID, row.RunID); err != nil {
 		return ports.ArtifactWorkbenchRow{}, err
-	}
-	if runTaskID != row.TaskID {
-		return ports.ArtifactWorkbenchRow{}, fmt.Errorf("%w: artifact %s task %s does not match run %s task %s", ports.ErrArtifactBrokenLinkage, artifactID, row.TaskID, row.RunID, runTaskID)
 	}
 
 	err = r.db.QueryRow(
@@ -230,6 +217,32 @@ func (r *BoardQueryRepository) GetArtifactWorkbench(artifactID string) (ports.Ar
 	row.Siblings = siblings
 
 	return row, nil
+}
+
+func (r *BoardQueryRepository) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+	current, err := r.artifactCompareArtifact(artifactID)
+	if err != nil {
+		return ports.ArtifactCompareRow{}, err
+	}
+
+	previousID, err := r.previousArtifactCompareID(current)
+	if err != nil {
+		return ports.ArtifactCompareRow{}, err
+	}
+
+	var previous *ports.ArtifactCompareArtifactRow
+	if previousID != "" {
+		row, err := r.artifactCompareArtifact(previousID)
+		if err != nil {
+			return ports.ArtifactCompareRow{}, err
+		}
+		previous = &row
+	}
+
+	return ports.ArtifactCompareRow{
+		Current:  current,
+		Previous: previous,
+	}, nil
 }
 
 func (r *BoardQueryRepository) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
@@ -520,4 +533,105 @@ func (r *BoardQueryRepository) runArtifacts(runID string) ([]ports.ArtifactRecor
 	}
 
 	return artifacts, rows.Err()
+}
+
+func (r *BoardQueryRepository) artifactCompareArtifact(artifactID string) (ports.ArtifactCompareArtifactRow, error) {
+	var row ports.ArtifactCompareArtifactRow
+	var runID sql.NullString
+	var storagePath sql.NullString
+
+	err := r.db.QueryRow(
+		`select id, task_id, run_id, kind, path, nullif(storage_path, ''), created_at
+		 from artifacts
+		 where id = ?`,
+		artifactID,
+	).Scan(
+		&row.ArtifactID,
+		&row.TaskID,
+		&runID,
+		&row.Kind,
+		&row.Path,
+		&storagePath,
+		&row.CreatedAt,
+	)
+	if err != nil {
+		return ports.ArtifactCompareArtifactRow{}, err
+	}
+
+	if !runID.Valid || runID.String == "" {
+		return ports.ArtifactCompareArtifactRow{}, fmt.Errorf("%w: artifact %s is not linked to one exact run", ports.ErrArtifactRunLinkageConflict, artifactID)
+	}
+	row.RunID = runID.String
+	if storagePath.Valid {
+		row.StoragePath = storagePath.String
+	} else {
+		row.StoragePath = row.Path
+	}
+
+	if err := r.ensureArtifactTaskLinkage(row.ArtifactID, row.TaskID, row.RunID); err != nil {
+		return ports.ArtifactCompareArtifactRow{}, err
+	}
+
+	return row, nil
+}
+
+func (r *BoardQueryRepository) previousArtifactCompareID(current ports.ArtifactCompareArtifactRow) (string, error) {
+	var artifactID string
+	err := r.db.QueryRow(
+		`select id
+		 from artifacts
+		 where task_id = ?
+		   and kind = ?
+		   and (created_at < ? or (created_at = ? and id < ?))
+		 order by created_at desc, id desc
+		 limit 1`,
+		current.TaskID,
+		current.Kind,
+		current.CreatedAt,
+		current.CreatedAt,
+		current.ArtifactID,
+	).Scan(&artifactID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return artifactID, nil
+}
+
+func (r *BoardQueryRepository) ensureArtifactTaskLinkage(artifactID, taskID, runID string) error {
+	var runTaskID string
+	err := r.db.QueryRow(
+		`select task_id
+		 from runs
+		 where id = ?`,
+		runID,
+	).Scan(&runTaskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: artifact %s references missing run %s", ports.ErrArtifactBrokenLinkage, artifactID, runID)
+	}
+	if err != nil {
+		return err
+	}
+	if runTaskID != taskID {
+		return fmt.Errorf("%w: artifact %s task %s does not match run %s task %s", ports.ErrArtifactBrokenLinkage, artifactID, taskID, runID, runTaskID)
+	}
+
+	var existingTaskID string
+	err = r.db.QueryRow(
+		`select id
+		 from tasks
+		 where id = ?`,
+		taskID,
+	).Scan(&existingTaskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: artifact %s references missing task %s", ports.ErrArtifactBrokenLinkage, artifactID, taskID)
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
