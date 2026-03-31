@@ -44,11 +44,11 @@
     const contentType = contentTypeFor(detail);
     const kind = kindFor(detail);
     const path = pathFor(detail);
+    const hasDiffLikeKind = kind === "diff" || kind === "patch";
     return (
       contentType.includes("diff") ||
       contentType.includes("patch") ||
-      kind.includes("diff") ||
-      kind.includes("patch") ||
+      hasDiffLikeKind ||
       path.endsWith(".diff") ||
       path.endsWith(".patch")
     );

@@ -76,6 +76,19 @@ test('renderPreview detects diff artifacts by content type or kind or path', () 
   assert.equal(byPath.renderer, 'diff');
 });
 
+test('renderPreview keeps diff_summary artifacts as generic text', () => {
+  const preview = '2 files changed, 3 insertions(+), 1 deletion(-)';
+  const result = renderPreview(
+    { content_type: 'text/plain', kind: 'diff_summary', path: 'summary.txt', preview_truncated: false },
+    preview,
+  );
+
+  assert.equal(result.renderer, 'text');
+  assert.equal(result.output, 'text');
+  assert.equal(result.fallback, false);
+  assert.equal(result.text, preview);
+});
+
 test('renderPreview preserves truncation signals and falls back when partial structured content is misleading', () => {
   const truncatedJSON = renderPreview(
     { content_type: 'application/json', kind: 'report', path: 'report.json', preview_truncated: true },

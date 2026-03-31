@@ -356,7 +356,9 @@ func TestArtifactRendererHelpersIncludeDiffDetectionByKindOrPath(t *testing.T) {
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), ".diff")
 	require.Contains(t, rec.Body.String(), ".patch")
-	require.Contains(t, rec.Body.String(), "kind.includes(\"diff\")")
+	require.Contains(t, rec.Body.String(), "kind === \"diff\"")
+	require.Contains(t, rec.Body.String(), "kind === \"patch\"")
+	require.NotContains(t, rec.Body.String(), "kind.includes(\"diff\")")
 }
 
 func TestArtifactRendererHelpersKeepMarkdownInert(t *testing.T) {
