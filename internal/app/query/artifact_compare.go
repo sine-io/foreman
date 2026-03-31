@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/pmezard/go-difflib/difflib"
@@ -24,6 +25,15 @@ type ArtifactCompareArtifact struct {
 	Kind        string `json:"kind"`
 	ContentType string `json:"content_type"`
 	CreatedAt   string `json:"created_at"`
+}
+
+type ArtifactCompareHistoryItem struct {
+	ArtifactID string `json:"artifact_id"`
+	RunID      string `json:"run_id"`
+	CreatedAt  string `json:"created_at"`
+	Summary    string `json:"summary"`
+	Selected   bool   `json:"selected"`
+	CompareURL string `json:"compare_url"`
 }
 
 type ArtifactCompareDiff struct {
@@ -54,6 +64,7 @@ type ArtifactCompareView struct {
 	Limits     ArtifactCompareLimits     `json:"limits"`
 	Messages   ArtifactCompareMessages   `json:"messages"`
 	Navigation ArtifactCompareNavigation `json:"navigation"`
+	History    []ArtifactCompareHistoryItem `json:"history"`
 }
 
 type ArtifactCompareQuery struct {
@@ -65,8 +76,13 @@ func NewArtifactCompareQuery(repo ports.BoardQueryRepository, store ports.Artifa
 	return &ArtifactCompareQuery{Repo: repo, Store: store}
 }
 
-func (q *ArtifactCompareQuery) Execute(artifactID string) (ArtifactCompareView, error) {
-	row, err := q.Repo.GetArtifactCompare(artifactID)
+func (q *ArtifactCompareQuery) Execute(artifactID string, previousArtifactID ...string) (ArtifactCompareView, error) {
+	selectedPreviousID := ""
+	if len(previousArtifactID) > 0 {
+		selectedPreviousID = previousArtifactID[0]
+	}
+
+	row, err := q.Repo.GetArtifactCompare(artifactID, selectedPreviousID)
 	if err != nil {
 		return ArtifactCompareView{}, err
 	}
@@ -81,6 +97,22 @@ func (q *ArtifactCompareQuery) Execute(artifactID string) (ArtifactCompareView, 
 			CurrentWorkbenchURL: artifactWorkbenchURL(row.Current.ArtifactID),
 			BackToRunURL:        runWorkbenchURL(row.Current.RunID),
 		},
+		History: make([]ArtifactCompareHistoryItem, 0, len(row.History)),
+	}
+
+	selectedHistoryID := ""
+	if row.Previous != nil {
+		selectedHistoryID = row.Previous.ArtifactID
+	}
+	for _, item := range row.History {
+		view.History = append(view.History, ArtifactCompareHistoryItem{
+			ArtifactID: item.ArtifactID,
+			RunID:      item.RunID,
+			CreatedAt:  item.CreatedAt,
+			Summary:    item.Summary,
+			Selected:   item.ArtifactID == selectedHistoryID,
+			CompareURL: artifactCompareURL(row.Current.ArtifactID, item.ArtifactID),
+		})
 	}
 
 	if row.Previous == nil {
@@ -191,6 +223,16 @@ func artifactCompareUnifiedDiff(previous, current ports.ArtifactCompareArtifactR
 		ToFile:   "current:" + current.ArtifactID,
 		Context:  3,
 	})
+}
+
+func artifactCompareURL(currentArtifactID, previousArtifactID string) string {
+	values := url.Values{
+		"artifact_id": []string{currentArtifactID},
+	}
+	if previousArtifactID != "" {
+		values.Set("previous_artifact_id", previousArtifactID)
+	}
+	return "/board/artifacts/compare?" + values.Encode()
 }
 
 func artifactCompareDiffInput(content string) string {

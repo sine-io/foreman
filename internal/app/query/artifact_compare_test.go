@@ -49,7 +49,7 @@ func TestArtifactCompareReturnsReadyForPreviousSameTaskSameKindArtifact(t *testi
 		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-current", "")
 	require.NoError(t, err)
 	require.Equal(t, "artifact-current", view.Current.ArtifactID)
 	require.NotNil(t, view.Previous)
@@ -58,6 +58,12 @@ func TestArtifactCompareReturnsReadyForPreviousSameTaskSameKindArtifact(t *testi
 	require.Equal(t, "text/plain; charset=utf-8", view.Current.ContentType)
 	require.Equal(t, "text/plain; charset=utf-8", view.Previous.ContentType)
 	require.NotNil(t, view.Diff)
+	require.Len(t, view.History, 1)
+	require.Equal(t, "artifact-prev", view.History[0].ArtifactID)
+	require.Equal(t, "run-1", view.History[0].RunID)
+	require.Equal(t, "Older assistant summary", view.History[0].Summary)
+	require.True(t, view.History[0].Selected)
+	require.Equal(t, "/board/artifacts/compare?artifact_id=artifact-current&previous_artifact_id=artifact-prev", view.History[0].CompareURL)
 	require.Equal(t, "text/unified-diff", view.Diff.Format)
 	require.Contains(t, view.Diff.Content, "-old line")
 	require.Contains(t, view.Diff.Content, "+new line")
@@ -125,7 +131,7 @@ func TestArtifactCompareUsesCreatedAtAndArtifactIDAsTieBreaker(t *testing.T) {
 		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-0003")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-0003", "")
 	require.NoError(t, err)
 	require.Equal(t, "ready", view.Status)
 	require.NotNil(t, view.Previous)
@@ -172,7 +178,7 @@ func TestArtifactCompareReturnsNoPreviousWhenNoEarlierArtifactExists(t *testing.
 		CreatedAt:   "2026-03-31T11:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-first")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-first", "")
 	require.NoError(t, err)
 	require.Equal(t, "artifact-first", view.Current.ArtifactID)
 	require.Equal(t, "no_previous", view.Status)
@@ -181,6 +187,7 @@ func TestArtifactCompareReturnsNoPreviousWhenNoEarlierArtifactExists(t *testing.
 	require.NotEmpty(t, view.Messages.Title)
 	require.NotEmpty(t, view.Messages.Detail)
 	require.Empty(t, view.Navigation.PreviousWorkbenchURL)
+	require.Empty(t, view.History)
 }
 
 func TestArtifactCompareOmitsDiffFromJSONWhenCompareIsNotReady(t *testing.T) {
@@ -204,7 +211,7 @@ func TestArtifactCompareOmitsDiffFromJSONWhenCompareIsNotReady(t *testing.T) {
 		CreatedAt:   "2026-03-31T09:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-first")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-first", "")
 	require.NoError(t, err)
 	require.Equal(t, "no_previous", view.Status)
 	require.Nil(t, view.Diff)
@@ -216,6 +223,7 @@ func TestArtifactCompareOmitsDiffFromJSONWhenCompareIsNotReady(t *testing.T) {
 	err = json.Unmarshal(payload, &document)
 	require.NoError(t, err)
 	require.NotContains(t, document, "diff")
+	require.Contains(t, document, "history")
 }
 
 func TestArtifactCompareReturnsUnsupportedForBinaryArtifactKinds(t *testing.T) {
@@ -256,7 +264,7 @@ func TestArtifactCompareReturnsUnsupportedForBinaryArtifactKinds(t *testing.T) {
 		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-current", "")
 	require.NoError(t, err)
 	require.Equal(t, "unsupported", view.Status)
 	require.NotNil(t, view.Previous)
@@ -265,6 +273,7 @@ func TestArtifactCompareReturnsUnsupportedForBinaryArtifactKinds(t *testing.T) {
 	require.Nil(t, view.Diff)
 	require.NotEmpty(t, view.Messages.Title)
 	require.NotEmpty(t, view.Messages.Detail)
+	require.Len(t, view.History, 1)
 }
 
 func TestArtifactCompareReturnsUnsupportedWhenCurrentArtifactHasNoPreviousComparableArtifact(t *testing.T) {
@@ -305,7 +314,7 @@ func TestArtifactCompareReturnsUnsupportedWhenCurrentArtifactHasNoPreviousCompar
 		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-first")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-first", "")
 	require.NoError(t, err)
 	require.Equal(t, "artifact-first", view.Current.ArtifactID)
 	require.Equal(t, "unsupported", view.Status)
@@ -314,6 +323,7 @@ func TestArtifactCompareReturnsUnsupportedWhenCurrentArtifactHasNoPreviousCompar
 	require.Nil(t, view.Diff)
 	require.NotEmpty(t, view.Messages.Title)
 	require.NotEmpty(t, view.Messages.Detail)
+	require.Empty(t, view.History)
 }
 
 func TestArtifactCompareReturnsReadyForJSONArtifacts(t *testing.T) {
@@ -354,7 +364,7 @@ func TestArtifactCompareReturnsReadyForJSONArtifacts(t *testing.T) {
 		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-current", "")
 	require.NoError(t, err)
 	require.Equal(t, "ready", view.Status)
 	require.Equal(t, "application/json", view.Current.ContentType)
@@ -421,7 +431,7 @@ func TestArtifactCompareReturnsTooLargeWhenEitherArtifactExceedsLimit(t *testing
 				CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 			})
 
-			view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
+			view, err := newArtifactCompareHarness(harness).Execute("artifact-current", "")
 			require.NoError(t, err)
 			require.Equal(t, "too_large", view.Status)
 			require.NotNil(t, view.Previous)
@@ -471,11 +481,62 @@ func TestArtifactCompareIncludesCurrentAndPreviousWorkbenchURLs(t *testing.T) {
 		CreatedAt:   "2026-03-31T10:01:00.000000000Z",
 	})
 
-	view, err := newArtifactCompareHarness(harness).Execute("artifact-current")
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-current", "")
 	require.NoError(t, err)
 	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-current", view.Navigation.CurrentWorkbenchURL)
 	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-prev", view.Navigation.PreviousWorkbenchURL)
 	require.Equal(t, "/board/runs/workbench?run_id=run-2", view.Navigation.BackToRunURL)
+}
+
+func TestArtifactCompareUsesExplicitPreviousArtifactWhenProvided(t *testing.T) {
+	harness := newArtifactWorkbenchHarness(t)
+	harness.seedTask(t, "project-1", "module-1", "task-1")
+	harness.saveRun(t, ports.Run{ID: "run-1", TaskID: "task-1", RunnerKind: "codex", State: "completed"}, "2026-03-31T09:00:00.000000000Z")
+	harness.saveRun(t, ports.Run{ID: "run-2", TaskID: "task-1", RunnerKind: "codex", State: "completed"}, "2026-03-31T10:00:00.000000000Z")
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-1.txt", "first\n")
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-2.txt", "second\n")
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-3.txt", "third\n")
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-1", TaskID: "task-1", RunID: "run-1", Kind: "assistant_summary", Path: "tasks/task-1/assistant-1.txt", StoragePath: "tasks/task-1/assistant-1.txt", Summary: "First", CreatedAt: "2026-03-31T09:01:00.000000000Z"})
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-2", TaskID: "task-1", RunID: "run-1", Kind: "assistant_summary", Path: "tasks/task-1/assistant-2.txt", StoragePath: "tasks/task-1/assistant-2.txt", Summary: "Second", CreatedAt: "2026-03-31T09:30:00.000000000Z"})
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-3", TaskID: "task-1", RunID: "run-2", Kind: "assistant_summary", Path: "tasks/task-1/assistant-3.txt", StoragePath: "tasks/task-1/assistant-3.txt", Summary: "Current", CreatedAt: "2026-03-31T10:01:00.000000000Z"})
+
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-3", "artifact-1")
+	require.NoError(t, err)
+	require.NotNil(t, view.Previous)
+	require.Equal(t, "artifact-1", view.Previous.ArtifactID)
+	require.Len(t, view.History, 2)
+	require.True(t, view.History[1].Selected)
+	require.Equal(t, "/board/artifacts/compare?artifact_id=artifact-3&previous_artifact_id=artifact-1", view.History[1].CompareURL)
+}
+
+func TestArtifactCompareReturnsClientErrorForInvalidExplicitPreviousArtifact(t *testing.T) {
+	harness := newArtifactWorkbenchHarness(t)
+	harness.seedTask(t, "project-1", "module-1", "task-1")
+	harness.saveRun(t, ports.Run{ID: "run-1", TaskID: "task-1", RunnerKind: "codex", State: "completed"}, "2026-03-31T09:00:00.000000000Z")
+	harness.saveRun(t, ports.Run{ID: "run-2", TaskID: "task-1", RunnerKind: "codex", State: "completed"}, "2026-03-31T10:00:00.000000000Z")
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-1.txt", "first\n")
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-2.txt", "current\n")
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-1", TaskID: "task-1", RunID: "run-1", Kind: "assistant_summary", Path: "tasks/task-1/assistant-1.txt", StoragePath: "tasks/task-1/assistant-1.txt", Summary: "First", CreatedAt: "2026-03-31T09:01:00.000000000Z"})
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-2", TaskID: "task-1", RunID: "run-2", Kind: "assistant_summary", Path: "tasks/task-1/assistant-2.txt", StoragePath: "tasks/task-1/assistant-2.txt", Summary: "Current", CreatedAt: "2026-03-31T10:01:00.000000000Z"})
+
+	_, err := newArtifactCompareHarness(harness).Execute("artifact-2", "artifact-missing")
+	require.ErrorIs(t, err, ports.ErrArtifactCompareSelectionInvalid)
+}
+
+func TestArtifactCompareKeepsHistoryArrayForUnsupportedState(t *testing.T) {
+	harness := newArtifactWorkbenchHarness(t)
+	harness.seedTask(t, "project-1", "module-1", "task-1")
+	harness.saveRun(t, ports.Run{ID: "run-1", TaskID: "task-1", RunnerKind: "codex", State: "completed"}, "2026-03-31T09:00:00.000000000Z")
+	harness.saveRun(t, ports.Run{ID: "run-2", TaskID: "task-1", RunnerKind: "codex", State: "completed"}, "2026-03-31T10:00:00.000000000Z")
+	harness.writeArtifactFile(t, "tasks/task-1/shot-prev.png", string([]byte{0x89, 'P', 'N', 'G'}))
+	harness.writeArtifactFile(t, "tasks/task-1/shot-current.png", string([]byte{0x89, 'P', 'N', 'G', 0x01}))
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-prev", TaskID: "task-1", RunID: "run-1", Kind: "screenshot", Path: "tasks/task-1/shot-prev.png", StoragePath: "tasks/task-1/shot-prev.png", Summary: "Previous screenshot", CreatedAt: "2026-03-31T09:01:00.000000000Z"})
+	harness.saveArtifact(t, artifactSeed{ID: "artifact-current", TaskID: "task-1", RunID: "run-2", Kind: "screenshot", Path: "tasks/task-1/shot-current.png", StoragePath: "tasks/task-1/shot-current.png", Summary: "Current screenshot", CreatedAt: "2026-03-31T10:01:00.000000000Z"})
+
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-current", "")
+	require.NoError(t, err)
+	require.Equal(t, "unsupported", view.Status)
+	require.Len(t, view.History, 1)
 }
 
 func newArtifactCompareHarness(harness *artifactWorkbenchHarness) *ArtifactCompareQuery {

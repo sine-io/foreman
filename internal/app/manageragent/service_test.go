@@ -1112,7 +1112,7 @@ func (f *fakeBoardQueryRepo) GetArtifactWorkbench(artifactID string) (ports.Arti
 	return f.artifactWorkbench, nil
 }
 
-func (f *fakeBoardQueryRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+func (f *fakeBoardQueryRepo) GetArtifactCompare(artifactID string, previousArtifactID string) (ports.ArtifactCompareRow, error) {
 	if f.artifactCompareErr != nil {
 		return ports.ArtifactCompareRow{}, f.artifactCompareErr
 	}

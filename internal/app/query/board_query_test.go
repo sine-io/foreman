@@ -59,7 +59,7 @@ func TestBoardQueryRepositoryPortExposesRunWorkbenchLookup(t *testing.T) {
 	_, err := repo.GetRunWorkbench("run-1")
 	require.NoError(t, err)
 
-	_, err = repo.GetArtifactCompare("artifact-1")
+	_, err = repo.GetArtifactCompare("artifact-1", "")
 	require.NoError(t, err)
 }
 
@@ -92,7 +92,7 @@ func (f fakeBoardReadRepo) GetArtifactWorkbench(artifactID string) (ports.Artifa
 	return ports.ArtifactWorkbenchRow{}, nil
 }
 
-func (f fakeBoardReadRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+func (f fakeBoardReadRepo) GetArtifactCompare(artifactID string, previousArtifactID string) (ports.ArtifactCompareRow, error) {
 	return ports.ArtifactCompareRow{}, nil
 }
 
