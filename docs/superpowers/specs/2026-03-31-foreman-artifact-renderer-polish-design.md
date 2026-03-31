@@ -132,6 +132,14 @@ That means:
 
 This keeps the server as a control-plane read model and keeps view formatting in the browser.
 
+Renderer selection may use:
+
+- `content_type`
+- existing artifact `kind`
+- existing artifact `path`
+
+This matters for diff-like artifacts because the current server path may still classify `.diff` or `.patch` as generic text content types. The client may therefore recognize diff/patch artifacts by filename extension or artifact kind in addition to `content_type`.
+
 ## Rendering Rules
 
 ### Generic Text Fallback
@@ -143,6 +151,18 @@ Any text-like artifact that does not match a specialized renderer should still r
 - current truncation behavior
 
 This remains the baseline behavior.
+
+### Truncation Rule
+
+The existing `preview_truncated` signal remains authoritative for enhanced renderers too.
+
+That means:
+
+- enhanced renderers may still render truncated preview content
+- the truncation warning must remain visible
+- if a structured renderer would become misleading on partial data, it should fall back to generic text preview instead of pretending the preview is complete
+
+Renderer polish must never hide the fact that the preview is partial.
 
 ### JSON
 
@@ -161,6 +181,15 @@ If `content_type` indicates Markdown:
 - render the preview as Markdown
 - keep the result inside the current artifact preview area
 - sanitize output so the page does not execute arbitrary markup or script content
+- keep the rendered result inert and text-focused
+
+For v1, Markdown enhancement must not introduce:
+
+- remote image loading
+- iframe or embed rendering
+- script execution
+- rich media expansion
+- arbitrary raw HTML passthrough
 
 If sanitization or parsing cannot produce a safe result, fall back to plain text preview.
 
@@ -171,6 +200,12 @@ If the artifact is a diff-like text artifact:
 - render a structured diff-oriented view
 - make additions and removals visually distinct
 - preserve a readable fallback if diff parsing is partial or malformed
+
+The client may identify diff-like artifacts by:
+
+- `content_type`
+- artifact `kind`
+- path suffix such as `.diff` or `.patch`
 
 This is a readability aid, not a full code-review tool.
 
