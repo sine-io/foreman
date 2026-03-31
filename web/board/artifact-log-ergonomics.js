@@ -247,10 +247,11 @@
   const extractSummaryAnchorsUnsafe = (summaryText, previewText, options = {}) => {
     const lines = renderLineNumberedTextUnsafe(previewText);
     const maxAnchors = safeInteger(options.maxAnchors, DEFAULT_MAX_ANCHORS);
-    const anchors = [];
+    const summaryAnchors = [];
+    const heuristicAnchors = [];
     const seenLineNumbers = new Set();
 
-    const addAnchor = (lineNumber, label, source) => {
+    const addAnchor = (target, lineNumber, label, source) => {
       if (!Number.isFinite(lineNumber) || lineNumber <= 0 || seenLineNumbers.has(lineNumber)) {
         return;
       }
@@ -259,14 +260,14 @@
         return;
       }
       seenLineNumbers.add(lineNumber);
-      anchors.push({ label: normalizedLabel, lineNumber, source });
+      target.push({ label: normalizedLabel, lineNumber, source });
     };
 
     const summaryCandidates = summaryCandidatesFor(summaryText).map((candidate) => candidate.toLowerCase());
     summaryCandidates.forEach((candidate) => {
       const line = lines.find((entry) => normalizeText(entry.text).toLowerCase().includes(candidate));
       if (line) {
-        addAnchor(line.lineNumber, line.text, "summary");
+        addAnchor(summaryAnchors, line.lineNumber, line.text, "summary");
       }
     });
 
@@ -276,25 +277,33 @@
         return;
       }
       if (/^\$ /.test(trimmedText)) {
-        addAnchor(line.lineNumber, trimmedText, "command");
+        addAnchor(heuristicAnchors, line.lineNumber, trimmedText, "command");
         return;
       }
       if (/^@@/.test(trimmedText)) {
-        addAnchor(line.lineNumber, trimmedText, "hunk");
+        addAnchor(heuristicAnchors, line.lineNumber, trimmedText, "hunk");
         return;
       }
       if (/^#{1,6}\s+/.test(trimmedText)) {
-        addAnchor(line.lineNumber, trimmedText, "heading");
+        addAnchor(heuristicAnchors, line.lineNumber, trimmedText, "heading");
         return;
       }
       if (matchesErrorKeyword(trimmedText)) {
-        addAnchor(line.lineNumber, trimmedText, "error");
+        addAnchor(heuristicAnchors, line.lineNumber, trimmedText, "error");
       }
     });
 
-    anchors.sort((left, right) => left.lineNumber - right.lineNumber);
+    const sortByLineNumber = (left, right) => left.lineNumber - right.lineNumber;
+    summaryAnchors.sort(sortByLineNumber);
+    heuristicAnchors.sort(sortByLineNumber);
+
+    const anchors = summaryAnchors.slice(0, maxAnchors);
+    if (anchors.length < maxAnchors) {
+      anchors.push(...heuristicAnchors.slice(0, maxAnchors - anchors.length));
+    }
+    anchors.sort(sortByLineNumber);
     return {
-      anchors: anchors.slice(0, maxAnchors),
+      anchors,
     };
   };
 

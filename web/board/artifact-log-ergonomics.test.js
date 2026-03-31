@@ -134,6 +134,26 @@ test('extractSummaryAnchors derives navigation from current summary and bounded 
   assert.equal(navigation.anchors.some((anchor) => /hidden footer/i.test(anchor.label)), false);
 });
 
+test('extractSummaryAnchors retains summary-derived matches ahead of heuristic-only anchors when truncated', () => {
+  const navigation = extractSummaryAnchors(
+    'database migration completed successfully',
+    [
+      '$ npm run setup',
+      'ERROR transient setup noise',
+      'still retrying',
+      'database migration completed successfully',
+    ].join('\n'),
+    { maxAnchors: 2 },
+  );
+
+  assert.deepEqual(
+    navigation.anchors.map((anchor) => anchor.lineNumber),
+    [1, 4],
+  );
+  assert.equal(navigation.anchors[1].source, 'summary');
+  assert.equal(navigation.anchors.some((anchor) => anchor.lineNumber === 2), false);
+});
+
 test('buildLogErgonomicsModel keeps JSON, Markdown, and diff success paths out of generic log ergonomics', () => {
   const jsonDetail = {
     content_type: 'application/json',
