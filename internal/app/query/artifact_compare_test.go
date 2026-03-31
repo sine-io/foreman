@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -180,6 +181,41 @@ func TestArtifactCompareReturnsNoPreviousWhenNoEarlierArtifactExists(t *testing.
 	require.NotEmpty(t, view.Messages.Title)
 	require.NotEmpty(t, view.Messages.Detail)
 	require.Empty(t, view.Navigation.PreviousWorkbenchURL)
+}
+
+func TestArtifactCompareOmitsDiffFromJSONWhenCompareIsNotReady(t *testing.T) {
+	harness := newArtifactWorkbenchHarness(t)
+	harness.seedTask(t, "project-1", "module-1", "task-1")
+	harness.saveRun(t, ports.Run{
+		ID:         "run-1",
+		TaskID:     "task-1",
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T09:00:00.000000000Z")
+	harness.writeArtifactFile(t, "tasks/task-1/assistant-first.txt", "first\n")
+	harness.saveArtifact(t, artifactSeed{
+		ID:          "artifact-first",
+		TaskID:      "task-1",
+		RunID:       "run-1",
+		Kind:        "assistant_summary",
+		Path:        "tasks/task-1/assistant-first.txt",
+		StoragePath: "tasks/task-1/assistant-first.txt",
+		Summary:     "First artifact",
+		CreatedAt:   "2026-03-31T09:01:00.000000000Z",
+	})
+
+	view, err := newArtifactCompareHarness(harness).Execute("artifact-first")
+	require.NoError(t, err)
+	require.Equal(t, "no_previous", view.Status)
+	require.Nil(t, view.Diff)
+
+	payload, err := json.Marshal(view)
+	require.NoError(t, err)
+
+	var document map[string]any
+	err = json.Unmarshal(payload, &document)
+	require.NoError(t, err)
+	require.NotContains(t, document, "diff")
 }
 
 func TestArtifactCompareReturnsUnsupportedForBinaryArtifactKinds(t *testing.T) {

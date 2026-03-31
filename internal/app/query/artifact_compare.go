@@ -50,7 +50,7 @@ type ArtifactCompareView struct {
 	Current    ArtifactCompareArtifact   `json:"current"`
 	Previous   *ArtifactCompareArtifact  `json:"previous"`
 	Status     string                    `json:"status"`
-	Diff       *ArtifactCompareDiff      `json:"diff"`
+	Diff       *ArtifactCompareDiff      `json:"diff,omitempty"`
 	Limits     ArtifactCompareLimits     `json:"limits"`
 	Messages   ArtifactCompareMessages   `json:"messages"`
 	Navigation ArtifactCompareNavigation `json:"navigation"`
