@@ -252,12 +252,12 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
       return { notFound: true };
     }
     if (response.status === 409) {
-      const text = await response.text();
-      return { conflict: true, message: text };
+      const payload = await response.json();
+      return { conflict: true, message: payload.error || "Artifact is not linked to one exact run." };
     }
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `Request failed with status ${response.status}`);
+      const payload = await response.json();
+      throw new Error(payload.error || `Request failed with status ${response.status}`);
     }
     return response.json();
   };
@@ -270,6 +270,7 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
       state.detail = null;
       state.detailState = "idle";
       state.notice = "";
+      updateURLState("");
       renderWorkbench();
       setStatus("Enter an artifact_id to load artifact detail.");
       return;

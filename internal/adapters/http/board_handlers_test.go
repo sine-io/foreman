@@ -234,6 +234,18 @@ func TestArtifactWorkbenchJavaScriptUsesArtifactIDURLState(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"artifact_id\", artifactId)")
 }
 
+func TestArtifactWorkbenchJavaScriptClearsArtifactIDURLStateWhenEmpty(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "searchParams.delete(\"artifact_id\")")
+	require.Contains(t, rec.Body.String(), "updateURLState(\"\")")
+}
+
 func TestArtifactWorkbenchJavaScriptRendersSiblingArtifacts(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -269,6 +281,20 @@ func TestArtifactWorkbenchJavaScriptUsesRawContentURL(t *testing.T) {
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "detail.raw_content_url")
 	require.Contains(t, rec.Body.String(), "Open raw artifact")
+}
+
+func TestArtifactWorkbenchJavaScriptExtractsJSONErrorMessages(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "const payload = await response.json();")
+	require.Contains(t, rec.Body.String(), "payload.error")
+	require.Contains(t, rec.Body.String(), "return { conflict: true, message: payload.error || \"Artifact is not linked to one exact run.\" };")
+	require.Contains(t, rec.Body.String(), "throw new Error(payload.error || `Request failed with status ${response.status}`);")
 }
 
 func TestRunWorkbenchJavaScriptLinksLinkedArtifactsToArtifactWorkbench(t *testing.T) {
