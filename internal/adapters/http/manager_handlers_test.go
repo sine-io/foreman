@@ -287,6 +287,26 @@ func TestManagerArtifactCompareEndpointKeepsNullableFieldsForNoPreviousState(t *
 	require.Nil(t, diff)
 }
 
+func TestManagerArtifactCompareEndpointKeepsNullableDiffForUnsupportedState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/unsupported-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, "unsupported", payload["status"])
+	previous, previousExists := payload["previous"]
+	diff, diffExists := payload["diff"]
+	require.True(t, previousExists)
+	require.True(t, diffExists)
+	require.NotNil(t, previous)
+	require.Nil(t, diff)
+}
+
 func TestManagerArtifactContentEndpointKeepsRasterImagesInline(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -1111,6 +1131,36 @@ func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID str
 			Navigation: manageragent.ArtifactCompareNavigation{
 				CurrentWorkbenchURL: "/board/artifacts/workbench?artifact_id=" + artifactID,
 				BackToRunURL:        "/board/runs/workbench?run_id=run-2",
+			},
+		}, nil
+	case "unsupported-compare":
+		return manageragent.ArtifactCompareView{
+			Current: manageragent.ArtifactCompareArtifact{
+				ArtifactID:  artifactID,
+				RunID:       "run-2",
+				TaskID:      "task-1",
+				Kind:        "screenshot",
+				ContentType: "image/png",
+				CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+			},
+			Previous: &manageragent.ArtifactCompareArtifact{
+				ArtifactID:  "artifact-previous-image",
+				RunID:       "run-1",
+				TaskID:      "task-1",
+				Kind:        "screenshot",
+				ContentType: "image/png",
+				CreatedAt:   "2026-04-01T09:00:00.000000000Z",
+			},
+			Status: "unsupported",
+			Limits: manageragent.ArtifactCompareLimits{MaxCompareBytes: 64 * 1024},
+			Messages: manageragent.ArtifactCompareMessages{
+				Title:  "Compare unavailable",
+				Detail: "Artifact compare currently supports text and structured-text content only.",
+			},
+			Navigation: manageragent.ArtifactCompareNavigation{
+				CurrentWorkbenchURL:  "/board/artifacts/workbench?artifact_id=" + artifactID,
+				PreviousWorkbenchURL: "/board/artifacts/workbench?artifact_id=artifact-previous-image",
+				BackToRunURL:         "/board/runs/workbench?run_id=run-2",
 			},
 		}, nil
 	default:
