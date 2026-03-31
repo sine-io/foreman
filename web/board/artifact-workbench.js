@@ -46,6 +46,16 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
     statusNode.dataset.tone = tone;
   };
 
+  const isPreviewableArtifact = (detail) => {
+    const contentType = detail.content_type || "";
+    return (
+      (detail.content_type && detail.content_type.startsWith("text/")) ||
+      contentType === "application/json" ||
+      contentType === "application/xml" ||
+      contentType === "application/x-yaml"
+    );
+  };
+
   const siblingWorkbenchURL = (sibling) =>
     sibling.artifact_id
       ? `/board/artifacts/workbench?artifact_id=${encodeURIComponent(sibling.artifact_id)}`
@@ -153,11 +163,12 @@ if (artifactInput && refreshButton && statusNode && siblingsRoot && detailRoot &
     const rawContentLink = detail.raw_content_url
       ? `<a class="board-link" href="${escapeHTML(detail.raw_content_url)}" target="_blank" rel="noopener noreferrer">Open raw artifact</a>`
       : '<span class="board-link board-link-disabled" aria-disabled="true">Raw artifact unavailable</span>';
-    const previewMarkup = detail.preview
+    const previewContent = detail.preview ?? "";
+    const previewMarkup = isPreviewableArtifact(detail)
       ? `
         <section class="detail-block detail-block-wide">
           <p class="detail-label">Bounded Preview</p>
-          <pre class="artifact-preview">${escapeHTML(detail.preview)}</pre>
+          <pre class="artifact-preview">${escapeHTML(previewContent)}</pre>
           ${detail.preview_truncated ? '<p class="detail-copy">Preview truncated to the workbench preview limit.</p>' : ""}
         </section>
       `

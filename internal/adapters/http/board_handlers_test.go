@@ -283,6 +283,19 @@ func TestArtifactWorkbenchJavaScriptUsesRawContentURL(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "Open raw artifact")
 }
 
+func TestArtifactWorkbenchJavaScriptTreatsEmptyTextPreviewAsPreviewable(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.content_type.startsWith(\"text/\")")
+	require.Contains(t, rec.Body.String(), "const previewContent = detail.preview ?? \"\";")
+	require.Contains(t, rec.Body.String(), "<pre class=\"artifact-preview\">${escapeHTML(previewContent)}</pre>")
+}
+
 func TestArtifactWorkbenchJavaScriptExtractsJSONErrorMessages(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
