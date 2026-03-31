@@ -57,6 +57,33 @@ For Phase 2, Foreman needs a dedicated artifact drill-down workbench that answer
 - Provide a safe raw-content endpoint through Foreman
 - Preserve a direct navigation path back to the related run workbench
 
+## Run Linkage Source Of Truth
+
+This design requires one explicit source-of-truth decision:
+
+- artifact drill-down is based on a durable `artifact -> run` linkage
+
+The persisted artifact model is currently task-scoped, but same-run sibling navigation and `run_workbench_url` require Foreman to resolve one artifact to one exact run without guessing.
+
+For this slice, the durable source of truth should be:
+
+- add persisted `run_id` linkage to artifact records
+- new artifact writes must persist `run_id`
+- same-run sibling lookup must use persisted `run_id`, not timestamp inference
+
+### Legacy Artifacts
+
+Existing task-scoped artifacts without reliable run linkage should remain legacy artifacts.
+
+Foreman should not guess run ownership for those rows from timestamps alone.
+
+That means:
+
+- linked artifacts participate fully in artifact workbench
+- legacy unlinked artifacts remain compatible through run-workbench in-page behavior until rewritten by newer runs or explicitly backfilled later
+
+This avoids ambiguous historical reconstruction and gives the artifact workbench a stable durable model.
+
 ## Non-Goals
 
 This design does not include:
@@ -130,6 +157,10 @@ The approved navigation path is:
 Board overview and task-detail workbench do not need direct artifact entry in v1.
 
 This keeps artifact drill-down clearly below run-level troubleshooting rather than turning it into a first-class top-level operator surface.
+
+Artifact workbench entry from run workbench is guaranteed only for linked artifacts with durable `run_id`.
+
+Legacy unlinked artifacts should continue to use compatibility behavior on the run page rather than pretending to belong to one exact run.
 
 ## Layout
 
@@ -211,6 +242,8 @@ This endpoint should return the full artifact workbench view, including:
 
 The workbench detail response should include preview content directly so the page can render the first view without an immediate second roundtrip for content.
 
+The workbench detail response applies to linked artifacts. For legacy unlinked artifacts, the endpoint may reject the request rather than inventing same-run context.
+
 ### Raw Content Endpoint
 
 Add a dedicated raw artifact content endpoint:
@@ -258,7 +291,7 @@ It should not force inline rendering for binary or media types.
 
 ## Sibling Scope Rule
 
-Sibling artifact navigation should be limited to artifacts from the same run as the selected artifact.
+Sibling artifact navigation should be limited to artifacts from the same persisted `run_id` as the selected artifact.
 
 It should not include:
 
@@ -298,6 +331,8 @@ The sibling rows should include:
 
 The server should compute navigation URLs rather than forcing the client to infer them.
 
+The `path` field in the workbench view should be a sanitized display path relative to Foreman's artifact root, never a raw absolute filesystem path.
+
 ## Error Handling
 
 ### Missing Artifact
@@ -306,6 +341,14 @@ If the artifact does not exist:
 
 - return `404`
 - do not render stale artifact data
+
+### Legacy Unlinked Artifact
+
+If the artifact row exists but does not have durable run linkage yet:
+
+- return `409`
+- explain that the artifact is not yet linked to one exact run
+- do not synthesize same-run sibling context from timestamps alone
 
 ### Broken Artifact Linkage
 
@@ -322,6 +365,16 @@ If a preview cannot be shown safely:
 - show metadata and raw-content access
 - do not treat missing preview as a hard failure
 
+### Raw Content Missing Or Unreadable
+
+If the artifact row exists but the backing file is missing:
+
+- return `410`
+
+If the backing file exists but Foreman cannot read it safely:
+
+- return `500`
+
 ## Control-Plane Boundary
 
 The artifact workbench should stay inside Foreman's local control-plane role.
@@ -331,6 +384,17 @@ That means:
 - preview and content access should flow through Foreman HTTP endpoints
 - the browser should not touch raw filesystem paths directly
 - the page should remain operator-focused, not repo-browser-focused
+
+### Raw Content Safety
+
+`GET /api/manager/artifacts/:id/content` should:
+
+- always set `X-Content-Type-Options: nosniff`
+- return only server-chosen `Content-Type`
+- force `Content-Disposition: attachment` for active or untrusted content types such as HTML, SVG, JavaScript, or unknown types
+- allow inline rendering only for explicitly safe text-like content types
+
+The workbench page should rely on bounded preview for first-class reading and treat raw content as a controlled escape hatch, not as the default inline surface.
 
 This keeps Foreman aligned with its Phase 2 boundary and avoids reimplementing a general artifact storage UI.
 

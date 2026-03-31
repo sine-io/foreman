@@ -180,6 +180,12 @@ In v1, `artifact target` means an internal anchor or selection target inside the
 - a dedicated artifact-detail page
 - inline artifact contents
 
+This rule is superseded in part by the later artifact workbench design at:
+
+- `docs/superpowers/specs/2026-03-31-foreman-artifact-workbench-design.md`
+
+For artifacts with durable `run_id` linkage, run workbench may deep-link to a dedicated artifact workbench page. In-page anchors remain the compatibility behavior for legacy unlinked task-scoped artifacts.
+
 ## Page Data Model
 
 The run-detail workbench needs a dedicated read model rather than reusing the current basic `RunDetailView`.
@@ -200,6 +206,11 @@ The view should include:
 - key metadata such as timestamps when available
 
 The server should compute navigation URLs rather than forcing the client to infer them.
+
+During the transition to dedicated artifact workbench, `artifact_target_urls` may contain:
+
+- dedicated artifact workbench URLs for linked artifacts
+- in-page anchors for legacy unlinked artifacts
 
 ## API Shape
 
