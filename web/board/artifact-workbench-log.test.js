@@ -329,6 +329,35 @@ test('summary navigation keeps collapsed teaser when the requested line is alrea
   );
 });
 
+test('summary navigation expands single-line previews when the anchor target sits beyond the teaser character budget', async () => {
+  const summaryTarget = 'late marker';
+  const hiddenPreviewTail = 'preview hidden tail marker';
+  const preview = `${'0123456789'.repeat(45)} ${hiddenPreviewTail} ${summaryTarget} ${'abcdef'.repeat(35)}`;
+
+  await withWorkbenchHarness(
+    {
+      'artifact-1': buildArtifactDetail('artifact-1', {
+        summary: summaryTarget,
+        preview,
+      }),
+    },
+    async ({ detailRoot }) => {
+      assert.match(detailRoot.innerHTML, /data-line-number="1"/);
+      assert.match(detailRoot.innerHTML, /data-expanded="false"/);
+      assert.doesNotMatch(detailRoot.innerHTML, /preview hidden tail marker/);
+
+      detailRoot.dispatch('click', {
+        target: createActionTarget('jump-to-line', { lineNumber: '1' }),
+      });
+      await flushPromises();
+
+      assert.match(detailRoot.innerHTML, /data-expanded="true"/);
+      assert.match(detailRoot.innerHTML, /preview hidden tail marker/);
+      assert.match(detailRoot.innerHTML, /artifact-preview-log-line is-targeted" id="artifact-preview-line-1"/);
+    },
+  );
+});
+
 test('switching to a different artifact resets long-text previews to collapsed mode', async () => {
   await withWorkbenchHarness(
     {

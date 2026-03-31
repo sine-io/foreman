@@ -669,7 +669,20 @@
         ? state.previewModel.teaser.visibleLines
         : [];
 
-    return visibleLines.some((line) => parseLineNumber(line && line.lineNumber) === parsedLineNumber);
+    const visibleLine = visibleLines.find(
+      (line) => parseLineNumber(line && line.lineNumber) === parsedLineNumber,
+    );
+    if (!visibleLine) {
+      return false;
+    }
+
+    const hiddenCharacterCount =
+      Number(state.previewModel && state.previewModel.teaser && state.previewModel.teaser.hiddenCharacterCount) || 0;
+    if (hiddenCharacterCount > 0 && visibleLines.length === 1) {
+      return false;
+    }
+
+    return true;
   };
 
   const scrollToPreviewLine = (lineNumber) => {
