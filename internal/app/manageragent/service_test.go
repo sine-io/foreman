@@ -419,6 +419,48 @@ func TestRunWorkbenchReturnsNotFoundWhenMissing(t *testing.T) {
 	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
+func TestArtifactWorkbenchReturnsView(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactWorkbench = ports.ArtifactWorkbenchRow{
+		ArtifactID:  "artifact-1",
+		RunID:       "run-9",
+		TaskID:      "task-1",
+		ProjectID:   "project-1",
+		ModuleID:    "module-1",
+		Kind:        "assistant_summary",
+		Summary:     "Artifact summary",
+		Path:        "tasks/task-1/assistant_summary.txt",
+		StoragePath: "tasks/task-1/assistant_summary.txt",
+		Siblings:    []ports.ArtifactRecord{{ID: "artifact-1", RunID: "run-9", Kind: "assistant_summary", Summary: "Artifact summary"}},
+	}
+	harness.artifactStore.preview = "Artifact preview"
+	svc := harness.newService()
+
+	view, err := svc.ArtifactWorkbench(context.Background(), "artifact-1")
+	require.NoError(t, err)
+	require.Equal(t, "artifact-1", view.ArtifactID)
+	require.Equal(t, "run-9", view.RunID)
+	require.Equal(t, "Artifact preview", view.Preview)
+}
+
+func TestArtifactWorkbenchReturnsConflictForLegacyArtifact(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactWorkbenchErr = ports.ErrArtifactRunLinkageConflict
+	svc := harness.newService()
+
+	_, err := svc.ArtifactWorkbench(context.Background(), "artifact-legacy")
+	require.ErrorIs(t, err, ErrArtifactWorkbenchConflict)
+}
+
+func TestArtifactWorkbenchReturnsNotFoundWhenMissing(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactWorkbenchErr = sql.ErrNoRows
+	svc := harness.newService()
+
+	_, err := svc.ArtifactWorkbench(context.Background(), "artifact-missing")
+	require.ErrorIs(t, err, ErrArtifactWorkbenchNotFound)
+}
+
 func TestTaskWorkbenchUsesRequestedProjectBoard(t *testing.T) {
 	harness := newHarness()
 	harness.mustCreateProject(t, "project-1")
@@ -583,6 +625,7 @@ type serviceHarness struct {
 	tasks          *fakeTaskRepo
 	approvals      *fakeApprovalRepo
 	runs           *fakeRunRepo
+	artifactStore  *fakeArtifactStore
 	board          *fakeBoardQueryRepo
 	policyDecision domainpolicy.Decision
 	runnerState    string
@@ -590,11 +633,12 @@ type serviceHarness struct {
 
 func newHarness() *serviceHarness {
 	harness := &serviceHarness{
-		projects:  newFakeProjectRepo(),
-		modules:   newFakeModuleRepo(),
-		tasks:     newFakeTaskRepo(),
-		approvals: &fakeApprovalRepo{byTaskID: map[string]approval.Approval{}},
-		runs:      &fakeRunRepo{},
+		projects:      newFakeProjectRepo(),
+		modules:       newFakeModuleRepo(),
+		tasks:         newFakeTaskRepo(),
+		approvals:     &fakeApprovalRepo{byTaskID: map[string]approval.Approval{}},
+		runs:          &fakeRunRepo{},
+		artifactStore: &fakeArtifactStore{},
 	}
 	harness.board = &fakeBoardQueryRepo{
 		modules:   harness.modules,
@@ -663,6 +707,7 @@ func (h *serviceHarness) newService() *Service {
 		ReprioritizeTask:             command.NewReprioritizeTaskHandler(h.tasks),
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
 		QueryRunWorkbench:            query.NewRunWorkbenchQuery(h.board),
+		QueryArtifactWorkbench:       query.NewArtifactWorkbenchQuery(h.board, h.artifactStore),
 		QueryTaskWorkbench:           query.NewTaskWorkbenchQuery(h.board),
 		QueryModuleBoard:             query.NewModuleBoardQuery(h.board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(h.board),
@@ -915,13 +960,36 @@ func (f *fakeArtifactRepo) Get(id string) (ports.ArtifactRecord, error) {
 	return ports.ArtifactRecord{ID: id}, nil
 }
 
+type fakeArtifactStore struct {
+	preview   string
+	truncated bool
+	err       error
+}
+
+func (f *fakeArtifactStore) Put(relativePath string, data []byte) (string, error) {
+	return relativePath, nil
+}
+
+func (f *fakeArtifactStore) ReadPreview(path string, maxBytes int) (string, bool, error) {
+	if f.err != nil {
+		return "", false, f.err
+	}
+	return f.preview, f.truncated, nil
+}
+
+func (f *fakeArtifactStore) ResolveDisplayPath(path string) (string, error) {
+	return path, nil
+}
+
 type fakeBoardQueryRepo struct {
-	modules         *fakeModuleRepo
-	tasks           *fakeTaskRepo
-	approvals       *fakeApprovalRepo
-	runs            *fakeRunRepo
-	runWorkbench    ports.RunWorkbenchRow
-	runWorkbenchErr error
+	modules              *fakeModuleRepo
+	tasks                *fakeTaskRepo
+	approvals            *fakeApprovalRepo
+	runs                 *fakeRunRepo
+	runWorkbench         ports.RunWorkbenchRow
+	runWorkbenchErr      error
+	artifactWorkbench    ports.ArtifactWorkbenchRow
+	artifactWorkbenchErr error
 }
 
 func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -972,6 +1040,13 @@ func (f *fakeBoardQueryRepo) GetRunWorkbench(runID string) (ports.RunWorkbenchRo
 		return ports.RunWorkbenchRow{}, f.runWorkbenchErr
 	}
 	return f.runWorkbench, nil
+}
+
+func (f *fakeBoardQueryRepo) GetArtifactWorkbench(artifactID string) (ports.ArtifactWorkbenchRow, error) {
+	if f.artifactWorkbenchErr != nil {
+		return ports.ArtifactWorkbenchRow{}, f.artifactWorkbenchErr
+	}
+	return f.artifactWorkbench, nil
 }
 
 func (f *fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {

@@ -38,6 +38,7 @@ type Dependencies struct {
 	ReprioritizeTask             *command.ReprioritizeTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
 	QueryRunWorkbench            *query.RunWorkbenchQuery
+	QueryArtifactWorkbench       *query.ArtifactWorkbenchQuery
 	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
@@ -64,6 +65,7 @@ type Service struct {
 	ReprioritizeTask             *command.ReprioritizeTaskHandler
 	QueryTaskStatus              *query.TaskStatusQuery
 	QueryRunWorkbench            *query.RunWorkbenchQuery
+	QueryArtifactWorkbench       *query.ArtifactWorkbenchQuery
 	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
@@ -91,6 +93,7 @@ func NewService(deps Dependencies) *Service {
 		ReprioritizeTask:             deps.ReprioritizeTask,
 		QueryTaskStatus:              deps.QueryTaskStatus,
 		QueryRunWorkbench:            deps.QueryRunWorkbench,
+		QueryArtifactWorkbench:       deps.QueryArtifactWorkbench,
 		QueryTaskWorkbench:           deps.QueryTaskWorkbench,
 		QueryModuleBoard:             deps.QueryModuleBoard,
 		QueryTaskBoard:               deps.QueryTaskBoard,
@@ -210,6 +213,19 @@ func (s *Service) RunWorkbench(ctx context.Context, runID string) (RunWorkbenchV
 	}
 
 	return s.QueryRunWorkbench.Execute(runID)
+}
+
+func (s *Service) ArtifactWorkbench(ctx context.Context, artifactID string) (ArtifactWorkbenchView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ArtifactWorkbenchView{}, err
+	}
+
+	view, err := s.QueryArtifactWorkbench.Execute(artifactID)
+	if err != nil {
+		return ArtifactWorkbenchView{}, normalizeArtifactWorkbenchError(artifactID, err)
+	}
+
+	return view, nil
 }
 
 func (s *Service) TaskWorkbench(ctx context.Context, projectID, taskID string) (TaskWorkbenchView, error) {
@@ -556,6 +572,21 @@ func normalizeTaskActionError(taskID, projectID string, err error) error {
 		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
 	case strings.Contains(err.Error(), "does not belong to project"):
 		return fmt.Errorf("%w: task %s not found in project %s", ErrTaskActionNotFound, taskID, projectID)
+	default:
+		return err
+	}
+}
+
+func normalizeArtifactWorkbenchError(artifactID string, err error) error {
+	switch {
+	case errors.Is(err, ErrArtifactWorkbenchNotFound):
+		return err
+	case errors.Is(err, ErrArtifactWorkbenchConflict):
+		return err
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("%w: artifact %s not found", ErrArtifactWorkbenchNotFound, artifactID)
+	case errors.Is(err, ports.ErrArtifactRunLinkageConflict):
+		return fmt.Errorf("%w: %v", ErrArtifactWorkbenchConflict, err)
 	default:
 		return err
 	}

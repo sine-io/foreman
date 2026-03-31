@@ -159,6 +159,79 @@ func (r *BoardQueryRepository) GetRunWorkbench(runID string) (ports.RunWorkbench
 	return row, nil
 }
 
+func (r *BoardQueryRepository) GetArtifactWorkbench(artifactID string) (ports.ArtifactWorkbenchRow, error) {
+	var row ports.ArtifactWorkbenchRow
+	var runID sql.NullString
+	var storagePath sql.NullString
+
+	err := r.db.QueryRow(
+		`select id, task_id, run_id, kind, path, nullif(storage_path, ''), summary
+		 from artifacts
+		 where id = ?`,
+		artifactID,
+	).Scan(
+		&row.ArtifactID,
+		&row.TaskID,
+		&runID,
+		&row.Kind,
+		&row.Path,
+		&storagePath,
+		&row.Summary,
+	)
+	if err != nil {
+		return ports.ArtifactWorkbenchRow{}, err
+	}
+
+	if !runID.Valid || runID.String == "" {
+		return ports.ArtifactWorkbenchRow{}, fmt.Errorf("%w: artifact %s is not linked to one exact run", ports.ErrArtifactRunLinkageConflict, artifactID)
+	}
+	row.RunID = runID.String
+	if storagePath.Valid {
+		row.StoragePath = storagePath.String
+	} else {
+		row.StoragePath = row.Path
+	}
+
+	var runTaskID string
+	err = r.db.QueryRow(
+		`select task_id
+		 from runs
+		 where id = ?`,
+		row.RunID,
+	).Scan(&runTaskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ports.ArtifactWorkbenchRow{}, fmt.Errorf("%w: artifact %s references missing run %s", ports.ErrArtifactBrokenLinkage, artifactID, row.RunID)
+	}
+	if err != nil {
+		return ports.ArtifactWorkbenchRow{}, err
+	}
+	if runTaskID != row.TaskID {
+		return ports.ArtifactWorkbenchRow{}, fmt.Errorf("%w: artifact %s task %s does not match run %s task %s", ports.ErrArtifactBrokenLinkage, artifactID, row.TaskID, row.RunID, runTaskID)
+	}
+
+	err = r.db.QueryRow(
+		`select m.project_id, t.module_id
+		 from tasks t
+		 join modules m on m.id = t.module_id
+		 where t.id = ?`,
+		row.TaskID,
+	).Scan(&row.ProjectID, &row.ModuleID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ports.ArtifactWorkbenchRow{}, fmt.Errorf("%w: artifact %s references missing task %s", ports.ErrArtifactBrokenLinkage, artifactID, row.TaskID)
+	}
+	if err != nil {
+		return ports.ArtifactWorkbenchRow{}, err
+	}
+
+	siblings, err := r.runArtifacts(row.RunID)
+	if err != nil {
+		return ports.ArtifactWorkbenchRow{}, err
+	}
+	row.Siblings = siblings
+
+	return row, nil
+}
+
 func (r *BoardQueryRepository) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	rows, err := r.db.Query(
 		`select a.id, a.task_id, t.module_id, t.summary, a.reason, a.state
@@ -372,7 +445,7 @@ func (r *BoardQueryRepository) latestApprovalForTask(taskID string) (approval.Ap
 
 func (r *BoardQueryRepository) taskArtifacts(taskID string) ([]ports.ArtifactRecord, string, error) {
 	rows, err := r.db.Query(
-		`select id, task_id, kind, path, summary
+		`select id, task_id, run_id, kind, path, nullif(storage_path, ''), summary
 		 from artifacts
 		 where task_id = ?
 		 order by created_at desc, id desc`,
@@ -389,8 +462,18 @@ func (r *BoardQueryRepository) taskArtifacts(taskID string) ([]ports.ArtifactRec
 	)
 	for rows.Next() {
 		var artifact ports.ArtifactRecord
-		if err := rows.Scan(&artifact.ID, &artifact.TaskID, &artifact.Kind, &artifact.Path, &artifact.Summary); err != nil {
+		var runID sql.NullString
+		var storagePath sql.NullString
+		if err := rows.Scan(&artifact.ID, &artifact.TaskID, &runID, &artifact.Kind, &artifact.Path, &storagePath, &artifact.Summary); err != nil {
 			return nil, "", err
+		}
+		if runID.Valid {
+			artifact.RunID = runID.String
+		}
+		if storagePath.Valid {
+			artifact.StoragePath = storagePath.String
+		} else {
+			artifact.StoragePath = artifact.Path
 		}
 		if preview == "" && artifact.Kind == "assistant_summary" {
 			preview = artifact.Summary
@@ -402,4 +485,39 @@ func (r *BoardQueryRepository) taskArtifacts(taskID string) ([]ports.ArtifactRec
 	}
 
 	return artifacts, preview, nil
+}
+
+func (r *BoardQueryRepository) runArtifacts(runID string) ([]ports.ArtifactRecord, error) {
+	rows, err := r.db.Query(
+		`select id, task_id, run_id, kind, path, nullif(storage_path, ''), summary
+		 from artifacts
+		 where run_id = ?
+		 order by created_at desc, id desc`,
+		runID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var artifacts []ports.ArtifactRecord
+	for rows.Next() {
+		var artifact ports.ArtifactRecord
+		var artifactRunID sql.NullString
+		var storagePath sql.NullString
+		if err := rows.Scan(&artifact.ID, &artifact.TaskID, &artifactRunID, &artifact.Kind, &artifact.Path, &storagePath, &artifact.Summary); err != nil {
+			return nil, err
+		}
+		if artifactRunID.Valid {
+			artifact.RunID = artifactRunID.String
+		}
+		if storagePath.Valid {
+			artifact.StoragePath = storagePath.String
+		} else {
+			artifact.StoragePath = artifact.Path
+		}
+		artifacts = append(artifacts, artifact)
+	}
+
+	return artifacts, rows.Err()
 }

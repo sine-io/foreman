@@ -31,6 +31,8 @@ type Response struct {
 type TaskStatusView = query.TaskStatusView
 type RunWorkbenchView = query.RunWorkbenchView
 type RunWorkbenchArtifact = query.RunWorkbenchArtifact
+type ArtifactWorkbenchView = query.ArtifactWorkbenchView
+type ArtifactWorkbenchSibling = query.ArtifactWorkbenchSibling
 type TaskWorkbenchView = query.TaskWorkbenchView
 type TaskWorkbenchAction = query.TaskWorkbenchAction
 type TaskWorkbenchArtifact = query.TaskWorkbenchArtifact
@@ -60,8 +62,10 @@ type ApprovalWorkbenchActionResponse struct {
 }
 
 var (
-	ErrTaskActionNotFound = errors.New("task action not found")
-	ErrTaskActionConflict = errors.New("task action conflict")
+	ErrTaskActionNotFound        = errors.New("task action not found")
+	ErrTaskActionConflict        = errors.New("task action conflict")
+	ErrArtifactWorkbenchNotFound = errors.New("artifact workbench not found")
+	ErrArtifactWorkbenchConflict = errors.New("artifact workbench conflict")
 )
 
 type ModuleSnapshot struct {

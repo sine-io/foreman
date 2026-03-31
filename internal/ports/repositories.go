@@ -11,6 +11,9 @@ import (
 
 var ErrPendingApprovalConflict = errors.New("pending approval already exists")
 
+var ErrArtifactRunLinkageConflict = errors.New("artifact run linkage conflict")
+var ErrArtifactBrokenLinkage = errors.New("artifact broken linkage")
+
 type ProjectRepository interface {
 	Save(project.Project) error
 	Get(id string) (project.Project, error)
@@ -101,6 +104,19 @@ type RunWorkbenchRow struct {
 	Artifacts    []ArtifactRecord
 }
 
+type ArtifactWorkbenchRow struct {
+	ArtifactID  string
+	RunID       string
+	TaskID      string
+	ProjectID   string
+	ModuleID    string
+	Kind        string
+	Path        string
+	StoragePath string
+	Summary     string
+	Siblings    []ArtifactRecord
+}
+
 type ApprovalQueueRow struct {
 	ApprovalID      string
 	TaskID          string
@@ -164,6 +180,7 @@ type BoardQueryRepository interface {
 	ListTasks(projectID string) ([]TaskBoardRow, error)
 	GetRunDetail(runID string) (RunDetailRecord, error)
 	GetRunWorkbench(runID string) (RunWorkbenchRow, error)
+	GetArtifactWorkbench(artifactID string) (ArtifactWorkbenchRow, error)
 	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
 	ListApprovalWorkbenchQueue(projectID string) ([]ApprovalWorkbenchQueueRow, error)
 	GetApprovalWorkbenchDetail(approvalID string) (ApprovalWorkbenchDetailRow, error)

@@ -85,6 +85,10 @@ func (f fakeBoardReadRepo) GetRunWorkbench(runID string) (ports.RunWorkbenchRow,
 	return f.runWorkbench, nil
 }
 
+func (f fakeBoardReadRepo) GetArtifactWorkbench(artifactID string) (ports.ArtifactWorkbenchRow, error) {
+	return ports.ArtifactWorkbenchRow{}, nil
+}
+
 func (f fakeBoardReadRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {
 	return f.approvals, nil
 }

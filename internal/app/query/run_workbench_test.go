@@ -72,7 +72,7 @@ func TestRunWorkbenchReturnsNotFoundForMissingRun(t *testing.T) {
 	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
-func TestRunWorkbenchIncludesTaskWorkbenchURLAndArtifactTargets(t *testing.T) {
+func TestRunWorkbenchArtifactTargetsUseArtifactWorkbenchForLinkedArtifacts(t *testing.T) {
 	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
 		row: ports.RunWorkbenchRow{
 			RunID:     "run-1",
@@ -80,8 +80,8 @@ func TestRunWorkbenchIncludesTaskWorkbenchURLAndArtifactTargets(t *testing.T) {
 			ProjectID: "project-1",
 			RunState:  "running",
 			Artifacts: []ports.ArtifactRecord{
-				{ID: "artifact-2", Kind: "assistant_summary", Path: "artifacts/tasks/task-1/assistant_summary.txt", Summary: "Working through the task"},
-				{ID: "artifact-1", Kind: "command_result", Path: "artifacts/tasks/task-1/command.txt", Summary: "Command output summary"},
+				{ID: "artifact-2", RunID: "run-1", Kind: "assistant_summary", Path: "artifacts/tasks/task-1/assistant_summary.txt", Summary: "Working through the task"},
+				{ID: "artifact-1", RunID: "run-1", Kind: "command_result", Path: "artifacts/tasks/task-1/command.txt", Summary: "Command output summary"},
 			},
 		},
 	})
@@ -90,12 +90,34 @@ func TestRunWorkbenchIncludesTaskWorkbenchURLAndArtifactTargets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/board/tasks/workbench?project_id=project-1&task_id=task-1", view.TaskWorkbenchURL)
 	require.Equal(t, map[string]string{
-		"artifact-2": "#artifact-artifact-2",
-		"artifact-1": "#artifact-artifact-1",
+		"artifact-2": "/board/artifacts/workbench?artifact_id=artifact-2",
+		"artifact-1": "/board/artifacts/workbench?artifact_id=artifact-1",
 	}, view.ArtifactTargetURLs)
 	require.Len(t, view.Artifacts, 2)
 	require.Equal(t, "assistant_summary", view.Artifacts[0].Kind)
 	require.Equal(t, "artifacts/tasks/task-1/assistant_summary.txt", view.Artifacts[0].Path)
+}
+
+func TestRunWorkbenchArtifactTargetsKeepAnchorFallbackForLegacyArtifacts(t *testing.T) {
+	query := NewRunWorkbenchQuery(fakeRunWorkbenchRepo{
+		row: ports.RunWorkbenchRow{
+			RunID:     "run-1",
+			TaskID:    "task-1",
+			ProjectID: "project-1",
+			RunState:  "running",
+			Artifacts: []ports.ArtifactRecord{
+				{ID: "artifact-2", Kind: "assistant_summary", Path: "artifacts/tasks/task-1/assistant_summary.txt", Summary: "Working through the task"},
+				{ID: "artifact-1", RunID: "run-1", Kind: "command_result", Path: "artifacts/tasks/task-1/command.txt", Summary: "Command output summary"},
+			},
+		},
+	})
+
+	view, err := query.Execute("run-1")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"artifact-2": "#artifact-artifact-2",
+		"artifact-1": "/board/artifacts/workbench?artifact_id=artifact-1",
+	}, view.ArtifactTargetURLs)
 }
 
 func TestRunWorkbenchEscapesTaskWorkbenchURLQueryParameters(t *testing.T) {

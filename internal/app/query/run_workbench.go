@@ -70,7 +70,7 @@ func (q *RunWorkbenchQuery) Execute(runID string) (RunWorkbenchView, error) {
 			Summary: artifact.Summary,
 		})
 		if artifact.ID != "" {
-			view.ArtifactTargetURLs[artifact.ID] = runWorkbenchArtifactTargetURL(artifact.ID)
+			view.ArtifactTargetURLs[artifact.ID] = runWorkbenchArtifactTargetURL(artifact)
 		}
 	}
 
@@ -113,7 +113,11 @@ func isRawLogArtifact(kind string) bool {
 	return kind == "run_log" || strings.HasSuffix(kind, "_log")
 }
 
-func runWorkbenchArtifactTargetURL(artifactID string) string {
+func runWorkbenchArtifactTargetURL(artifact ports.ArtifactRecord) string {
+	if artifact.RunID != "" {
+		return artifactWorkbenchURL(artifact.ID)
+	}
+	artifactID := artifact.ID
 	return "#artifact-" + artifactID
 }
 
