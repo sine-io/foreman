@@ -77,6 +77,33 @@ test('buildLogErgonomicsModel collapses long single-line previews with a charact
   assert.equal(model.teaser.visibleLines[0].text, preview.slice(0, 120));
 });
 
+test('buildLogErgonomicsModel collapses few-line previews when total characters exceed teaser budget', () => {
+  const preview = ['a'.repeat(260), 'b'.repeat(260), 'c'.repeat(260)].join('\n');
+  const detail = {
+    content_type: 'text/plain',
+    kind: 'artifact',
+    path: 'stdout.log',
+    preview,
+    preview_truncated: false,
+  };
+  const previewResult = renderers.renderPreview(detail, detail.preview);
+  const model = buildLogErgonomicsModel(detail, previewResult, {
+    teaserCharacters: 300,
+    teaserLineCount: 5,
+  });
+
+  assert.equal(model.eligible, true);
+  assert.equal(model.teaser.collapsed, true);
+  assert.equal(model.expansion.canExpand, true);
+  assert.equal(model.expansion.expanded, false);
+  assert.equal(model.teaser.visibleLines.length, 2);
+  assert.equal(model.teaser.hiddenLineCount, 1);
+  assert.equal(model.teaser.hiddenCharacterCount > 0, true);
+  assert.equal(model.teaser.visibleLines[0].text.length, 260);
+  assert.equal(model.teaser.visibleLines[1].text.length > 0, true);
+  assert.equal(model.teaser.visibleLines[1].text.length < 260, true);
+});
+
 test('expand-all state helpers transition from collapsed to expanded without mutation', () => {
   const initialState = createExpansionState({ eligible: true });
   const expandedState = expandAllState(initialState);
@@ -182,4 +209,25 @@ test('buildLogErgonomicsModel requires a valid generic previewResult contract be
   assert.equal(fallbackPreviewResult.fallback, true);
   const fallbackModel = buildLogErgonomicsModel(detail, fallbackPreviewResult);
   assert.equal(fallbackModel.eligible, true);
+});
+
+test('buildLogErgonomicsModel rejects non-text artifacts even with a generic text previewResult', () => {
+  const detail = {
+    content_type: 'application/octet-stream',
+    kind: 'artifact',
+    path: 'archive.bin',
+    preview: 'z'.repeat(900),
+    preview_truncated: false,
+  };
+  const previewResult = {
+    renderer: 'text',
+    output: 'text',
+    text: detail.preview,
+  };
+
+  assert.equal(isLongTextPreview(detail, previewResult), false);
+  const model = buildLogErgonomicsModel(detail, previewResult);
+  assert.equal(model.eligible, false);
+  assert.equal(model.expansion.canExpand, false);
+  assert.equal(model.teaser.collapsed, false);
 });

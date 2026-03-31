@@ -67,7 +67,7 @@
     return true;
   };
 
-  const isTextLikeArtifact = (detail, previewResult, previewText) => {
+  const isTextLikeArtifact = (detail) => {
     const contentType = normalizeText(normalizeDetail(detail).content_type).toLowerCase();
     if (contentType.startsWith("text/")) {
       return true;
@@ -79,10 +79,7 @@
     ) {
       return true;
     }
-    if (previewResult && previewResult.renderer === "text" && typeof previewResult.text === "string") {
-      return true;
-    }
-    return normalizeText(previewText).length > 0;
+    return false;
   };
 
   const renderLineNumberedTextUnsafe = (previewText) =>
@@ -131,19 +128,47 @@
     const teaserLineCount = safeInteger(options.teaserLineCount, DEFAULT_TEASER_LINE_COUNT);
     const teaserCharacters = safeInteger(options.teaserCharacters, DEFAULT_TEASER_CHARACTERS);
     let visibleLines = normalizedLines.slice(0, teaserLineCount);
-    const hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
+    let hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
     let hiddenCharacterCount = 0;
 
-    if (hiddenLineCount === 0 && normalizedLines.length === 1) {
-      const firstLine = normalizedLines[0];
-      if (firstLine.text.length > teaserCharacters) {
-        visibleLines = [
-          {
-            ...firstLine,
-            text: firstLine.text.slice(0, teaserCharacters),
-          },
-        ];
-        hiddenCharacterCount = firstLine.text.length - teaserCharacters;
+    if (hiddenLineCount === 0) {
+      const totalCharacterCount = normalizedLines.reduce(
+        (sum, line) => sum + normalizeText(line && line.text).length,
+        0,
+      );
+
+      if (totalCharacterCount > teaserCharacters) {
+        let remainingCharacters = teaserCharacters;
+        const characterVisibleLines = [];
+
+        normalizedLines.forEach((line) => {
+          const lineText = normalizeText(line && line.text);
+          if (remainingCharacters <= 0) {
+            hiddenCharacterCount += lineText.length;
+            return;
+          }
+
+          if (lineText.length <= remainingCharacters) {
+            characterVisibleLines.push({
+              ...line,
+              text: lineText,
+            });
+            remainingCharacters -= lineText.length;
+            return;
+          }
+
+          characterVisibleLines.push({
+            ...line,
+            text: lineText.slice(0, remainingCharacters),
+          });
+          hiddenCharacterCount += lineText.length - remainingCharacters;
+          remainingCharacters = 0;
+        });
+
+        if (hiddenCharacterCount > 0) {
+          visibleLines = characterVisibleLines;
+          hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
+        }
       }
     }
 
