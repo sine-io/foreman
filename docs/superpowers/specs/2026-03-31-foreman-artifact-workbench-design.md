@@ -265,7 +265,7 @@ The first version should show:
 It should not:
 
 - stream arbitrarily large artifact bodies inline
-- inline binary payloads
+- inline binary payloads except where later explicitly amended by the binary/media preview design
 - become a full log viewer
 
 ### Bounded Preview
@@ -400,8 +400,18 @@ That means:
 
 - always set `X-Content-Type-Options: nosniff`
 - return only server-chosen `Content-Type`
-- force `Content-Disposition: attachment` for active or untrusted content types such as HTML, SVG, JavaScript, or unknown types
-- allow inline rendering only for explicitly safe text-like content types
+- force `Content-Disposition: attachment` for active or untrusted content types such as HTML, JavaScript, or unknown types
+- allow inline rendering for explicitly safe text-like content types
+
+This raw-content rule is amended in part by the later binary/media preview design at:
+
+- `docs/superpowers/specs/2026-03-31-foreman-artifact-binary-media-preview-design.md`
+
+After that amendment:
+
+- approved raster image types may render inline through the same endpoint
+- SVG is handled by the later binary/media preview rules as a best-effort previewable type under the current safety policy
+- non-image binary/media artifacts remain attachment/download oriented
 
 The workbench page should rely on bounded preview for first-class reading and treat raw content as a controlled escape hatch, not as the default inline surface.
 
