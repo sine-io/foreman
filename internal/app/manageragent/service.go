@@ -617,7 +617,8 @@ func normalizeArtifactCompareError(artifactID string, err error) error {
 	case errors.Is(err, sql.ErrNoRows):
 		return fmt.Errorf("%w: artifact %s not found", ErrArtifactCompareNotFound, artifactID)
 	case errors.Is(err, ports.ErrArtifactCompareSelectionInvalid):
-		return fmt.Errorf("%w: %v", ErrArtifactCompareSelection, err)
+		msg := strings.TrimPrefix(err.Error(), ports.ErrArtifactCompareSelectionInvalid.Error()+": ")
+		return fmt.Errorf("%w: %s", ErrArtifactCompareSelection, msg)
 	default:
 		return err
 	}
