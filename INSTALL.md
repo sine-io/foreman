@@ -225,11 +225,11 @@ Expected outcomes:
 
 Legacy `#artifact-...` run-page anchors remain as a compatibility fallback for older unlinked artifacts, but that behavior is not part of the normal reproducible smoke because newly created artifacts are linked.
 
-## Artifact Renderer Polish Smoke
+## Artifact Renderer Polish Smoke (Optional Browser Check)
 
-With `foreman serve` running, verify renderer polish inside the existing artifact workbench:
+With `foreman serve` running, you can manually verify renderer polish inside the existing artifact workbench if you already have a suitable artifact. The documented clean-repo smoke above does not guarantee creation of a JSON, Markdown, or diff / patch artifact.
 
-1. Reuse an artifact from the artifact workbench smoke whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch.
+1. If you already have an artifact whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch, note its `artifact_id`. Otherwise, skip this optional check.
 
 2. Read the manager artifact workbench detail and note the preview metadata that drives renderer selection.
 
@@ -237,18 +237,14 @@ With `foreman serve` running, verify renderer polish inside the existing artifac
 curl http://localhost:8080/api/manager/artifacts/<artifact-id>/workbench
 ```
 
-3. Load the existing board artifact workbench page and inspect the preview there.
-
-```bash
-curl http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>
-```
+3. Open `http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>` in a web browser and inspect the preview there. The renderer polish is client-side, so `curl` against the board route only verifies the static shell, not the rendered preview.
 
 Expected outcomes:
 
 - renderer polish stays inside `/board/artifacts/workbench?artifact_id=<artifact-id>` and does not add a new route
-- JSON artifacts pretty-print, Markdown artifacts render safely as inert formatted content, and diff / patch artifacts use a structured diff-oriented preview
+- in the browser, JSON artifacts pretty-print, Markdown artifacts render safely as inert formatted content, and diff / patch artifacts use a structured diff-oriented preview
 - the smoke artifact may be selected by `content_type`, artifact `kind`, or filename `path`
-- malformed or unsupported content still falls back to the generic text preview
+- unsupported content, and renderer fallback cases such as JSON parse failures, still use the generic text preview
 - truncation warnings remain visible when the preview is partial
 
 ## Control-Plane Hardening Smoke

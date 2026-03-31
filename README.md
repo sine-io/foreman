@@ -199,7 +199,7 @@ Artifact workbench operator flow:
 - Stream raw artifact bytes with `GET /api/manager/artifacts/<artifact-id>/content`, which now returns safe response headers for direct download or preview.
 - Renderer polish stays inside this existing artifact workbench page; it does not add a new route.
 - Artifacts whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch now get a more readable structured preview.
-- Malformed JSON, malformed diff content, and unsupported text-like content still fall back to the generic text preview.
+- Unsupported text-like content, along with JSON previews that fail to parse, still fall back to the generic text preview.
 
 ## Control-Plane Guarantees
 
