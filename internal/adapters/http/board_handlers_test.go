@@ -315,6 +315,70 @@ func TestArtifactWorkbenchJavaScriptUsesRawContentURL(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "Open raw artifact")
 }
 
+func TestArtifactWorkbenchJavaScriptUsesInlineImagePreviewForSupportedImages(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "image/png")
+	require.Contains(t, rec.Body.String(), "image/jpeg")
+	require.Contains(t, rec.Body.String(), "image/gif")
+	require.Contains(t, rec.Body.String(), "image/webp")
+	require.Contains(t, rec.Body.String(), "artifact-preview-image")
+}
+
+func TestArtifactWorkbenchJavaScriptKeepsBinaryArtifactsOnFallbackPath(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Inline preview is unavailable for this artifact type.")
+	require.Contains(t, rec.Body.String(), "Use the raw artifact link for the original content.")
+}
+
+func TestArtifactWorkbenchJavaScriptUsesRawContentURLForImagePreview(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact-preview-image")
+	require.Contains(t, rec.Body.String(), "detail.raw_content_url")
+}
+
+func TestArtifactWorkbenchJavaScriptKeepsSVGOnBestEffortPath(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "image/svg+xml")
+	require.Contains(t, rec.Body.String(), "browser could not display this image preview")
+}
+
+func TestArtifactWorkbenchJavaScriptFallsBackWhenImagePreviewFailsToLoad(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "data-artifact-preview-image")
+	require.Contains(t, rec.Body.String(), "addEventListener(\"error\"")
+	require.Contains(t, rec.Body.String(), "imagePreviewFailed")
+}
+
 func TestArtifactWorkbenchJavaScriptTreatsEmptyTextPreviewAsPreviewable(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 

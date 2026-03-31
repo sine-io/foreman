@@ -186,6 +186,83 @@ func TestArtifactWorkbenchIncludesBoundedPreviewAndTruncationFlag(t *testing.T) 
 	require.True(t, view.PreviewTruncated)
 }
 
+func TestArtifactWorkbenchQueryClassifiesApprovedImageTypes(t *testing.T) {
+	harness := newArtifactWorkbenchHarness(t)
+	harness.seedTask(t, "project-1", "module-1", "task-1")
+	harness.saveRun(t, ports.Run{
+		ID:         "run-1",
+		TaskID:     "task-1",
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T09:00:00.000000000Z")
+
+	cases := []struct {
+		name            string
+		artifactID      string
+		path            string
+		storagePath     string
+		wantContentType string
+	}{
+		{
+			name:            "png falls back to storage path when display path is blank",
+			artifactID:      "artifact-png",
+			storagePath:     "tasks/task-1/screenshot.png",
+			wantContentType: "image/png",
+		},
+		{
+			name:            "jpeg",
+			artifactID:      "artifact-jpeg",
+			path:            "tasks/task-1/photo.jpg",
+			wantContentType: "image/jpeg",
+		},
+		{
+			name:            "gif",
+			artifactID:      "artifact-gif",
+			path:            "tasks/task-1/animation.gif",
+			wantContentType: "image/gif",
+		},
+		{
+			name:            "webp",
+			artifactID:      "artifact-webp",
+			path:            "tasks/task-1/preview.webp",
+			wantContentType: "image/webp",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			artifactFilePath := tc.path
+			if artifactFilePath == "" {
+				artifactFilePath = tc.storagePath
+			}
+			harness.writeArtifactFile(t, artifactFilePath, string([]byte{0x00, 0x01, 0x02, 0x03}))
+
+			storagePath := tc.storagePath
+			if storagePath == "" {
+				storagePath = tc.path
+			}
+			harness.saveArtifact(t, artifactSeed{
+				ID:          tc.artifactID,
+				TaskID:      "task-1",
+				RunID:       "run-1",
+				Kind:        "screenshot",
+				Path:        tc.path,
+				StoragePath: storagePath,
+				Summary:     "Previewable image artifact",
+				CreatedAt:   "2026-03-31T09:01:00.000000000Z",
+			})
+
+			view, err := harness.query.Execute(tc.artifactID)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantContentType, view.ContentType)
+			require.Empty(t, view.Preview)
+			require.False(t, view.PreviewTruncated)
+			require.False(t, artifactWorkbenchPreviewable(view.ContentType))
+			require.True(t, ArtifactWorkbenchAllowsInlineRawContent(view.ContentType))
+		})
+	}
+}
+
 func TestArtifactWorkbenchFallsBackForNonTextArtifact(t *testing.T) {
 	harness := newArtifactWorkbenchHarness(t)
 	harness.seedTask(t, "project-1", "module-1", "task-1")
@@ -195,24 +272,25 @@ func TestArtifactWorkbenchFallsBackForNonTextArtifact(t *testing.T) {
 		RunnerKind: "codex",
 		State:      "completed",
 	}, "2026-03-31T09:00:00.000000000Z")
-	harness.writeArtifactFile(t, "tasks/task-1/screenshot.png", string([]byte{0x89, 0x50, 0x4e, 0x47}))
+	harness.writeArtifactFile(t, "tasks/task-1/report.pdf", string([]byte{0x25, 0x50, 0x44, 0x46}))
 	harness.saveArtifact(t, artifactSeed{
-		ID:          "artifact-image",
+		ID:          "artifact-binary",
 		TaskID:      "task-1",
 		RunID:       "run-1",
-		Kind:        "screenshot",
-		Path:        "tasks/task-1/screenshot.png",
-		StoragePath: "tasks/task-1/screenshot.png",
-		Summary:     "PNG screenshot artifact",
+		Kind:        "report",
+		Path:        "tasks/task-1/report.pdf",
+		StoragePath: "tasks/task-1/report.pdf",
+		Summary:     "PDF report artifact",
 		CreatedAt:   "2026-03-31T09:01:00.000000000Z",
 	})
 
-	view, err := harness.query.Execute("artifact-image")
+	view, err := harness.query.Execute("artifact-binary")
 	require.NoError(t, err)
-	require.Equal(t, "image/png", view.ContentType)
+	require.Equal(t, "application/pdf", view.ContentType)
 	require.Empty(t, view.Preview)
 	require.False(t, view.PreviewTruncated)
-	require.Equal(t, "/api/manager/artifacts/artifact-image/content", view.RawContentURL)
+	require.False(t, ArtifactWorkbenchAllowsInlineRawContent(view.ContentType))
+	require.Equal(t, "/api/manager/artifacts/artifact-binary/content", view.RawContentURL)
 }
 
 func TestArtifactWorkbenchIncludesRunAndRawContentURLs(t *testing.T) {

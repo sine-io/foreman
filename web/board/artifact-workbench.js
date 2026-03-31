@@ -17,14 +17,26 @@
   const currentRenderers = () => globalScope.ForemanArtifactRenderers || globalThis.ForemanArtifactRenderers;
   const currentLogErgonomics = () =>
     globalScope.ForemanArtifactLogErgonomics || globalThis.ForemanArtifactLogErgonomics;
+  const normalizedContentType = (value) => normalizeText(value).split(";")[0].trim().toLowerCase();
 
   const isPreviewableArtifact = (detail) => {
-    const contentType = normalizeText(detail && detail.content_type);
+    const contentType = normalizedContentType(detail && detail.content_type);
     return (
       contentType.startsWith("text/") ||
       contentType === "application/json" ||
       contentType === "application/xml" ||
       contentType === "application/x-yaml"
+    );
+  };
+
+  const isImagePreviewableArtifact = (detail) => {
+    const contentType = normalizedContentType(detail && detail.content_type);
+    return (
+      contentType === "image/png" ||
+      contentType === "image/jpeg" ||
+      contentType === "image/gif" ||
+      contentType === "image/webp" ||
+      contentType === "image/svg+xml"
     );
   };
 
@@ -55,6 +67,13 @@
   const buildPreviewNoticeMarkup = (notice) =>
     notice ? `<p class="detail-copy artifact-preview-notice">${escapeHTML(notice)}</p>` : "";
 
+  const buildBinaryFallbackMarkup = (rawContentLink, message) => `
+    <div class="artifact-preview-fallback">
+      <p class="detail-copy">${escapeHTML(message)}</p>
+      ${rawContentLink}
+    </div>
+  `;
+
   const buildTextPreviewMarkup = (previewText, options = {}) => {
     const extraClasses = options.extraClasses || "";
     const classSuffix = extraClasses ? ` ${extraClasses}` : "";
@@ -80,6 +99,19 @@
         .join("")}
     </div>
     ${buildPreviewNoticeMarkup(truncatedNotice)}
+  `;
+
+  const buildImagePreviewMarkup = (detail) => `
+    <figure class="artifact-preview artifact-preview-image-frame">
+      <img
+        class="artifact-preview-image"
+        src="${escapeHTML(detail.raw_content_url)}"
+        alt="${escapeHTML(detail.summary || detail.path || detail.artifact_id || "Artifact image preview")}"
+        loading="lazy"
+        data-artifact-preview-image="true"
+        data-artifact-id="${escapeHTML(detail.artifact_id || "")}"
+      />
+    </figure>
   `;
 
   const isStructuredRendererSuccess = (previewResult) => {
@@ -230,6 +262,10 @@
     const renderers = options.renderers || currentRenderers();
     const logErgonomics = options.logErgonomics || currentLogErgonomics();
     const genericTruncationNotice = resolveTruncationNotice(normalizedDetail, renderers);
+    const imagePreviewFailureMessage =
+      "The browser could not display this image preview. Use the raw artifact link for the original content.";
+    const binaryFallbackMessage =
+      "Inline preview is unavailable for this artifact type. Use the raw artifact link for the original content.";
     const renderGenericPreview = (previewText = previewContent, previewResult = {}) => {
       const truncatedNotice =
         typeof previewResult.truncated_notice === "string" && previewResult.truncated_notice
@@ -306,14 +342,33 @@
       };
     };
 
+    if (isImagePreviewableArtifact(normalizedDetail)) {
+      if (!normalizedDetail.raw_content_url || options.imagePreviewFailed) {
+        return {
+          markup: wrapPreviewSection(
+            "Preview",
+            buildBinaryFallbackMarkup(
+              rawContentLink,
+              options.imagePreviewFailed ? imagePreviewFailureMessage : binaryFallbackMessage,
+            ),
+          ),
+          previewModel: null,
+          previewResult: null,
+        };
+      }
+
+      return {
+        markup: wrapPreviewSection("Inline Preview", buildImagePreviewMarkup(normalizedDetail)),
+        previewModel: null,
+        previewResult: null,
+      };
+    }
+
     if (!isPreviewableArtifact(normalizedDetail)) {
       return {
         markup: wrapPreviewSection(
           "Preview",
-          `
-            <p class="detail-copy">Inline preview is unavailable for this artifact type. Use the raw artifact link for the original content.</p>
-            ${rawContentLink}
-          `,
+          buildBinaryFallbackMarkup(rawContentLink, binaryFallbackMessage),
         ),
         previewModel: null,
         previewResult: null,
@@ -417,6 +472,7 @@
     previewExpansion: null,
     previewModel: null,
     previewTargetLineNumber: 0,
+    imagePreviewFailed: false,
     requestToken: 0,
   };
 
@@ -562,6 +618,7 @@
       logErgonomics: currentLogErgonomics(),
       previewExpansion: state.previewExpansion,
       targetLineNumber: state.previewTargetLineNumber,
+      imagePreviewFailed: state.imagePreviewFailed,
     });
     const previewMarkup = previewViewModel.markup;
     state.previewExpansion = previewViewModel.previewModel ? previewViewModel.previewModel.expansion : null;
@@ -731,6 +788,7 @@
       state.detail = null;
       state.detailState = "idle";
       state.notice = "";
+      state.imagePreviewFailed = false;
       updateURLState("");
       renderWorkbench();
       setStatus("Enter an artifact_id to load artifact detail.");
@@ -739,6 +797,7 @@
 
     state.detailState = "loading";
     state.notice = "";
+    state.imagePreviewFailed = false;
     updateURLState(requestedArtifactId);
     renderWorkbench();
     setStatus(`Loading ${requestedArtifactId}...`);
@@ -758,6 +817,7 @@
         state.previewExpansion = null;
         state.previewModel = null;
         state.previewTargetLineNumber = 0;
+        state.imagePreviewFailed = false;
         renderWorkbench();
         setStatus(`Artifact ${requestedArtifactId} not found.`, "danger");
         return;
@@ -770,6 +830,7 @@
         state.previewExpansion = null;
         state.previewModel = null;
         state.previewTargetLineNumber = 0;
+        state.imagePreviewFailed = false;
         renderWorkbench();
         setStatus(`Artifact ${requestedArtifactId} is not linked to one exact run.`, "warning");
         return;
@@ -780,6 +841,7 @@
       state.previewExpansion = null;
       state.previewModel = null;
       state.previewTargetLineNumber = 0;
+      state.imagePreviewFailed = false;
       renderWorkbench();
       setStatus(`Loaded ${requestedArtifactId}.`);
     } catch (error) {
@@ -795,6 +857,7 @@
       state.previewExpansion = null;
       state.previewModel = null;
       state.previewTargetLineNumber = 0;
+      state.imagePreviewFailed = false;
       renderWorkbench();
       setStatus(`Failed to load ${requestedArtifactId}.`, "danger");
     }
@@ -813,6 +876,35 @@
       refreshWorkbench();
     }
   });
+  detailRoot.addEventListener("error", (event) => {
+    const target = event && event.target;
+    const imageNode =
+      target && target.dataset && target.dataset.artifactPreviewImage
+        ? target
+        : target && typeof target.closest === "function"
+          ? target.closest("[data-artifact-preview-image]")
+          : null;
+
+    if (
+      !imageNode ||
+      !imageNode.dataset ||
+      !state.detail ||
+      state.detailState !== "ready" ||
+      state.imagePreviewFailed ||
+      !isImagePreviewableArtifact(state.detail)
+    ) {
+      return;
+    }
+
+    const imageArtifactId = normalizeText(imageNode.dataset.artifactId);
+    const selectedArtifactId = normalizeText(state.detail.artifact_id);
+    if (imageArtifactId && selectedArtifactId && imageArtifactId !== selectedArtifactId) {
+      return;
+    }
+
+    state.imagePreviewFailed = true;
+    renderDetail();
+  }, true);
   detailRoot.addEventListener("click", (event) => {
     const target = event && event.target;
     const actionNode =

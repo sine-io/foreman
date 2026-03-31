@@ -33,7 +33,7 @@ The currently implemented slice now includes:
 - approval workbench queue/detail/action endpoints, including `approved_pending_dispatch` retry-dispatch recovery
 - task-detail workbench detail/action endpoints for per-task operator flow, including direct task dispatch, retry, cancel, and reprioritize controls
 - run-detail workbench detail flow, including the canonical `/board/runs/workbench?run_id=<run-id>` route and legacy `/board/runs/:id` compatibility redirect
-- artifact workbench detail flow, including run-workbench deep links to `/board/artifacts/workbench?artifact_id=<artifact-id>`, legacy run-page anchor fallback, safe raw-content streaming headers, renderer polish for JSON / Markdown / diff previews, and long-text ergonomics inside the existing artifact workbench
+- artifact workbench detail flow, including run-workbench deep links to `/board/artifacts/workbench?artifact_id=<artifact-id>`, legacy run-page anchor fallback, safe raw-content streaming headers, renderer polish for JSON / Markdown / diff previews, approved image preview inside the existing artifact workbench with binary fallback for other binary artifacts, and long-text ergonomics inside the existing artifact workbench
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
@@ -83,6 +83,7 @@ These stay in outer layers. Domain and application code should not depend on fra
 - [`docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-30-foreman-phase-2-run-detail-workbench.md): fifth Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md): sixth Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-renderer-polish.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-renderer-polish.md): seventh Phase 2 execution plan
+- [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-binary-preview.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-binary-preview.md): eighth Phase 2 execution plan
 
 ## Quick Start
 
@@ -201,6 +202,7 @@ Artifact workbench operator flow:
 - Stream raw artifact bytes with `GET /api/manager/artifacts/<artifact-id>/content`, which now returns safe response headers for direct download or preview.
 - Renderer polish stays inside this existing artifact workbench page; it does not add a new route.
 - Artifacts whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch now get a more readable structured preview.
+- Approved image preview also stays inside this existing artifact workbench page: `image/png`, `image/jpeg`, `image/gif`, and `image/webp` preview inline, `image/svg+xml` stays best-effort under the current safety policy, and non-image binary artifacts stay on the metadata/download binary fallback path.
 - Long text and log-like artifacts that stay on the generic long-text path now add line numbers, a collapsed first-screen teaser with `Expand all`, and lightweight summary navigation derived from existing summary and preview text.
 - Unsupported text-like content, along with JSON previews that fail to parse, still fall back to the generic text preview.
 - Short or otherwise simple text content stays on the simpler preview path without the heavier long-text ergonomics UI.

@@ -8,11 +8,13 @@ import (
 	"net"
 	stdhttp "net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sine-io/foreman/internal/app/command"
+	"github.com/sine-io/foreman/internal/ports"
 	"github.com/stretchr/testify/require"
 )
 
@@ -500,6 +502,84 @@ func TestServeExposesArtifactWorkbenchAPI(t *testing.T) {
 	require.Equal(t, "nosniff", contentResp.Header.Get("X-Content-Type-Options"))
 	require.Equal(t, "text/plain; charset=utf-8", contentResp.Header.Get("Content-Type"))
 	require.Contains(t, contentResp.Header.Get("Content-Disposition"), "inline;")
+
+	cancel()
+	require.NoError(t, <-errCh)
+}
+
+func TestServeArtifactContentPreservesImagePreviewContract(t *testing.T) {
+	cfg := testConfig(t)
+	appIface, err := BuildApp(cfg)
+	require.NoError(t, err)
+
+	appImpl, ok := appIface.(*app)
+	require.True(t, ok)
+	require.NoError(t, appImpl.ensureDefaultProject())
+	require.NoError(t, appImpl.ensureDefaultModule())
+
+	taskDTO, err := appIface.CreateTask(command.CreateTaskCommand{
+		ModuleID:   defaultModuleID,
+		Title:      "Inspect screenshot artifact",
+		TaskType:   "write",
+		WriteScope: "repo:demo",
+		Acceptance: "Inspect screenshot artifact",
+		Priority:   10,
+	})
+	require.NoError(t, err)
+
+	pngBody := []byte{0x89, 0x50, 0x4e, 0x47}
+	artifactPath := filepath.ToSlash(filepath.Join("tasks", taskDTO.ID, "preview.png"))
+	fullArtifactPath := filepath.Join(cfg.ArtifactRoot, filepath.FromSlash(artifactPath))
+	require.NoError(t, os.MkdirAll(filepath.Dir(fullArtifactPath), 0o755))
+	require.NoError(t, os.WriteFile(fullArtifactPath, pngBody, 0o644))
+
+	require.NoError(t, appImpl.runs.Save(ports.Run{
+		ID:         "run-image-preview",
+		TaskID:     taskDTO.ID,
+		RunnerKind: "codex",
+		State:      "completed",
+		CreatedAt:  "2026-03-31T09:00:00.000000000Z",
+	}))
+
+	artifactID, err := appImpl.artifacts.Create(taskDTO.ID, "run-image-preview", "screenshot", artifactPath)
+	require.NoError(t, err)
+	_, err = appImpl.db.Exec(`update artifacts set path = '' where id = ?`, artifactID)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- appIface.Serve(ctx)
+	}()
+	waitForHTTP(t, cfg.HTTPAddr)
+
+	workbenchResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/artifacts/" + artifactID + "/workbench")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = workbenchResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, workbenchResp.StatusCode)
+
+	var workbenchPayload struct {
+		ContentType   string `json:"content_type"`
+		Preview       string `json:"preview"`
+		RawContentURL string `json:"raw_content_url"`
+	}
+	require.NoError(t, json.NewDecoder(workbenchResp.Body).Decode(&workbenchPayload))
+	require.Equal(t, "image/png", workbenchPayload.ContentType)
+	require.Empty(t, workbenchPayload.Preview)
+	require.Equal(t, "/api/manager/artifacts/"+artifactID+"/content", workbenchPayload.RawContentURL)
+
+	contentResp, err := stdhttp.Get("http://" + cfg.HTTPAddr + workbenchPayload.RawContentURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = contentResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, contentResp.StatusCode)
+	require.Equal(t, "nosniff", contentResp.Header.Get("X-Content-Type-Options"))
+	require.Equal(t, workbenchPayload.ContentType, contentResp.Header.Get("Content-Type"))
+	require.Contains(t, contentResp.Header.Get("Content-Disposition"), "inline;")
+	body, err := io.ReadAll(contentResp.Body)
+	require.NoError(t, err)
+	require.Equal(t, pngBody, body)
 
 	cancel()
 	require.NoError(t, <-errCh)

@@ -576,6 +576,37 @@ body {
   white-space: pre-wrap;
 }
 
+.artifact-preview-fallback {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.artifact-preview-image-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16rem;
+  padding: 0.75rem;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 240, 0.98) 0%, rgba(244, 241, 232, 0.96) 100%),
+    radial-gradient(circle at top left, rgba(255, 247, 226, 0.85), transparent 22rem);
+  white-space: normal;
+  overflow-wrap: normal;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.artifact-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 0.75rem;
+  background: #fffdf7;
+  box-shadow: 0 18px 28px rgba(80, 53, 24, 0.12);
+}
+
 .artifact-preview-summary-nav {
   display: flex;
   flex-wrap: wrap;
