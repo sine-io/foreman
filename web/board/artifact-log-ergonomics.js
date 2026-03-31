@@ -130,45 +130,44 @@
     let visibleLines = normalizedLines.slice(0, teaserLineCount);
     let hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
     let hiddenCharacterCount = 0;
+    const lineCappedVisibleLines = visibleLines.slice();
 
-    if (hiddenLineCount === 0) {
-      const totalCharacterCount = normalizedLines.reduce(
-        (sum, line) => sum + normalizeText(line && line.text).length,
-        0,
-      );
+    const visibleCharacterCount = lineCappedVisibleLines.reduce(
+      (sum, line) => sum + normalizeText(line && line.text).length,
+      0,
+    );
 
-      if (totalCharacterCount > teaserCharacters) {
-        let remainingCharacters = teaserCharacters;
-        const characterVisibleLines = [];
+    if (visibleCharacterCount > teaserCharacters) {
+      let remainingCharacters = teaserCharacters;
+      const characterVisibleLines = [];
 
-        normalizedLines.forEach((line) => {
-          const lineText = normalizeText(line && line.text);
-          if (remainingCharacters <= 0) {
-            hiddenCharacterCount += lineText.length;
-            return;
-          }
+      lineCappedVisibleLines.forEach((line) => {
+        const lineText = normalizeText(line && line.text);
+        if (remainingCharacters <= 0) {
+          hiddenCharacterCount += lineText.length;
+          return;
+        }
 
-          if (lineText.length <= remainingCharacters) {
-            characterVisibleLines.push({
-              ...line,
-              text: lineText,
-            });
-            remainingCharacters -= lineText.length;
-            return;
-          }
-
+        if (lineText.length <= remainingCharacters) {
           characterVisibleLines.push({
             ...line,
-            text: lineText.slice(0, remainingCharacters),
+            text: lineText,
           });
-          hiddenCharacterCount += lineText.length - remainingCharacters;
-          remainingCharacters = 0;
-        });
-
-        if (hiddenCharacterCount > 0) {
-          visibleLines = characterVisibleLines;
-          hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
+          remainingCharacters -= lineText.length;
+          return;
         }
+
+        characterVisibleLines.push({
+          ...line,
+          text: lineText.slice(0, remainingCharacters),
+        });
+        hiddenCharacterCount += lineText.length - remainingCharacters;
+        remainingCharacters = 0;
+      });
+
+      if (hiddenCharacterCount > 0) {
+        visibleLines = characterVisibleLines;
+        hiddenLineCount = Math.max(normalizedLines.length - visibleLines.length, 0);
       }
     }
 

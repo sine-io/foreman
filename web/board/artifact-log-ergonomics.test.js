@@ -54,6 +54,26 @@ test('sliceCollapsedTeaser returns a first-screen teaser and hidden count', () =
   );
 });
 
+test('sliceCollapsedTeaser still enforces character budget when line cap already hides later lines', () => {
+  const preview = Array.from({ length: 12 }, () => 'x'.repeat(120)).join('\n');
+  const lines = renderLineNumberedText(preview);
+  const teaser = sliceCollapsedTeaser(lines, {
+    teaserCharacters: 250,
+    teaserLineCount: 8,
+  });
+
+  assert.equal(teaser.collapsed, true);
+  assert.equal(teaser.hiddenLineCount, 9);
+  assert.equal(teaser.hiddenCharacterCount > 0, true);
+  assert.deepEqual(
+    teaser.visibleLines.map((line) => line.lineNumber),
+    [1, 2, 3],
+  );
+  assert.equal(teaser.visibleLines[0].text.length, 120);
+  assert.equal(teaser.visibleLines[1].text.length, 120);
+  assert.equal(teaser.visibleLines[2].text.length, 10);
+});
+
 test('buildLogErgonomicsModel collapses long single-line previews with a character teaser', () => {
   const preview = '0123456789'.repeat(90);
   const detail = {
