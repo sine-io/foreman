@@ -251,7 +251,7 @@ Expected outcomes:
 
 With `foreman serve` running, you can manually verify browser-only image preview and binary fallback behavior inside the existing artifact workbench if you already have a suitable artifact. The documented clean-repo smoke above does not guarantee creation of an approved image artifact or another binary artifact.
 
-1. If you already have an artifact whose `content_type` is `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, or another non-image binary type, note its `artifact_id`. If you want to confirm both the image-preview and binary-fallback paths, use one approved image artifact plus one non-image binary artifact. Otherwise, skip this optional check.
+1. If you want to confirm the successful inline-preview path, start with an artifact whose `content_type` is `image/png`, `image/jpeg`, `image/gif`, or `image/webp`, and note its `artifact_id`. If you also want to confirm the fallback paths, use one non-image binary artifact plus, optionally, one `image/svg+xml` artifact for the current best-effort SVG behavior. Otherwise, skip this optional check.
 
 2. Read the manager artifact workbench detail and note the authoritative `content_type` plus the existing metadata and raw-artifact actions.
 
