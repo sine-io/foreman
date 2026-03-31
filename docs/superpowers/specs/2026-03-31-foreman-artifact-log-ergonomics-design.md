@@ -107,6 +107,25 @@ This slice does not change the renderer-polish direction for:
 
 Those remain handled by the structured renderer path.
 
+### Renderer Precedence
+
+Structured renderer selection still runs first.
+
+That means:
+
+- JSON stays on the JSON renderer path
+- Markdown stays on the Markdown renderer path
+- diff / patch stays on the structured diff renderer path
+
+Artifact log ergonomics apply only when the artifact preview is on the generic long-text path.
+
+This includes:
+
+- native long text / log-like artifacts
+- structured artifacts that explicitly fall back to generic text preview because their specialized renderer declines or safely falls back
+
+It does not apply on top of the normal structured-renderer success path.
+
 ## Route And API Shape
 
 This slice does not add new routes.
@@ -152,7 +171,15 @@ The approved behavior is:
 - make it obvious that more content exists
 - allow one-click expansion to the full bounded preview
 
+For v1, collapsed mode means:
+
+- show a clipped first-screen teaser of the bounded preview
+- do not rely on internal scrolling inside collapsed mode
+- require explicit expansion before the operator reads the rest of the bounded preview
+
 The page should not default to fully expanded long text.
+
+Selecting a different sibling or artifact should reset that newly selected artifact back to collapsed mode by default.
 
 ### Expand All
 
@@ -193,6 +220,12 @@ Likely useful anchors include:
 - command boundaries
 
 If no clear anchors exist, the navigation area may remain empty.
+
+Summary navigation is derived only from the currently available bounded preview text and existing summary fields. It must not imply access to content beyond the bounded preview.
+
+If an operator clicks a derived navigation anchor and that target is outside the currently visible collapsed slice, the page may auto-expand the current bounded preview to reveal it.
+
+The truncation warning must remain visible in both collapsed and expanded states so `Expand all` is not mistaken for “show the full artifact.”
 
 ## Long-Text Detection
 
