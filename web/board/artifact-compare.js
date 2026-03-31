@@ -138,29 +138,14 @@
   const state = {
     artifactId: "",
     detail: null,
-    detailState: "idle",
     requestToken: 0,
     notice: "",
+    loading: false,
   };
 
   const readArtifactID = () => {
     const searchParams = new URLSearchParams(currentLocation().search);
     return searchParams.get("artifact_id") || "";
-  };
-
-  const updateURLState = (artifactId) => {
-    const searchParams = new URLSearchParams(currentLocation().search);
-    if (artifactId) {
-      searchParams.set("artifact_id", artifactId);
-    } else {
-      searchParams.delete("artifact_id");
-    }
-    const query = searchParams.toString();
-    const nextURL = query ? `${currentLocation().pathname}?${query}` : currentLocation().pathname;
-    const historyRef = currentHistory();
-    if (historyRef && typeof historyRef.replaceState === "function") {
-      historyRef.replaceState({}, "", nextURL);
-    }
   };
 
   const setStatus = (message, tone = "info") => {
@@ -175,20 +160,15 @@
   };
 
   const renderCompare = () => {
-    if (state.detailState === "idle") {
-      renderEmpty("Enter an artifact_id to load artifact compare.");
-      return;
-    }
-    if (state.detailState === "loading") {
+    artifactInput.textContent = state.artifactId || "Missing artifact_id";
+
+    if (state.loading && !state.detail) {
       renderEmpty("Loading artifact compare...");
       return;
     }
-    if (state.detailState === "not_found") {
-      renderEmpty(`No artifact with ID ${state.artifactId} exists.`);
-      return;
-    }
-    if (state.detailState === "error") {
-      renderEmpty(state.notice || "Unable to load artifact compare.");
+
+    if (state.notice && !state.detail) {
+      renderEmpty(state.notice);
       return;
     }
 
@@ -211,21 +191,21 @@
   };
 
   const loadCompare = async () => {
-    const requestedArtifactId = state.artifactId;
+    const requestedArtifactId = readArtifactID();
     const requestToken = ++state.requestToken;
+    state.artifactId = requestedArtifactId;
 
     if (!requestedArtifactId) {
       state.detail = null;
-      state.detailState = "idle";
-      updateURLState("");
+      state.loading = false;
+      state.notice = "Artifact compare requires artifact_id in the page URL.";
       renderCompare();
-      setStatus("Enter an artifact_id to load artifact compare.");
+      setStatus("Artifact compare requires artifact_id.", "danger");
       return;
     }
 
-    state.detailState = "loading";
+    state.loading = true;
     state.notice = "";
-    updateURLState(requestedArtifactId);
     renderCompare();
     setStatus(`Loading compare for ${requestedArtifactId}...`);
 
@@ -236,14 +216,15 @@
       }
       if (detail.notFound) {
         state.detail = null;
-        state.detailState = "not_found";
+        state.loading = false;
+        state.notice = `No artifact with ID ${requestedArtifactId} exists.`;
         renderCompare();
         setStatus(`Artifact ${requestedArtifactId} not found.`, "danger");
         return;
       }
 
       state.detail = detail;
-      state.detailState = "ready";
+      state.loading = false;
       renderCompare();
       setStatus(`Loaded compare for ${requestedArtifactId}.`);
     } catch (error) {
@@ -251,7 +232,7 @@
         return;
       }
       state.detail = null;
-      state.detailState = "error";
+      state.loading = false;
       state.notice = error.message || "Failed to load artifact compare.";
       renderCompare();
       setStatus(`Failed to load ${requestedArtifactId}.`, "danger");
@@ -259,26 +240,17 @@
   };
 
   const refreshCompare = async () => {
-    state.artifactId = artifactInput.value.trim();
-    artifactInput.value = state.artifactId;
     await loadCompare();
   };
 
   refreshButton.addEventListener("click", refreshCompare);
-  artifactInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      refreshCompare();
-    }
-  });
 
   if (typeof globalScope.addEventListener === "function") {
     globalScope.addEventListener("popstate", () => {
-      artifactInput.value = readArtifactID();
       refreshCompare();
     });
   }
 
   state.artifactId = readArtifactID();
-  artifactInput.value = state.artifactId;
   refreshCompare();
 })(typeof window !== "undefined" ? window : globalThis);
