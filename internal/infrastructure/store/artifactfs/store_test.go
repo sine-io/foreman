@@ -46,6 +46,36 @@ func TestArtifactStoreResolveDisplayPathStripsSymlinkedArtifactRoot(t *testing.T
 	require.NotContains(t, displayPath, "..")
 }
 
+func TestArtifactStoreResolveDisplayPathAcceptsRealPathWhenRootUsesSymlinkAlias(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real-runtime-artifacts")
+	rootLink := filepath.Join(parent, "runtime-artifacts")
+	store := New(rootLink)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "tasks", "task-1"), 0o755))
+	require.NoError(t, os.Symlink(realRoot, rootLink))
+
+	displayPath, err := store.ResolveDisplayPath(filepath.Join(realRoot, "tasks", "task-1", "assistant_summary.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "tasks/task-1/assistant_summary.txt", displayPath)
+}
+
+func TestArtifactStoreReadPreviewAcceptsSymlinkAliasWhenRootUsesRealPath(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real-runtime-artifacts")
+	rootLink := filepath.Join(parent, "runtime-artifacts")
+	store := New(realRoot)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "tasks", "task-1"), 0o755))
+	require.NoError(t, os.Symlink(realRoot, rootLink))
+	require.NoError(t, os.WriteFile(filepath.Join(realRoot, "tasks", "task-1", "assistant_summary.txt"), []byte("preview"), 0o644))
+
+	preview, truncated, err := store.ReadPreview(filepath.Join(rootLink, "tasks", "task-1", "assistant_summary.txt"), 16)
+	require.NoError(t, err)
+	require.Equal(t, "preview", preview)
+	require.False(t, truncated)
+}
+
 func TestArtifactStoreReadPreviewRejectsSymlinkEscape(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "runtime-artifacts")
 	outsideDir := t.TempDir()

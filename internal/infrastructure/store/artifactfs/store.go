@@ -100,10 +100,6 @@ func (s Store) resolvePath(path string) (string, error) {
 		return "", err
 	}
 
-	if err := ensureWithinRoot(rootPath, candidate, path); err != nil {
-		return "", err
-	}
-
 	resolvedCandidate, err := resolveExistingPath(candidate)
 	if err != nil {
 		return "", err

@@ -111,6 +111,35 @@ func TestArtifactRepositoryCreateUsesSymlinkedArtifactRootForDisplayPath(t *test
 	require.NotEqual(t, filepath.Join(realRoot, "tasks", "task-1", "assistant_summary.txt"), row.Path)
 }
 
+func TestArtifactRepositoryCreatePersistsAssistantSummaryText(t *testing.T) {
+	db := OpenTestDB(t)
+	taskID := seedTaskGraph(t, db)
+	repo, root := newTestArtifactRepository(t, db)
+
+	saveRunRow(t, db, ports.Run{
+		ID:         "run-1",
+		TaskID:     taskID,
+		RunnerKind: "codex",
+		State:      "completed",
+	}, "2026-03-31T09:00:00.000000000Z")
+
+	fullPath := filepath.Join(root, "tasks", "task-1", "assistant_summary.txt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+	require.NoError(t, os.WriteFile(fullPath, []byte("Assistant summary explains the run\n"), 0o644))
+
+	id, err := repo.Create(
+		taskID,
+		"run-1",
+		"assistant_summary",
+		fullPath,
+	)
+	require.NoError(t, err)
+
+	row, err := repo.Get(id)
+	require.NoError(t, err)
+	require.Equal(t, "Assistant summary explains the run", row.Summary)
+}
+
 func TestArtifactRepositoryGetRoundTripsRunID(t *testing.T) {
 	db := OpenTestDB(t)
 	taskID := seedTaskGraph(t, db)

@@ -3,10 +3,13 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sine-io/foreman/internal/ports"
 )
+
+const assistantSummaryMaxBytes = 64 * 1024
 
 type ArtifactRepository struct {
 	db    dbtx
@@ -29,6 +32,12 @@ func (r *ArtifactRepository) Create(taskID, runID, kind, path string) (string, e
 
 	id := fmt.Sprintf("artifact-%d", time.Now().UnixNano())
 	createdAt := sortableTimestamp(time.Now())
+	summary := ""
+	if kind == "assistant_summary" {
+		if preview, _, err := r.store.ReadPreview(path, assistantSummaryMaxBytes); err == nil {
+			summary = strings.TrimSpace(preview)
+		}
+	}
 
 	var runRef any
 	if runID != "" {
@@ -36,13 +45,14 @@ func (r *ArtifactRepository) Create(taskID, runID, kind, path string) (string, e
 	}
 
 	_, err = r.db.Exec(
-		`insert into artifacts (id, task_id, run_id, kind, path, storage_path, summary, created_at) values (?, ?, ?, ?, ?, ?, '', ?)`,
+		`insert into artifacts (id, task_id, run_id, kind, path, storage_path, summary, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)`,
 		id,
 		taskID,
 		runRef,
 		kind,
 		displayPath,
 		path,
+		summary,
 		createdAt,
 	)
 	if err != nil {
