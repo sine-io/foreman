@@ -266,8 +266,13 @@ func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapt
 	}
 
 	fullPath := filepath.Join(a.Config.ArtifactRoot, filepath.FromSlash(displayPath))
-	content, err := os.ReadFile(fullPath)
+	file, err := os.Open(fullPath)
 	if err != nil {
+		return httpadapter.ManagerArtifactContent{}, err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
 		return httpadapter.ManagerArtifactContent{}, err
 	}
 
@@ -279,7 +284,8 @@ func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapt
 	return httpadapter.ManagerArtifactContent{
 		Path:        artifactPath,
 		ContentType: view.ContentType,
-		Content:     content,
+		Size:        info.Size(),
+		Reader:      file,
 	}, nil
 }
 

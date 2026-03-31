@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"mime"
 	nethttp "net/http"
 	"os"
@@ -18,7 +19,8 @@ import (
 type ManagerArtifactContent struct {
 	Path        string
 	ContentType string
-	Content     []byte
+	Size        int64
+	Reader      io.ReadCloser
 }
 
 type ManagerApp interface {
@@ -167,15 +169,23 @@ func (h *ManagerHandlers) ManagerArtifactContent(c *gin.Context) {
 		respondManagerArtifactContentError(c, err)
 		return
 	}
+	if content.Reader == nil {
+		respondManagerArtifactContentError(c, errors.New("artifact content reader missing"))
+		return
+	}
+	defer func() {
+		_ = content.Reader.Close()
+	}()
 
 	contentType := content.ContentType
 	if strings.TrimSpace(contentType) == "" {
 		contentType = "application/octet-stream"
 	}
 
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("Content-Disposition", artifactContentDisposition(content.Path, contentType))
-	c.Data(nethttp.StatusOK, contentType, content.Content)
+	c.DataFromReader(nethttp.StatusOK, content.Size, contentType, content.Reader, map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"Content-Disposition":    artifactContentDisposition(content.Path, contentType),
+	})
 }
 
 func (h *ManagerHandlers) ManagerBoardSnapshot(c *gin.Context) {
@@ -479,7 +489,7 @@ func safeInlineArtifactContentType(contentType string) bool {
 	}
 
 	switch mediaType {
-	case "text/plain", "text/markdown", "text/csv", "application/json", "application/xml", "application/x-yaml":
+	case "text/plain", "text/markdown", "text/csv", "application/json", "application/x-yaml":
 		return true
 	default:
 		return false

@@ -212,6 +212,13 @@ func TestManagerArtifactContentEndpointReturnsSafeHeaders(t *testing.T) {
 			wantDispositionFragment: "attachment;",
 			wantBody:                "<html><body>unsafe</body></html>",
 		},
+		{
+			name:                    "xml downloads as attachment",
+			artifactID:              "artifact-xml",
+			wantContentType:         "application/xml",
+			wantDispositionFragment: "attachment;",
+			wantBody:                "<note>hello</note>",
+		},
 	}
 
 	for _, tc := range cases {
@@ -229,6 +236,19 @@ func TestManagerArtifactContentEndpointReturnsSafeHeaders(t *testing.T) {
 			require.Equal(t, tc.wantBody, rec.Body.String())
 		})
 	}
+}
+
+func TestManagerArtifactContentEndpointStreamsAndClosesReader(t *testing.T) {
+	app := newFakeManagerHTTPApp()
+	router := NewRouter(app)
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-stream/content", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Equal(t, "streamed artifact body", rec.Body.String())
+	require.True(t, app.artifactContentClosed)
 }
 
 func TestManagerArtifactContentEndpointMapsMissingFileTo410(t *testing.T) {
@@ -593,6 +613,7 @@ func TestManagerApprovalEndpointsMapMissingAndConflictErrors(t *testing.T) {
 type fakeManagerHTTPApp struct {
 	*fakeHTTPApp
 	lastReprioritizePriority int
+	artifactContentClosed    bool
 }
 
 func newFakeManagerHTTPApp() *fakeManagerHTTPApp {
@@ -802,15 +823,48 @@ func (a *fakeManagerHTTPApp) ArtifactContent(ctx context.Context, artifactID str
 		return ManagerArtifactContent{
 			Path:        "tasks/task-1/report.html",
 			ContentType: "text/html; charset=utf-8",
-			Content:     []byte("<html><body>unsafe</body></html>"),
+			Size:        int64(len("<html><body>unsafe</body></html>")),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader("<html><body>unsafe</body></html>")},
+		}, nil
+	case "artifact-xml":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/report.xml",
+			ContentType: "application/xml",
+			Size:        int64(len("<note>hello</note>")),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader("<note>hello</note>")},
+		}, nil
+	case "artifact-stream":
+		return ManagerArtifactContent{
+			Path:        "tasks/task-1/stream.txt",
+			ContentType: "text/plain; charset=utf-8",
+			Size:        int64(len("streamed artifact body")),
+			Reader: &trackedReadCloser{
+				Reader: strings.NewReader("streamed artifact body"),
+				onClose: func() {
+					a.artifactContentClosed = true
+				},
+			},
 		}, nil
 	default:
 		return ManagerArtifactContent{
 			Path:        "tasks/task-1/assistant_summary.txt",
 			ContentType: "text/plain; charset=utf-8",
-			Content:     []byte("Artifact preview content"),
+			Size:        int64(len("Artifact preview content")),
+			Reader:      &trackedReadCloser{Reader: strings.NewReader("Artifact preview content")},
 		}, nil
 	}
+}
+
+type trackedReadCloser struct {
+	*strings.Reader
+	onClose func()
+}
+
+func (r *trackedReadCloser) Close() error {
+	if r.onClose != nil {
+		r.onClose()
+	}
+	return nil
 }
 
 func (a *fakeManagerHTTPApp) BoardSnapshot(ctx context.Context, projectID string) (manageragent.BoardSnapshotView, error) {
