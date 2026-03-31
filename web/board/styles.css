@@ -200,6 +200,7 @@ body {
   max-width: 1240px;
 }
 
+.artifact-workbench-shell,
 .run-workbench-shell,
 .task-workbench-shell {
   max-width: 1240px;
@@ -228,6 +229,13 @@ body {
   align-items: start;
 }
 
+.artifact-workbench-layout {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.9fr) minmax(0, 1.5fr) minmax(18rem, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
 .run-workbench-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.95fr);
@@ -235,12 +243,16 @@ body {
   align-items: start;
 }
 
+.artifact-workbench-detail,
 .run-workbench-detail,
 .task-workbench-detail {
   display: grid;
   gap: 0.85rem;
 }
 
+.artifact-siblings-panel,
+.artifact-detail-panel,
+.artifact-metadata-panel,
 .run-overview-panel,
 .run-side-panel,
 .task-overview-panel,
@@ -511,11 +523,72 @@ body {
   color: #8a7b66;
 }
 
+.board-status[data-tone="warning"] {
+  color: #8a5a1a;
+}
+
+.artifact-sibling-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.artifact-sibling-item {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: #fffdf7;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.artifact-sibling-item.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: #fff8ef;
+}
+
+.artifact-sibling-item strong,
+.artifact-sibling-item p,
+.artifact-preview {
+  margin: 0;
+}
+
+.artifact-preview {
+  max-height: 32rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: #fffdf7;
+  color: var(--ink);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.artifact-metadata-grid {
+  align-items: stretch;
+}
+
+.artifact-metadata-path {
+  grid-column: 1 / -1;
+}
+
+.artifact-metadata-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
 @media (max-width: 960px) {
   .board-layout {
     grid-template-columns: 1fr;
   }
 
+  .artifact-workbench-layout,
   .run-workbench-layout,
   .task-workbench-layout,
   .approval-workbench-layout,

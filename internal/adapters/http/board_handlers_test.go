@@ -119,7 +119,7 @@ func TestTaskWorkbenchPageServesHTML(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "/board/assets/task-workbench.js")
 }
 
-func TestArtifactWorkbenchPlaceholderPageServes(t *testing.T) {
+func TestArtifactWorkbenchPageServes(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
 	req := httptest.NewRequest(stdhttp.MethodGet, "/board/artifacts/workbench?artifact_id=artifact-1", nil)
@@ -127,8 +127,9 @@ func TestArtifactWorkbenchPlaceholderPageServes(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "Artifact workbench placeholder")
-	require.Contains(t, rec.Body.String(), "artifact-1")
+	require.Contains(t, rec.Body.String(), "Artifact Workbench")
+	require.Contains(t, rec.Body.String(), "/board/assets/artifact-workbench.js")
+	require.Contains(t, rec.Body.String(), "Refresh artifact")
 }
 
 func TestRunWorkbenchPageServes(t *testing.T) {
@@ -218,6 +219,80 @@ func TestRunWorkbenchJavaScriptUsesArtifactTargetURLs(t *testing.T) {
 	require.Equal(t, stdhttp.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "detail.artifact_target_urls")
 	require.Contains(t, rec.Body.String(), "detail.artifact_target_urls[artifact.id]")
+}
+
+func TestArtifactWorkbenchJavaScriptUsesArtifactIDURLState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
+	require.Contains(t, rec.Body.String(), "searchParams.get(\"artifact_id\")")
+	require.Contains(t, rec.Body.String(), "searchParams.set(\"artifact_id\", artifactId)")
+}
+
+func TestArtifactWorkbenchJavaScriptRendersSiblingArtifacts(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.siblings")
+	require.Contains(t, rec.Body.String(), "sibling.artifact_id")
+	require.Contains(t, rec.Body.String(), "/board/artifacts/workbench?artifact_id=")
+}
+
+func TestArtifactWorkbenchJavaScriptUsesServerProvidedRunWorkbenchURL(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.run_workbench_url")
+	require.Contains(t, rec.Body.String(), "Back to run workbench")
+}
+
+func TestArtifactWorkbenchJavaScriptUsesRawContentURL(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "detail.raw_content_url")
+	require.Contains(t, rec.Body.String(), "Open raw artifact")
+}
+
+func TestRunWorkbenchJavaScriptLinksLinkedArtifactsToArtifactWorkbench(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "targetURL.startsWith(\"/board/artifacts/workbench?\")")
+	require.Contains(t, rec.Body.String(), "Open artifact workbench")
+}
+
+func TestRunWorkbenchJavaScriptKeepsLegacyArtifactAnchorFallback(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/run-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "targetURL.startsWith(\"#\")")
+	require.Contains(t, rec.Body.String(), "Jump to artifact card")
 }
 
 func TestRunWorkbenchJavaScriptIncludesRefreshControl(t *testing.T) {

@@ -48,16 +48,27 @@ if (runInput && refreshButton && statusNode && overviewRoot && metadataRoot) {
   const artifactTargetURL = (detail, artifact) =>
     (detail.artifact_target_urls && detail.artifact_target_urls[artifact.id]) || "";
 
+  const isArtifactWorkbenchTarget = (targetURL) =>
+    targetURL.startsWith("/board/artifacts/workbench?");
+
+  const isLegacyArtifactAnchor = (targetURL) => targetURL.startsWith("#");
+
   const artifactTargetID = (detail, artifact) => {
     const targetURL = artifactTargetURL(detail, artifact);
-    return targetURL.startsWith("#") ? targetURL.slice(1) : "";
+    return isLegacyArtifactAnchor(targetURL) ? targetURL.slice(1) : "";
   };
 
   const renderArtifactTarget = (detail, artifact) => {
     const targetURL = artifactTargetURL(detail, artifact);
-    return targetURL
-      ? `<a class="artifact-link" href="${escapeHTML(targetURL)}">Open artifact target</a>`
-      : '<span class="artifact-link artifact-link-muted">Artifact target unavailable</span>';
+    if (isArtifactWorkbenchTarget(targetURL)) {
+      return `<a class="artifact-link" href="${escapeHTML(targetURL)}">Open artifact workbench</a>`;
+    }
+
+    if (isLegacyArtifactAnchor(targetURL)) {
+      return `<a class="artifact-link" href="${escapeHTML(targetURL)}">Jump to artifact card</a>`;
+    }
+
+    return '<span class="artifact-link artifact-link-muted">Artifact target unavailable</span>';
   };
 
   const renderArtifacts = (detail) => {

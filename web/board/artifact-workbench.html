@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Foreman Artifact Workbench</title>
+    <link rel="stylesheet" href="/board/assets/styles.css" />
+  </head>
+  <body>
+    <main class="board-shell artifact-workbench-shell">
+      <header class="board-header">
+        <p class="eyebrow">Foreman</p>
+        <h1>Artifact Workbench</h1>
+        <p class="subtitle">
+          Inspect one run-linked artifact, switch between same-run siblings, and return to the
+          run workbench without losing a stable deep link.
+        </p>
+      </header>
+
+      <section class="board-toolbar workbench-toolbar">
+        <label class="board-label" for="artifact-workbench-artifact-id">Artifact ID</label>
+        <input id="artifact-workbench-artifact-id" class="board-input" />
+        <button id="artifact-workbench-refresh" class="board-button" type="button">
+          Refresh artifact
+        </button>
+        <p id="artifact-workbench-status" class="board-status">Loading artifact detail...</p>
+      </section>
+
+      <section class="artifact-workbench-layout">
+        <section class="board-panel artifact-siblings-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Same Run</p>
+            <h2>Sibling Artifacts</h2>
+          </header>
+          <div id="artifact-workbench-siblings" class="artifact-workbench-detail"></div>
+        </section>
+
+        <section class="board-panel artifact-detail-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Artifact</p>
+            <h2>Current Artifact</h2>
+          </header>
+          <div id="artifact-workbench-detail" class="artifact-workbench-detail"></div>
+        </section>
+
+        <section class="board-panel artifact-metadata-panel">
+          <header class="panel-header">
+            <p class="panel-kicker">Metadata</p>
+            <h2>Metadata And Navigation</h2>
+          </header>
+          <div id="artifact-workbench-metadata" class="artifact-workbench-detail"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/board/assets/artifact-workbench.js"></script>
+  </body>
+</html>

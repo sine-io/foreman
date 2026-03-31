@@ -1,7 +1,6 @@
 package http
 
 import (
-	"html/template"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -29,9 +28,7 @@ func NewRouter(app App) *gin.Engine {
 		c.File(filepath.Join(boardAssetDir(), "run-workbench.html"))
 	})
 	router.GET("/board/artifacts/workbench", func(c *gin.Context) {
-		artifactID := template.HTMLEscapeString(c.Query("artifact_id"))
-		c.Header("Content-Type", "text/html; charset=utf-8")
-		c.String(http.StatusOK, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Artifact Workbench</title></head><body><main><h1>Artifact workbench placeholder</h1><p>The dedicated artifact workbench page is not registered on this branch yet.</p><p>Artifact ID: %s</p></main></body></html>`, artifactID)
+		c.File(filepath.Join(boardAssetDir(), "artifact-workbench.html"))
 	})
 	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)
