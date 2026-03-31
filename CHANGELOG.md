@@ -83,6 +83,12 @@
 - Recorded that run workbench deep-links linked artifacts into artifact workbench while legacy run-page artifact anchors remain as a fallback
 - Recorded that raw artifact content now streams with safe response headers
 
+### Phase 2 Artifact Renderer Polish
+
+- Documented renderer polish for JSON pretty-print, safe Markdown render, and diff / patch previews inside the existing artifact workbench
+- Added a renderer-polish smoke path that reuses artifacts selected by `content_type`, `kind`, or `path`
+- Recorded that malformed or unsupported preview content still falls back to the generic text preview
+
 ## 2026-03-30
 
 ### Phase 2 Run Workbench

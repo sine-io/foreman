@@ -33,7 +33,7 @@ The currently implemented slice now includes:
 - approval workbench queue/detail/action endpoints, including `approved_pending_dispatch` retry-dispatch recovery
 - task-detail workbench detail/action endpoints for per-task operator flow, including direct task dispatch, retry, cancel, and reprioritize controls
 - run-detail workbench detail flow, including the canonical `/board/runs/workbench?run_id=<run-id>` route and legacy `/board/runs/:id` compatibility redirect
-- artifact workbench detail flow, including run-workbench deep links to `/board/artifacts/workbench?artifact_id=<artifact-id>`, legacy run-page anchor fallback, and safe raw-content streaming headers
+- artifact workbench detail flow, including run-workbench deep links to `/board/artifacts/workbench?artifact_id=<artifact-id>`, legacy run-page anchor fallback, safe raw-content streaming headers, and renderer polish for JSON / Markdown / diff previews inside the existing artifact workbench
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
@@ -197,6 +197,9 @@ Artifact workbench operator flow:
 - Older run-page artifact anchors remain available as a compatibility fallback for legacy links.
 - Read the manager view with `GET /api/manager/artifacts/<artifact-id>/workbench`.
 - Stream raw artifact bytes with `GET /api/manager/artifacts/<artifact-id>/content`, which now returns safe response headers for direct download or preview.
+- Renderer polish stays inside this existing artifact workbench page; it does not add a new route.
+- Artifacts whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch now get a more readable structured preview.
+- Malformed JSON, malformed diff content, and unsupported text-like content still fall back to the generic text preview.
 
 ## Control-Plane Guarantees
 

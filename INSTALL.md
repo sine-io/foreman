@@ -225,6 +225,32 @@ Expected outcomes:
 
 Legacy `#artifact-...` run-page anchors remain as a compatibility fallback for older unlinked artifacts, but that behavior is not part of the normal reproducible smoke because newly created artifacts are linked.
 
+## Artifact Renderer Polish Smoke
+
+With `foreman serve` running, verify renderer polish inside the existing artifact workbench:
+
+1. Reuse an artifact from the artifact workbench smoke whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch.
+
+2. Read the manager artifact workbench detail and note the preview metadata that drives renderer selection.
+
+```bash
+curl http://localhost:8080/api/manager/artifacts/<artifact-id>/workbench
+```
+
+3. Load the existing board artifact workbench page and inspect the preview there.
+
+```bash
+curl http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>
+```
+
+Expected outcomes:
+
+- renderer polish stays inside `/board/artifacts/workbench?artifact_id=<artifact-id>` and does not add a new route
+- JSON artifacts pretty-print, Markdown artifacts render safely as inert formatted content, and diff / patch artifacts use a structured diff-oriented preview
+- the smoke artifact may be selected by `content_type`, artifact `kind`, or filename `path`
+- malformed or unsupported content still falls back to the generic text preview
+- truncation warnings remain visible when the preview is partial
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:
