@@ -38,7 +38,7 @@ Foreman now has:
 
 But once an operator understands one artifact, there is still no direct answer to:
 
-- what changed since the previous run?
+- what changed since the previous artifact?
 - is this output different in a meaningful way?
 - did the same artifact kind regress or improve?
 
@@ -120,6 +120,19 @@ The approved v1 comparison rule is:
 
 - current artifact is selected by `artifact_id`
 - previous artifact is the latest earlier artifact with the same `task_id` and `kind`
+
+“Earlier” must be deterministic.
+
+The ordering rule for compare selection should be:
+
+- current artifact is identified first
+- candidate historical artifacts must share the same `task_id` and `kind`
+- candidates must satisfy:
+  - lower `created_at` than the current artifact, or
+  - same `created_at` and lower stable `artifact_id`
+- the chosen previous artifact is the nearest candidate ordered by:
+  - `created_at DESC`
+  - `artifact_id DESC`
 
 No alternative selector is added in v1.
 
@@ -267,13 +280,14 @@ Suggested contents:
   - `kind`
   - `content_type`
   - `created_at`
-  - `workbench_url`
 - `diff`
   - `format`
   - `content`
-  - `truncated`
 - `limits`
   - `max_compare_bytes`
+- `messages`
+  - `title`
+  - `detail`
 - `navigation`
   - `current_workbench_url`
   - `previous_workbench_url`
@@ -282,6 +296,17 @@ Suggested contents:
 The first version should keep `diff.format` fixed at:
 
 - `text/unified-diff`
+
+Non-`ready` DTO contract should be explicit:
+
+- `current` is always present
+- `previous` is `null` for `no_previous`
+- `previous` is still present for `unsupported` and `too_large` when the previous comparable artifact is found
+- `diff` is present only for `ready`
+- `diff` is `null` for `no_previous`, `unsupported`, and `too_large`
+- `messages` is always present and should provide direct operator-facing text for the current state
+- `navigation.current_workbench_url` and `navigation.back_to_run_url` are always present
+- `navigation.previous_workbench_url` is present only when `previous` is present
 
 ## Supported Compare Content In V1
 
@@ -302,6 +327,8 @@ The first version should not attempt true compare for:
 Those artifacts should return:
 
 - `unsupported`
+
+Compare should become `ready` only when both the current artifact and the selected previous artifact resolve to supported text or structured-text content.
 
 ## Client / Server Boundary
 
@@ -338,7 +365,7 @@ This keeps the initial slice narrow and predictable.
 
 Compare should be bounded.
 
-If either side exceeds the configured compare limit, Foreman should not attempt an unbounded diff. Instead it should return:
+If either side exceeds the configured compare limit, Foreman should not attempt an unbounded or truncated diff. Instead it should return:
 
 - `too_large`
 
