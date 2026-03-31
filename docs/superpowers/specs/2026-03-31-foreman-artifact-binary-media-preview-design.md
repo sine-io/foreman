@@ -70,6 +70,21 @@ It should not:
 - become a document viewer platform
 - add a second binary-focused surface below artifact workbench
 
+## Relationship To Existing Artifact Workbench Design
+
+This spec amends the earlier artifact workbench design at:
+
+- `docs/superpowers/specs/2026-03-31-foreman-artifact-workbench-design.md`
+
+Specifically, it replaces the earlier v1 restriction that all non-text artifacts remain metadata/download-only.
+
+After this amendment:
+
+- approved image types may preview inline inside the existing artifact workbench
+- non-image binary artifacts remain on the metadata/download fallback path
+
+This spec does not change any other artifact workbench responsibilities.
+
 ## Primary Role
 
 The approved primary role for this slice is:
@@ -125,6 +140,10 @@ This means:
 - no new image-specific route
 - no server-side HTML rendering for previews
 
+The authoritative field for inline image previewability is the normalized server `content_type` already returned by `GET /api/manager/artifacts/:id/workbench`.
+
+The client should not introduce new byte-sniffing or extension-sniffing as the source of truth for previewability in this slice.
+
 ## Preview Rules
 
 ### Image Preview
@@ -168,7 +187,13 @@ This slice reuses:
 
 The raw content endpoint remains the source of truth for download/open behavior.
 
-For this slice, the implementation may extend the existing inline-safe behavior of the raw content endpoint to support the approved image types, but it must not weaken the current safety guarantees for active or untrusted content.
+For this slice, the server behavior should be:
+
+- `image/png`, `image/jpeg`, `image/gif`, and `image/webp` are inline-previewable through the existing raw content endpoint
+- `image/svg+xml` is best-effort previewable through the same endpoint, but may still fall back to attachment/download if the current safety policy rejects inline SVG
+- non-image binary/media types remain attachment/download oriented
+
+This slice must not weaken the current safety guarantees for active or untrusted content.
 
 ## Error Handling
 

@@ -289,6 +289,15 @@ For non-text artifacts, v1 should show:
 
 It should not force inline rendering for binary or media types.
 
+This rule is amended in part by the later binary/media preview design at:
+
+- `docs/superpowers/specs/2026-03-31-foreman-artifact-binary-media-preview-design.md`
+
+After that amendment:
+
+- approved image types may preview inline inside the existing artifact workbench
+- non-image binary artifacts remain on the metadata/download fallback path
+
 ## Sibling Scope Rule
 
 Sibling artifact navigation should be limited to artifacts from the same persisted `run_id` as the selected artifact.
