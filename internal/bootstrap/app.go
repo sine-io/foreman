@@ -244,8 +244,8 @@ func (a *app) ArtifactWorkbench(ctx context.Context, artifactID string) (appmana
 	return a.manager.ArtifactWorkbench(ctx, artifactID)
 }
 
-func (a *app) ArtifactCompare(ctx context.Context, artifactID string) (appmanageragent.ArtifactCompareView, error) {
-	return a.manager.ArtifactCompare(ctx, artifactID)
+func (a *app) ArtifactCompare(ctx context.Context, artifactID, previousArtifactID string) (appmanageragent.ArtifactCompareView, error) {
+	return a.manager.ArtifactCompare(ctx, artifactID, previousArtifactID)
 }
 
 func (a *app) ArtifactContent(ctx context.Context, artifactID string) (httpadapter.ManagerArtifactContent, error) {

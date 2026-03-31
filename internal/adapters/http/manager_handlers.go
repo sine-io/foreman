@@ -29,7 +29,7 @@ type ManagerApp interface {
 	TaskStatus(context.Context, string, string) (manageragent.TaskStatusView, error)
 	RunWorkbench(context.Context, string) (manageragent.RunWorkbenchView, error)
 	ArtifactWorkbench(context.Context, string) (manageragent.ArtifactWorkbenchView, error)
-	ArtifactCompare(context.Context, string) (manageragent.ArtifactCompareView, error)
+	ArtifactCompare(context.Context, string, string) (manageragent.ArtifactCompareView, error)
 	ArtifactContent(context.Context, string) (ManagerArtifactContent, error)
 	TaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchView, error)
 	DispatchTaskWorkbench(context.Context, string, string) (manageragent.TaskWorkbenchActionResponse, error)
@@ -166,7 +166,7 @@ func (h *ManagerHandlers) ManagerArtifactWorkbench(c *gin.Context) {
 }
 
 func (h *ManagerHandlers) ManagerArtifactCompare(c *gin.Context) {
-	view, err := h.app.ArtifactCompare(c.Request.Context(), c.Param("id"))
+	view, err := h.app.ArtifactCompare(c.Request.Context(), c.Param("id"), c.Query("previous_artifact_id"))
 	if err != nil {
 		respondManagerError(c, err)
 		return
@@ -392,6 +392,8 @@ func respondManagerError(c *gin.Context, err error) {
 		c.JSON(nethttp.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, manageragent.ErrArtifactCompareNotFound):
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, manageragent.ErrArtifactCompareSelection):
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionNotFound):
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, command.ErrApprovalActionConflict):
@@ -501,6 +503,7 @@ func artifactCompareResponseDTO(view manageragent.ArtifactCompareView) managerAr
 			PreviousWorkbenchURL: view.Navigation.PreviousWorkbenchURL,
 			BackToRunURL:         view.Navigation.BackToRunURL,
 		},
+		History: make([]managerArtifactCompareHistoryItemResponse, 0, len(view.History)),
 	}
 	if view.Previous != nil {
 		resp.Previous = &managerArtifactCompareArtifactResponse{
@@ -517,6 +520,16 @@ func artifactCompareResponseDTO(view manageragent.ArtifactCompareView) managerAr
 			Format:  view.Diff.Format,
 			Content: view.Diff.Content,
 		}
+	}
+	for _, item := range view.History {
+		resp.History = append(resp.History, managerArtifactCompareHistoryItemResponse{
+			ArtifactID: item.ArtifactID,
+			RunID:      item.RunID,
+			CreatedAt:  item.CreatedAt,
+			Summary:    item.Summary,
+			Selected:   item.Selected,
+			CompareURL: item.CompareURL,
+		})
 	}
 	return resp
 }

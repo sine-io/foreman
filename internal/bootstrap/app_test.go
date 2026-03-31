@@ -670,6 +670,13 @@ func TestServeArtifactCompareExposesLiveCompareRoute(t *testing.T) {
 			PreviousWorkbenchURL string `json:"previous_workbench_url"`
 			BackToRunURL         string `json:"back_to_run_url"`
 		} `json:"navigation"`
+		History []struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+			Summary    string `json:"summary"`
+			Selected   bool   `json:"selected"`
+			CompareURL string `json:"compare_url"`
+		} `json:"history"`
 	}
 	require.NoError(t, json.NewDecoder(compareResp.Body).Decode(&comparePayload))
 	require.Equal(t, "ready", comparePayload.Status)
@@ -688,6 +695,16 @@ func TestServeArtifactCompareExposesLiveCompareRoute(t *testing.T) {
 	require.Equal(t, "/board/artifacts/workbench?artifact_id="+currentID, comparePayload.Navigation.CurrentWorkbenchURL)
 	require.Equal(t, "/board/artifacts/workbench?artifact_id="+previousID, comparePayload.Navigation.PreviousWorkbenchURL)
 	require.Equal(t, "/board/runs/workbench?run_id=run-compare-2", comparePayload.Navigation.BackToRunURL)
+	require.Len(t, comparePayload.History, 1)
+	require.Equal(t, previousID, comparePayload.History[0].ArtifactID)
+	require.True(t, comparePayload.History[0].Selected)
+	require.Contains(t, comparePayload.History[0].CompareURL, "artifact_id="+currentID)
+	require.Contains(t, comparePayload.History[0].CompareURL, "previous_artifact_id="+previousID)
+
+	compareResp, err = stdhttp.Get("http://" + cfg.HTTPAddr + "/api/manager/artifacts/" + currentID + "/compare?previous_artifact_id=" + previousID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = compareResp.Body.Close() })
+	require.Equal(t, stdhttp.StatusOK, compareResp.StatusCode)
 
 	cancel()
 	require.NoError(t, <-errCh)

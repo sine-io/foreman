@@ -227,6 +227,14 @@ func TestManagerArtifactCompareEndpointReturnsReadyView(t *testing.T) {
 			PreviousWorkbenchURL string `json:"previous_workbench_url"`
 			BackToRunURL         string `json:"back_to_run_url"`
 		} `json:"navigation"`
+		History []struct {
+			ArtifactID string `json:"artifact_id"`
+			RunID      string `json:"run_id"`
+			CreatedAt  string `json:"created_at"`
+			Summary    string `json:"summary"`
+			Selected   bool   `json:"selected"`
+			CompareURL string `json:"compare_url"`
+		} `json:"history"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "ready", resp.Status)
@@ -243,6 +251,13 @@ func TestManagerArtifactCompareEndpointReturnsReadyView(t *testing.T) {
 	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-compare", resp.Navigation.CurrentWorkbenchURL)
 	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-previous", resp.Navigation.PreviousWorkbenchURL)
 	require.Equal(t, "/board/runs/workbench?run_id=run-2", resp.Navigation.BackToRunURL)
+	require.Len(t, resp.History, 2)
+	require.Equal(t, "artifact-previous", resp.History[0].ArtifactID)
+	require.Equal(t, "run-1", resp.History[0].RunID)
+	require.Equal(t, "Selected summary", resp.History[0].Summary)
+	require.True(t, resp.History[0].Selected)
+	require.Contains(t, resp.History[0].CompareURL, "artifact_id=artifact-compare")
+	require.Contains(t, resp.History[0].CompareURL, "previous_artifact_id=artifact-previous")
 }
 
 func TestManagerArtifactCompareEndpointMapsMissingArtifactTo404(t *testing.T) {
@@ -265,6 +280,29 @@ func TestManagerArtifactCompareEndpointMapsBrokenLinkageTo500(t *testing.T) {
 
 	require.Equal(t, stdhttp.StatusInternalServerError, rec.Code)
 	require.Contains(t, rec.Body.String(), "artifact compare points to missing run")
+}
+
+func TestManagerArtifactCompareEndpointUsesExplicitPreviousArtifactWhenProvided(t *testing.T) {
+	app := newFakeManagerHTTPApp()
+	router := NewRouter(app)
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-compare/compare?previous_artifact_id=artifact-older", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Equal(t, "artifact-older", app.lastComparePreviousArtifactID)
+}
+
+func TestManagerArtifactCompareEndpointMapsInvalidPreviousArtifactTo400(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/invalid-compare/compare?previous_artifact_id=artifact-bad", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact compare selection invalid")
 }
 
 func TestManagerArtifactCompareEndpointKeepsNullableFieldsForNoPreviousState(t *testing.T) {
@@ -301,10 +339,13 @@ func TestManagerArtifactCompareEndpointKeepsNullableDiffForUnsupportedState(t *t
 	require.Equal(t, "unsupported", payload["status"])
 	previous, previousExists := payload["previous"]
 	diff, diffExists := payload["diff"]
+	history, historyExists := payload["history"]
 	require.True(t, previousExists)
 	require.True(t, diffExists)
+	require.True(t, historyExists)
 	require.NotNil(t, previous)
 	require.Nil(t, diff)
+	require.IsType(t, []any{}, history)
 }
 
 func TestManagerArtifactContentEndpointKeepsRasterImagesInline(t *testing.T) {
@@ -809,6 +850,7 @@ type fakeManagerHTTPApp struct {
 	*fakeHTTPApp
 	lastReprioritizePriority int
 	artifactContentClosed    bool
+	lastComparePreviousArtifactID string
 }
 
 func newFakeManagerHTTPApp() *fakeManagerHTTPApp {
@@ -1106,12 +1148,15 @@ func (a *fakeManagerHTTPApp) ArtifactWorkbench(ctx context.Context, artifactID s
 	}
 }
 
-func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID string) (manageragent.ArtifactCompareView, error) {
+func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID string, previousArtifactID string) (manageragent.ArtifactCompareView, error) {
+	a.lastComparePreviousArtifactID = previousArtifactID
 	switch artifactID {
 	case "missing-compare":
 		return manageragent.ArtifactCompareView{}, fmt.Errorf("%w: artifact missing-compare not found", manageragent.ErrArtifactCompareNotFound)
 	case "broken-compare":
 		return manageragent.ArtifactCompareView{}, errors.New("artifact compare points to missing run")
+	case "invalid-compare":
+		return manageragent.ArtifactCompareView{}, fmt.Errorf("%w: artifact compare selection invalid: artifact-bad is outside the bounded history set", manageragent.ErrArtifactCompareSelection)
 	case "no-previous-compare":
 		return manageragent.ArtifactCompareView{
 			Current: manageragent.ArtifactCompareArtifact{
@@ -1132,6 +1177,7 @@ func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID str
 				CurrentWorkbenchURL: "/board/artifacts/workbench?artifact_id=" + artifactID,
 				BackToRunURL:        "/board/runs/workbench?run_id=run-2",
 			},
+			History: []manageragent.ArtifactCompareHistoryItem{},
 		}, nil
 	case "unsupported-compare":
 		return manageragent.ArtifactCompareView{
@@ -1162,8 +1208,24 @@ func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID str
 				PreviousWorkbenchURL: "/board/artifacts/workbench?artifact_id=artifact-previous-image",
 				BackToRunURL:         "/board/runs/workbench?run_id=run-2",
 			},
+			History: []manageragent.ArtifactCompareHistoryItem{
+				{
+					ArtifactID: "artifact-previous-image",
+					RunID:      "run-1",
+					CreatedAt:  "2026-04-01T09:00:00.000000000Z",
+					Summary:    "Previous screenshot",
+					Selected:   true,
+					CompareURL: "/board/artifacts/compare?artifact_id=" + artifactID + "&previous_artifact_id=artifact-previous-image",
+				},
+			},
 		}, nil
 	default:
+		selectedID := "artifact-previous"
+		selectedSummary := "Selected summary"
+		if previousArtifactID != "" {
+			selectedID = previousArtifactID
+			selectedSummary = "Explicit selected summary"
+		}
 		return manageragent.ArtifactCompareView{
 			Current: manageragent.ArtifactCompareArtifact{
 				ArtifactID:  artifactID,
@@ -1174,7 +1236,7 @@ func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID str
 				CreatedAt:   "2026-04-01T10:00:00.000000000Z",
 			},
 			Previous: &manageragent.ArtifactCompareArtifact{
-				ArtifactID:  "artifact-previous",
+				ArtifactID:  selectedID,
 				RunID:       "run-1",
 				TaskID:      "task-1",
 				Kind:        "assistant_summary",
@@ -1193,8 +1255,26 @@ func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID str
 			},
 			Navigation: manageragent.ArtifactCompareNavigation{
 				CurrentWorkbenchURL:  "/board/artifacts/workbench?artifact_id=" + artifactID,
-				PreviousWorkbenchURL: "/board/artifacts/workbench?artifact_id=artifact-previous",
+				PreviousWorkbenchURL: "/board/artifacts/workbench?artifact_id=" + selectedID,
 				BackToRunURL:         "/board/runs/workbench?run_id=run-2",
+			},
+			History: []manageragent.ArtifactCompareHistoryItem{
+				{
+					ArtifactID: "artifact-previous",
+					RunID:      "run-1",
+					CreatedAt:  "2026-04-01T09:00:00.000000000Z",
+					Summary:    "Selected summary",
+					Selected:   selectedID == "artifact-previous",
+					CompareURL: "/board/artifacts/compare?artifact_id=" + artifactID + "&previous_artifact_id=artifact-previous",
+				},
+				{
+					ArtifactID: "artifact-older",
+					RunID:      "run-0",
+					CreatedAt:  "2026-04-01T08:00:00.000000000Z",
+					Summary:    selectedSummary,
+					Selected:   selectedID == "artifact-older",
+					CompareURL: "/board/artifacts/compare?artifact_id=" + artifactID + "&previous_artifact_id=artifact-older",
+				},
 			},
 		}, nil
 	}

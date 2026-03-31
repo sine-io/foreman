@@ -480,7 +480,16 @@ func TestArtifactCompareReturnsReadyView(t *testing.T) {
 			Kind:        "assistant_summary",
 			Path:        "tasks/task-1/previous.txt",
 			StoragePath: "tasks/task-1/previous.txt",
+			Summary:     "Previous summary",
 			CreatedAt:   "2026-04-01T09:00:00.000000000Z",
+		},
+		History: []ports.ArtifactCompareHistoryItemRow{
+			{
+				ArtifactID: "artifact-previous",
+				RunID:      "run-1",
+				CreatedAt:  "2026-04-01T09:00:00.000000000Z",
+				Summary:    "Previous summary",
+			},
 		},
 	}
 	harness.artifactStore.previews = map[string]string{
@@ -489,7 +498,7 @@ func TestArtifactCompareReturnsReadyView(t *testing.T) {
 	}
 	svc := harness.newService()
 
-	view, err := svc.ArtifactCompare(context.Background(), "artifact-current")
+	view, err := svc.ArtifactCompare(context.Background(), "artifact-current", "")
 	require.NoError(t, err)
 	require.Equal(t, "ready", view.Status)
 	require.Equal(t, "artifact-current", view.Current.ArtifactID)
@@ -498,6 +507,11 @@ func TestArtifactCompareReturnsReadyView(t *testing.T) {
 	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-current", view.Navigation.CurrentWorkbenchURL)
 	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-previous", view.Navigation.PreviousWorkbenchURL)
 	require.Equal(t, "/board/runs/workbench?run_id=run-2", view.Navigation.BackToRunURL)
+	require.Len(t, view.History, 1)
+	require.Equal(t, "artifact-previous", view.History[0].ArtifactID)
+	require.Equal(t, "Previous summary", view.History[0].Summary)
+	require.True(t, view.History[0].Selected)
+	require.Equal(t, "/board/artifacts/compare?artifact_id=artifact-current&previous_artifact_id=artifact-previous", view.History[0].CompareURL)
 	require.NotNil(t, view.Diff)
 	require.Contains(t, view.Diff.Content, "previous:artifact-previous")
 	require.Contains(t, view.Diff.Content, "current:artifact-current")
@@ -508,8 +522,56 @@ func TestArtifactCompareReturnsNotFoundWhenMissing(t *testing.T) {
 	harness.board.artifactCompareErr = sql.ErrNoRows
 	svc := harness.newService()
 
-	_, err := svc.ArtifactCompare(context.Background(), "artifact-missing")
+	_, err := svc.ArtifactCompare(context.Background(), "artifact-missing", "")
 	require.ErrorIs(t, err, ErrArtifactCompareNotFound)
+}
+
+func TestArtifactCompareUsesExplicitPreviousArtifactWhenProvided(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactCompare = ports.ArtifactCompareRow{
+		Current: ports.ArtifactCompareArtifactRow{
+			ArtifactID:  "artifact-current",
+			RunID:       "run-2",
+			TaskID:      "task-1",
+			Kind:        "assistant_summary",
+			Path:        "tasks/task-1/current.txt",
+			StoragePath: "tasks/task-1/current.txt",
+			CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+		},
+		Previous: &ports.ArtifactCompareArtifactRow{
+			ArtifactID:  "artifact-selected",
+			RunID:       "run-1",
+			TaskID:      "task-1",
+			Kind:        "assistant_summary",
+			Path:        "tasks/task-1/selected.txt",
+			StoragePath: "tasks/task-1/selected.txt",
+			Summary:     "Selected summary",
+			CreatedAt:   "2026-04-01T09:30:00.000000000Z",
+		},
+		History: []ports.ArtifactCompareHistoryItemRow{
+			{ArtifactID: "artifact-selected", RunID: "run-1", CreatedAt: "2026-04-01T09:30:00.000000000Z", Summary: "Selected summary"},
+		},
+	}
+	harness.artifactStore.previews = map[string]string{
+		"tasks/task-1/current.txt":  "current artifact\n",
+		"tasks/task-1/selected.txt": "selected artifact\n",
+	}
+	svc := harness.newService()
+
+	view, err := svc.ArtifactCompare(context.Background(), "artifact-current", "artifact-selected")
+	require.NoError(t, err)
+	require.Equal(t, "ready", view.Status)
+	require.Equal(t, "artifact-selected", view.Previous.ArtifactID)
+	require.Equal(t, "artifact-selected", harness.board.lastPreviousArtifactID)
+}
+
+func TestArtifactCompareReturnsClientErrorForInvalidPreviousArtifact(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactCompareErr = ports.ErrArtifactCompareSelectionInvalid
+	svc := harness.newService()
+
+	_, err := svc.ArtifactCompare(context.Background(), "artifact-current", "artifact-invalid")
+	require.ErrorIs(t, err, ErrArtifactCompareSelection)
 }
 
 func TestTaskWorkbenchUsesRequestedProjectBoard(t *testing.T) {
@@ -1053,6 +1115,7 @@ type fakeBoardQueryRepo struct {
 	artifactWorkbenchErr error
 	artifactCompare      ports.ArtifactCompareRow
 	artifactCompareErr   error
+	lastPreviousArtifactID string
 }
 
 func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -1113,6 +1176,7 @@ func (f *fakeBoardQueryRepo) GetArtifactWorkbench(artifactID string) (ports.Arti
 }
 
 func (f *fakeBoardQueryRepo) GetArtifactCompare(artifactID string, previousArtifactID string) (ports.ArtifactCompareRow, error) {
+	f.lastPreviousArtifactID = previousArtifactID
 	if f.artifactCompareErr != nil {
 		return ports.ArtifactCompareRow{}, f.artifactCompareErr
 	}
