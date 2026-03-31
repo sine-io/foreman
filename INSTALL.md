@@ -247,6 +247,29 @@ Expected outcomes:
 - unsupported content, and renderer fallback cases such as JSON parse failures, still use the generic text preview
 - truncation warnings remain visible when the preview is partial
 
+## Artifact Long-Text Ergonomics Smoke (Optional Browser Check)
+
+With `foreman serve` running, you can manually verify long-text ergonomics inside the existing artifact workbench if you already have a suitable artifact. This is browser-only UI behavior on the generic long-text path, so `curl` against the board route only verifies the shell, not the line-numbered collapsed preview.
+
+1. If you already have an artifact that stays on the generic long-text path, note its `artifact_id`. Good candidates include `run_log`, `command_result`, or other long `text/plain` artifacts. If the artifact renders on the structured JSON, Markdown, or diff / patch path, or if the text is short, skip this optional check.
+
+2. Read the manager artifact workbench detail and note the existing summary, preview, and truncation metadata that the browser uses for long-text ergonomics.
+
+```bash
+curl http://localhost:8080/api/manager/artifacts/<artifact-id>/workbench
+```
+
+3. Open `http://localhost:8080/board/artifacts/workbench?artifact_id=<artifact-id>` in a web browser and inspect the preview there.
+
+Expected outcomes:
+
+- long-text ergonomics stay inside `/board/artifacts/workbench?artifact_id=<artifact-id>` and do not add a new route or new manager API fields
+- long text and log-like artifacts on the generic long-text path show line numbers, start in a collapsed first-screen teaser, and offer `Expand all` for the current bounded preview
+- lightweight summary navigation is derived from existing summary and preview text, and following a hidden anchor may expand the bounded preview to reveal it
+- JSON, Markdown, and diff / patch structured-renderer success paths remain separate from long-text ergonomics
+- unsupported or short content still uses the simpler preview path
+- truncation warnings remain visible in both collapsed and expanded states
+
 ## Control-Plane Hardening Smoke
 
 With `foreman serve` running, verify repeated dispatch and persisted task-status reconstruction:

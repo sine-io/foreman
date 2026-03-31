@@ -89,6 +89,12 @@
 - Added an optional browser-only renderer-polish smoke path for existing artifacts selected by `content_type`, `kind`, or `path`
 - Recorded the generic text preview fallback for unsupported content and JSON parse failures
 
+### Phase 2 Artifact Log Ergonomics
+
+- Documented long-text ergonomics inside the existing artifact workbench generic long-text path, including line numbers, a collapsed first-screen teaser, `Expand all`, and summary navigation
+- Added an optional browser-only long-text ergonomics smoke path for existing `run_log`, `command_result`, and other long `text/plain` artifacts
+- Recorded that JSON, Markdown, and diff / patch structured-renderer success paths remain separate while short or unsupported content still uses the simpler preview path
+
 ## 2026-03-30
 
 ### Phase 2 Run Workbench
