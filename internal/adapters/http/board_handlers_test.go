@@ -119,6 +119,18 @@ func TestTaskWorkbenchPageServesHTML(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "/board/assets/task-workbench.js")
 }
 
+func TestArtifactWorkbenchPlaceholderPageServes(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/artifacts/workbench?artifact_id=artifact-1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Artifact workbench placeholder")
+	require.Contains(t, rec.Body.String(), "artifact-1")
+}
+
 func TestRunWorkbenchPageServes(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
