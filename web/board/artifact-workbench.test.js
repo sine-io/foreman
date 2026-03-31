@@ -52,7 +52,7 @@ const loadWorkbenchModule = () => {
   }
 };
 
-const { composeArtifactPreviewMarkup, buildArtifactCompareURL } = loadWorkbenchModule();
+const { composeArtifactPreviewMarkup, composeArtifactMetadataMarkup, buildArtifactCompareURL } = loadWorkbenchModule();
 
 test('TestArtifactWorkbenchJavaScriptUsesRendererHelpersForJSON', () => {
   assert.equal(typeof composeArtifactPreviewMarkup, 'function');
@@ -180,4 +180,19 @@ test('TestArtifactWorkbenchJavaScriptLinksToArtifactCompare', () => {
     buildArtifactCompareURL('artifact-1'),
     '/board/artifacts/compare?artifact_id=artifact-1',
   );
+
+  const metadataMarkup = composeArtifactMetadataMarkup({
+    artifact_id: 'artifact-1',
+    run_id: 'run-1',
+    task_id: 'task-1',
+    project_id: 'project-1',
+    module_id: 'module-1',
+    content_type: 'text/plain; charset=utf-8',
+    path: 'tasks/task-1/assistant_summary.txt',
+    run_workbench_url: '/board/runs/workbench?run_id=run-1',
+    raw_content_url: '/api/manager/artifacts/artifact-1/content',
+  });
+
+  assert.match(metadataMarkup, /Compare with previous/);
+  assert.match(metadataMarkup, /\/board\/artifacts\/compare\?artifact_id=artifact-1/);
 });

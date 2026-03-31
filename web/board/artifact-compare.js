@@ -206,6 +206,7 @@
 
     state.loading = true;
     state.notice = "";
+    state.detail = null;
     renderCompare();
     setStatus(`Loading compare for ${requestedArtifactId}...`);
 

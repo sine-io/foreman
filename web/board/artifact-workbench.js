@@ -57,6 +57,13 @@
       ? `<a class="board-link" href="${escapeHTML(detail.raw_content_url)}" target="_blank" rel="noopener noreferrer">Open raw artifact</a>`
       : '<span class="board-link board-link-disabled" aria-disabled="true">Raw artifact unavailable</span>';
 
+  const buildArtifactCompareURL = (artifactId) => {
+    if (!artifactId) {
+      return "/board/artifacts/compare";
+    }
+    return `/board/artifacts/compare?artifact_id=${encodeURIComponent(artifactId)}`;
+  };
+
   const wrapPreviewSection = (label, bodyMarkup) => `
     <section class="detail-block detail-block-wide">
       <p class="detail-label">${escapeHTML(label)}</p>
@@ -438,15 +445,66 @@
   const composeArtifactPreviewMarkup = (detail, options = {}) =>
     buildArtifactPreviewViewModel(detail, options).markup;
 
-  const buildArtifactCompareURL = (artifactId) => {
-    if (!artifactId) {
-      return "/board/artifacts/compare";
-    }
-    return `/board/artifacts/compare?artifact_id=${encodeURIComponent(artifactId)}`;
+  const composeArtifactMetadataMarkup = (detail) => {
+    const rawContentLink = buildRawContentLinkMarkup(detail);
+    const runWorkbenchLink = detail && detail.run_workbench_url
+      ? `<a class="board-link" href="${escapeHTML(detail.run_workbench_url)}">Back to run workbench</a>`
+      : '<span class="board-link board-link-disabled" aria-disabled="true">Run workbench unavailable</span>';
+    const compareLink = detail && detail.artifact_id
+      ? `<a class="board-link" href="${escapeHTML(buildArtifactCompareURL(detail.artifact_id))}">Compare with previous</a>`
+      : '<span class="board-link board-link-disabled" aria-disabled="true">Compare unavailable</span>';
+
+    return `
+      <article class="approval-detail-card">
+        <section class="detail-grid detail-grid-secondary artifact-metadata-grid">
+          <article class="detail-block">
+            <p class="detail-label">Artifact ID</p>
+            <p class="detail-copy">${escapeHTML(detail && detail.artifact_id)}</p>
+          </article>
+
+          <article class="detail-block">
+            <p class="detail-label">Run ID</p>
+            <p class="detail-copy">${escapeHTML((detail && detail.run_id) || "Not recorded")}</p>
+          </article>
+
+          <article class="detail-block">
+            <p class="detail-label">Task ID</p>
+            <p class="detail-copy">${escapeHTML((detail && detail.task_id) || "Not recorded")}</p>
+          </article>
+
+          <article class="detail-block">
+            <p class="detail-label">Project ID</p>
+            <p class="detail-copy">${escapeHTML((detail && detail.project_id) || "Not recorded")}</p>
+          </article>
+
+          <article class="detail-block">
+            <p class="detail-label">Module ID</p>
+            <p class="detail-copy">${escapeHTML((detail && detail.module_id) || "Not recorded")}</p>
+          </article>
+
+          <article class="detail-block">
+            <p class="detail-label">Content Type</p>
+            <p class="detail-copy">${escapeHTML((detail && detail.content_type) || "Unknown")}</p>
+          </article>
+
+          <article class="detail-block detail-block-wide artifact-metadata-path">
+            <p class="detail-label">Path</p>
+            <p class="detail-copy">${escapeHTML((detail && detail.path) || "Artifact path not recorded")}</p>
+          </article>
+        </section>
+
+        <section class="artifact-metadata-actions">
+          ${runWorkbenchLink}
+          ${compareLink}
+          ${rawContentLink}
+        </section>
+      </article>
+    `;
   };
 
   const api = {
     composeArtifactPreviewMarkup,
+    composeArtifactMetadataMarkup,
     buildArtifactCompareURL,
   };
 
@@ -619,9 +677,8 @@
     }
 
     const detail = state.detail;
-    const rawContentLink = buildRawContentLinkMarkup(detail);
     const previewViewModel = buildArtifactPreviewViewModel(detail, {
-      rawContentLinkMarkup: rawContentLink,
+      rawContentLinkMarkup: buildRawContentLinkMarkup(detail),
       renderers: currentRenderers(),
       logErgonomics: currentLogErgonomics(),
       previewExpansion: state.previewExpansion,
@@ -656,59 +713,7 @@
       </article>
     `;
 
-    const runWorkbenchLink = detail.run_workbench_url
-      ? `<a class="board-link" href="${escapeHTML(detail.run_workbench_url)}">Back to run workbench</a>`
-      : '<span class="board-link board-link-disabled" aria-disabled="true">Run workbench unavailable</span>';
-    const compareLink = detail.artifact_id
-      ? `<a class="board-link" href="${escapeHTML(buildArtifactCompareURL(detail.artifact_id))}">Compare with previous</a>`
-      : '<span class="board-link board-link-disabled" aria-disabled="true">Compare unavailable</span>';
-
-    metadataRoot.innerHTML = `
-      <article class="approval-detail-card">
-        <section class="detail-grid detail-grid-secondary artifact-metadata-grid">
-          <article class="detail-block">
-            <p class="detail-label">Artifact ID</p>
-            <p class="detail-copy">${escapeHTML(detail.artifact_id)}</p>
-          </article>
-
-          <article class="detail-block">
-            <p class="detail-label">Run ID</p>
-            <p class="detail-copy">${escapeHTML(detail.run_id || "Not recorded")}</p>
-          </article>
-
-          <article class="detail-block">
-            <p class="detail-label">Task ID</p>
-            <p class="detail-copy">${escapeHTML(detail.task_id || "Not recorded")}</p>
-          </article>
-
-          <article class="detail-block">
-            <p class="detail-label">Project ID</p>
-            <p class="detail-copy">${escapeHTML(detail.project_id || "Not recorded")}</p>
-          </article>
-
-          <article class="detail-block">
-            <p class="detail-label">Module ID</p>
-            <p class="detail-copy">${escapeHTML(detail.module_id || "Not recorded")}</p>
-          </article>
-
-          <article class="detail-block">
-            <p class="detail-label">Content Type</p>
-            <p class="detail-copy">${escapeHTML(detail.content_type || "Unknown")}</p>
-          </article>
-
-          <article class="detail-block detail-block-wide artifact-metadata-path">
-            <p class="detail-label">Path</p>
-            <p class="detail-copy">${escapeHTML(detail.path || "Artifact path not recorded")}</p>
-          </article>
-        </section>
-
-        <section class="artifact-metadata-actions">
-          ${runWorkbenchLink}
-          ${compareLink}
-          ${rawContentLink}
-        </section>
-      </article>
-    `;
+    metadataRoot.innerHTML = composeArtifactMetadataMarkup(detail);
   };
 
   const renderWorkbench = () => {
