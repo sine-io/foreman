@@ -33,7 +33,7 @@ The currently implemented slice now includes:
 - approval workbench queue/detail/action endpoints, including `approved_pending_dispatch` retry-dispatch recovery
 - task-detail workbench detail/action endpoints for per-task operator flow, including direct task dispatch, retry, cancel, and reprioritize controls
 - run-detail workbench detail flow, including the canonical `/board/runs/workbench?run_id=<run-id>` route and legacy `/board/runs/:id` compatibility redirect
-- artifact workbench detail flow, including run-workbench deep links to `/board/artifacts/workbench?artifact_id=<artifact-id>`, legacy run-page anchor fallback, safe raw-content streaming headers, renderer polish for JSON / Markdown / diff previews, approved image preview inside the existing artifact workbench with binary fallback for other binary artifacts, and long-text ergonomics inside the existing artifact workbench
+- artifact workbench detail flow, including run-workbench deep links to `/board/artifacts/workbench?artifact_id=<artifact-id>`, legacy run-page anchor fallback, safe raw-content streaming headers, renderer polish for JSON / Markdown / diff previews, approved image preview inside the existing artifact workbench with binary fallback for other binary artifacts, long-text ergonomics inside the existing artifact workbench, and a compare page at `/board/artifacts/compare?artifact_id=<artifact-id>` for previous-version text diffs
 
 Phase 1 is now validated end-to-end, including a live smoke run against the real `codex` CLI.
 
@@ -85,6 +85,7 @@ These stay in outer layers. Domain and application code should not depend on fra
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-workbench.md): sixth Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-renderer-polish.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-renderer-polish.md): seventh Phase 2 execution plan
 - [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-binary-preview.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-binary-preview.md): eighth Phase 2 execution plan
+- [`docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-compare.md`](/root/link/repo/docs/superpowers/plans/2026-03-31-foreman-phase-2-artifact-compare.md): ninth Phase 2 execution plan
 
 ## Quick Start
 
@@ -200,11 +201,14 @@ Artifact workbench operator flow:
 - From the run workbench, linked artifacts now deep-link to `/board/artifacts/workbench?artifact_id=<artifact-id>`.
 - Older run-page artifact anchors remain available as a compatibility fallback for legacy links.
 - Read the manager view with `GET /api/manager/artifacts/<artifact-id>/workbench`.
+- Read the compare manager view with `GET /api/manager/artifacts/<artifact-id>/compare`.
 - Stream raw artifact bytes with `GET /api/manager/artifacts/<artifact-id>/content`, which now returns safe response headers for direct download or preview.
+- Use `Compare with previous` to open `/board/artifacts/compare?artifact_id=<artifact-id>`, which compares the current artifact against the immediately previous same-task same-kind text artifact.
 - Renderer polish stays inside this existing artifact workbench page; it does not add a new route.
 - Artifacts whose `content_type`, `kind`, or `path` maps to JSON, Markdown, or diff / patch now get a more readable structured preview.
 - Approved image preview also stays inside this existing artifact workbench page: `image/png`, `image/jpeg`, `image/gif`, and `image/webp` preview inline, `image/svg+xml` stays best-effort under the current safety policy, and non-image binary artifacts stay on the metadata/download binary fallback path.
 - Long text and log-like artifacts that stay on the generic long-text path now add line numbers, a collapsed first-screen teaser with `Expand all`, and lightweight summary navigation derived from existing summary and preview text.
+- Artifact compare stays read-only: it renders `ready`, `no_previous`, `unsupported`, and `too_large` states from the manager API instead of introducing compare-side write actions or manual history selection.
 - Unsupported text-like content, along with JSON previews that fail to parse, still fall back to the generic text preview.
 - Short or otherwise simple text content stays on the simpler preview path without the heavier long-text ergonomics UI.
 

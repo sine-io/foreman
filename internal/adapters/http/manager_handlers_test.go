@@ -190,6 +190,123 @@ func TestManagerArtifactWorkbenchEndpointMapsBrokenLinkageTo500(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "artifact points to missing run")
 }
 
+func TestManagerArtifactCompareEndpointReturnsReadyView(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/artifact-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	var resp struct {
+		Status   string `json:"status"`
+		Current  struct {
+			ArtifactID  string `json:"artifact_id"`
+			RunID       string `json:"run_id"`
+			TaskID      string `json:"task_id"`
+			Kind        string `json:"kind"`
+			ContentType string `json:"content_type"`
+			CreatedAt   string `json:"created_at"`
+		} `json:"current"`
+		Previous *struct {
+			ArtifactID string `json:"artifact_id"`
+		} `json:"previous"`
+		Diff *struct {
+			Format  string `json:"format"`
+			Content string `json:"content"`
+		} `json:"diff"`
+		Limits struct {
+			MaxCompareBytes int `json:"max_compare_bytes"`
+		} `json:"limits"`
+		Messages struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		} `json:"messages"`
+		Navigation struct {
+			CurrentWorkbenchURL  string `json:"current_workbench_url"`
+			PreviousWorkbenchURL string `json:"previous_workbench_url"`
+			BackToRunURL         string `json:"back_to_run_url"`
+		} `json:"navigation"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "ready", resp.Status)
+	require.Equal(t, "artifact-compare", resp.Current.ArtifactID)
+	require.Equal(t, "run-2", resp.Current.RunID)
+	require.Equal(t, "task-1", resp.Current.TaskID)
+	require.Equal(t, "assistant_summary", resp.Current.Kind)
+	require.Equal(t, "text/plain; charset=utf-8", resp.Current.ContentType)
+	require.NotNil(t, resp.Previous)
+	require.NotNil(t, resp.Diff)
+	require.Equal(t, "text/unified-diff", resp.Diff.Format)
+	require.Equal(t, 64*1024, resp.Limits.MaxCompareBytes)
+	require.NotEmpty(t, resp.Messages.Title)
+	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-compare", resp.Navigation.CurrentWorkbenchURL)
+	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-previous", resp.Navigation.PreviousWorkbenchURL)
+	require.Equal(t, "/board/runs/workbench?run_id=run-2", resp.Navigation.BackToRunURL)
+}
+
+func TestManagerArtifactCompareEndpointMapsMissingArtifactTo404(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/missing-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusNotFound, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact missing-compare not found")
+}
+
+func TestManagerArtifactCompareEndpointMapsBrokenLinkageTo500(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/broken-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusInternalServerError, rec.Code)
+	require.Contains(t, rec.Body.String(), "artifact compare points to missing run")
+}
+
+func TestManagerArtifactCompareEndpointKeepsNullableFieldsForNoPreviousState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/no-previous-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, "no_previous", payload["status"])
+	previous, previousExists := payload["previous"]
+	diff, diffExists := payload["diff"]
+	require.True(t, previousExists)
+	require.True(t, diffExists)
+	require.Nil(t, previous)
+	require.Nil(t, diff)
+}
+
+func TestManagerArtifactCompareEndpointKeepsNullableDiffForUnsupportedState(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/api/manager/artifacts/unsupported-compare/compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, "unsupported", payload["status"])
+	previous, previousExists := payload["previous"]
+	diff, diffExists := payload["diff"]
+	require.True(t, previousExists)
+	require.True(t, diffExists)
+	require.NotNil(t, previous)
+	require.Nil(t, diff)
+}
+
 func TestManagerArtifactContentEndpointKeepsRasterImagesInline(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -984,6 +1101,100 @@ func (a *fakeManagerHTTPApp) ArtifactWorkbench(ctx context.Context, artifactID s
 			Siblings: []manageragent.ArtifactWorkbenchSibling{
 				{ArtifactID: "artifact-1", Kind: "assistant_summary", Summary: "Created board view", Selected: artifactID == "artifact-1"},
 				{ArtifactID: "artifact-2", Kind: "command_result", Summary: "go test ./...", Selected: artifactID == "artifact-2"},
+			},
+		}, nil
+	}
+}
+
+func (a *fakeManagerHTTPApp) ArtifactCompare(ctx context.Context, artifactID string) (manageragent.ArtifactCompareView, error) {
+	switch artifactID {
+	case "missing-compare":
+		return manageragent.ArtifactCompareView{}, fmt.Errorf("%w: artifact missing-compare not found", manageragent.ErrArtifactCompareNotFound)
+	case "broken-compare":
+		return manageragent.ArtifactCompareView{}, errors.New("artifact compare points to missing run")
+	case "no-previous-compare":
+		return manageragent.ArtifactCompareView{
+			Current: manageragent.ArtifactCompareArtifact{
+				ArtifactID:  artifactID,
+				RunID:       "run-2",
+				TaskID:      "task-1",
+				Kind:        "assistant_summary",
+				ContentType: "text/plain; charset=utf-8",
+				CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+			},
+			Status: "no_previous",
+			Limits: manageragent.ArtifactCompareLimits{MaxCompareBytes: 64 * 1024},
+			Messages: manageragent.ArtifactCompareMessages{
+				Title:  "No previous artifact",
+				Detail: "No earlier artifact with the same task and kind is available for compare.",
+			},
+			Navigation: manageragent.ArtifactCompareNavigation{
+				CurrentWorkbenchURL: "/board/artifacts/workbench?artifact_id=" + artifactID,
+				BackToRunURL:        "/board/runs/workbench?run_id=run-2",
+			},
+		}, nil
+	case "unsupported-compare":
+		return manageragent.ArtifactCompareView{
+			Current: manageragent.ArtifactCompareArtifact{
+				ArtifactID:  artifactID,
+				RunID:       "run-2",
+				TaskID:      "task-1",
+				Kind:        "screenshot",
+				ContentType: "image/png",
+				CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+			},
+			Previous: &manageragent.ArtifactCompareArtifact{
+				ArtifactID:  "artifact-previous-image",
+				RunID:       "run-1",
+				TaskID:      "task-1",
+				Kind:        "screenshot",
+				ContentType: "image/png",
+				CreatedAt:   "2026-04-01T09:00:00.000000000Z",
+			},
+			Status: "unsupported",
+			Limits: manageragent.ArtifactCompareLimits{MaxCompareBytes: 64 * 1024},
+			Messages: manageragent.ArtifactCompareMessages{
+				Title:  "Compare unavailable",
+				Detail: "Artifact compare currently supports text and structured-text content only.",
+			},
+			Navigation: manageragent.ArtifactCompareNavigation{
+				CurrentWorkbenchURL:  "/board/artifacts/workbench?artifact_id=" + artifactID,
+				PreviousWorkbenchURL: "/board/artifacts/workbench?artifact_id=artifact-previous-image",
+				BackToRunURL:         "/board/runs/workbench?run_id=run-2",
+			},
+		}, nil
+	default:
+		return manageragent.ArtifactCompareView{
+			Current: manageragent.ArtifactCompareArtifact{
+				ArtifactID:  artifactID,
+				RunID:       "run-2",
+				TaskID:      "task-1",
+				Kind:        "assistant_summary",
+				ContentType: "text/plain; charset=utf-8",
+				CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+			},
+			Previous: &manageragent.ArtifactCompareArtifact{
+				ArtifactID:  "artifact-previous",
+				RunID:       "run-1",
+				TaskID:      "task-1",
+				Kind:        "assistant_summary",
+				ContentType: "text/plain; charset=utf-8",
+				CreatedAt:   "2026-04-01T09:00:00.000000000Z",
+			},
+			Status: "ready",
+			Diff: &manageragent.ArtifactCompareDiff{
+				Format:  "text/unified-diff",
+				Content: "--- previous:artifact-previous\n+++ current:artifact-compare\n",
+			},
+			Limits: manageragent.ArtifactCompareLimits{MaxCompareBytes: 64 * 1024},
+			Messages: manageragent.ArtifactCompareMessages{
+				Title:  "Compare ready",
+				Detail: "Showing a unified diff between the current artifact and the previous artifact.",
+			},
+			Navigation: manageragent.ArtifactCompareNavigation{
+				CurrentWorkbenchURL:  "/board/artifacts/workbench?artifact_id=" + artifactID,
+				PreviousWorkbenchURL: "/board/artifacts/workbench?artifact_id=artifact-previous",
+				BackToRunURL:         "/board/runs/workbench?run_id=run-2",
 			},
 		}, nil
 	}

@@ -117,6 +117,21 @@ type ArtifactWorkbenchRow struct {
 	Siblings    []ArtifactRecord
 }
 
+type ArtifactCompareArtifactRow struct {
+	ArtifactID  string
+	RunID       string
+	TaskID      string
+	Kind        string
+	Path        string
+	StoragePath string
+	CreatedAt   string
+}
+
+type ArtifactCompareRow struct {
+	Current  ArtifactCompareArtifactRow
+	Previous *ArtifactCompareArtifactRow
+}
+
 type ApprovalQueueRow struct {
 	ApprovalID      string
 	TaskID          string
@@ -181,6 +196,7 @@ type BoardQueryRepository interface {
 	GetRunDetail(runID string) (RunDetailRecord, error)
 	GetRunWorkbench(runID string) (RunWorkbenchRow, error)
 	GetArtifactWorkbench(artifactID string) (ArtifactWorkbenchRow, error)
+	GetArtifactCompare(artifactID string) (ArtifactCompareRow, error)
 	ListApprovals(projectID string) ([]ApprovalQueueRow, error)
 	ListApprovalWorkbenchQueue(projectID string) ([]ApprovalWorkbenchQueueRow, error)
 	GetApprovalWorkbenchDetail(approvalID string) (ApprovalWorkbenchDetailRow, error)

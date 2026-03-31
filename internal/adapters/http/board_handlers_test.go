@@ -132,6 +132,30 @@ func TestArtifactWorkbenchPageServes(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "Refresh artifact")
 }
 
+func TestArtifactComparePageServes(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/artifacts/compare?artifact_id=artifact-compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "Artifact Compare")
+	require.Contains(t, rec.Body.String(), "/board/assets/artifact-compare.js")
+	require.Contains(t, rec.Body.String(), "Refresh compare")
+}
+
+func TestArtifactCompareHTMLLoadsCompareAsset(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/artifacts/compare?artifact_id=artifact-compare", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "/board/assets/artifact-compare.js")
+}
+
 func TestArtifactWorkbenchHTMLLoadsRendererHelpers(t *testing.T) {
 	router := NewRouter(newFakeManagerHTTPApp())
 
@@ -202,6 +226,17 @@ func TestRunWorkbenchJavaScriptUsesRunIDURLState(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "new URLSearchParams(window.location.search)")
 	require.Contains(t, rec.Body.String(), "searchParams.get(\"run_id\")")
 	require.Contains(t, rec.Body.String(), "searchParams.set(\"run_id\", runId)")
+}
+
+func TestArtifactWorkbenchJavaScriptLinksToArtifactCompare(t *testing.T) {
+	router := NewRouter(newFakeManagerHTTPApp())
+
+	req := httptest.NewRequest(stdhttp.MethodGet, "/board/assets/artifact-workbench.js", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, stdhttp.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "/board/artifacts/compare?artifact_id=")
 }
 
 func TestTaskWorkbenchJavaScriptIncludesDisabledActionReasons(t *testing.T) {

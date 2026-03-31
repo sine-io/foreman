@@ -98,6 +98,45 @@ type managerArtifactWorkbenchSiblingResponse struct {
 	Selected   bool   `json:"selected"`
 }
 
+type managerArtifactCompareArtifactResponse struct {
+	ArtifactID  string `json:"artifact_id"`
+	RunID       string `json:"run_id"`
+	TaskID      string `json:"task_id"`
+	Kind        string `json:"kind"`
+	ContentType string `json:"content_type"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type managerArtifactCompareDiffResponse struct {
+	Format  string `json:"format"`
+	Content string `json:"content"`
+}
+
+type managerArtifactCompareLimitsResponse struct {
+	MaxCompareBytes int `json:"max_compare_bytes"`
+}
+
+type managerArtifactCompareMessagesResponse struct {
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
+type managerArtifactCompareNavigationResponse struct {
+	CurrentWorkbenchURL  string `json:"current_workbench_url"`
+	PreviousWorkbenchURL string `json:"previous_workbench_url,omitempty"`
+	BackToRunURL         string `json:"back_to_run_url"`
+}
+
+type managerArtifactCompareResponse struct {
+	Current    managerArtifactCompareArtifactResponse   `json:"current"`
+	Previous   *managerArtifactCompareArtifactResponse  `json:"previous"`
+	Status     string                                   `json:"status"`
+	Diff       *managerArtifactCompareDiffResponse      `json:"diff"`
+	Limits     managerArtifactCompareLimitsResponse     `json:"limits"`
+	Messages   managerArtifactCompareMessagesResponse   `json:"messages"`
+	Navigation managerArtifactCompareNavigationResponse `json:"navigation"`
+}
+
 type managerTaskWorkbenchActionResponse struct {
 	TaskID              string `json:"task_id"`
 	TaskState           string `json:"task_state"`

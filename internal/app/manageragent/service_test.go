@@ -461,6 +461,57 @@ func TestArtifactWorkbenchReturnsNotFoundWhenMissing(t *testing.T) {
 	require.ErrorIs(t, err, ErrArtifactWorkbenchNotFound)
 }
 
+func TestArtifactCompareReturnsReadyView(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactCompare = ports.ArtifactCompareRow{
+		Current: ports.ArtifactCompareArtifactRow{
+			ArtifactID:  "artifact-current",
+			RunID:       "run-2",
+			TaskID:      "task-1",
+			Kind:        "assistant_summary",
+			Path:        "tasks/task-1/current.txt",
+			StoragePath: "tasks/task-1/current.txt",
+			CreatedAt:   "2026-04-01T10:00:00.000000000Z",
+		},
+		Previous: &ports.ArtifactCompareArtifactRow{
+			ArtifactID:  "artifact-previous",
+			RunID:       "run-1",
+			TaskID:      "task-1",
+			Kind:        "assistant_summary",
+			Path:        "tasks/task-1/previous.txt",
+			StoragePath: "tasks/task-1/previous.txt",
+			CreatedAt:   "2026-04-01T09:00:00.000000000Z",
+		},
+	}
+	harness.artifactStore.previews = map[string]string{
+		"tasks/task-1/current.txt":  "current artifact\n",
+		"tasks/task-1/previous.txt": "previous artifact\n",
+	}
+	svc := harness.newService()
+
+	view, err := svc.ArtifactCompare(context.Background(), "artifact-current")
+	require.NoError(t, err)
+	require.Equal(t, "ready", view.Status)
+	require.Equal(t, "artifact-current", view.Current.ArtifactID)
+	require.Equal(t, "artifact-previous", view.Previous.ArtifactID)
+	require.Equal(t, 64*1024, view.Limits.MaxCompareBytes)
+	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-current", view.Navigation.CurrentWorkbenchURL)
+	require.Equal(t, "/board/artifacts/workbench?artifact_id=artifact-previous", view.Navigation.PreviousWorkbenchURL)
+	require.Equal(t, "/board/runs/workbench?run_id=run-2", view.Navigation.BackToRunURL)
+	require.NotNil(t, view.Diff)
+	require.Contains(t, view.Diff.Content, "previous:artifact-previous")
+	require.Contains(t, view.Diff.Content, "current:artifact-current")
+}
+
+func TestArtifactCompareReturnsNotFoundWhenMissing(t *testing.T) {
+	harness := newHarness()
+	harness.board.artifactCompareErr = sql.ErrNoRows
+	svc := harness.newService()
+
+	_, err := svc.ArtifactCompare(context.Background(), "artifact-missing")
+	require.ErrorIs(t, err, ErrArtifactCompareNotFound)
+}
+
 func TestTaskWorkbenchUsesRequestedProjectBoard(t *testing.T) {
 	harness := newHarness()
 	harness.mustCreateProject(t, "project-1")
@@ -708,6 +759,7 @@ func (h *serviceHarness) newService() *Service {
 		QueryTaskStatus:              query.NewTaskStatusQueryFromRepositories(h.tasks, h.modules, h.runs, h.approvals),
 		QueryRunWorkbench:            query.NewRunWorkbenchQuery(h.board),
 		QueryArtifactWorkbench:       query.NewArtifactWorkbenchQuery(h.board, h.artifactStore),
+		QueryArtifactCompare:         query.NewArtifactCompareQuery(h.board, h.artifactStore),
 		QueryTaskWorkbench:           query.NewTaskWorkbenchQuery(h.board),
 		QueryModuleBoard:             query.NewModuleBoardQuery(h.board),
 		QueryTaskBoard:               query.NewTaskBoardQuery(h.board),
@@ -961,9 +1013,12 @@ func (f *fakeArtifactRepo) Get(id string) (ports.ArtifactRecord, error) {
 }
 
 type fakeArtifactStore struct {
-	preview   string
-	truncated bool
-	err       error
+	preview        string
+	truncated      bool
+	err            error
+	previews       map[string]string
+	truncatedPaths map[string]bool
+	errByPath      map[string]error
 }
 
 func (f *fakeArtifactStore) Put(relativePath string, data []byte) (string, error) {
@@ -971,8 +1026,14 @@ func (f *fakeArtifactStore) Put(relativePath string, data []byte) (string, error
 }
 
 func (f *fakeArtifactStore) ReadPreview(path string, maxBytes int) (string, bool, error) {
+	if err, ok := f.errByPath[path]; ok {
+		return "", false, err
+	}
 	if f.err != nil {
 		return "", false, f.err
+	}
+	if preview, ok := f.previews[path]; ok {
+		return preview, f.truncatedPaths[path], nil
 	}
 	return f.preview, f.truncated, nil
 }
@@ -990,6 +1051,8 @@ type fakeBoardQueryRepo struct {
 	runWorkbenchErr      error
 	artifactWorkbench    ports.ArtifactWorkbenchRow
 	artifactWorkbenchErr error
+	artifactCompare      ports.ArtifactCompareRow
+	artifactCompareErr   error
 }
 
 func (f *fakeBoardQueryRepo) ListModules(projectID string) ([]ports.ModuleBoardRow, error) {
@@ -1047,6 +1110,13 @@ func (f *fakeBoardQueryRepo) GetArtifactWorkbench(artifactID string) (ports.Arti
 		return ports.ArtifactWorkbenchRow{}, f.artifactWorkbenchErr
 	}
 	return f.artifactWorkbench, nil
+}
+
+func (f *fakeBoardQueryRepo) GetArtifactCompare(artifactID string) (ports.ArtifactCompareRow, error) {
+	if f.artifactCompareErr != nil {
+		return ports.ArtifactCompareRow{}, f.artifactCompareErr
+	}
+	return f.artifactCompare, nil
 }
 
 func (f *fakeBoardQueryRepo) ListApprovals(projectID string) ([]ports.ApprovalQueueRow, error) {

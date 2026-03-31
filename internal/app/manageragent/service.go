@@ -39,6 +39,7 @@ type Dependencies struct {
 	QueryTaskStatus              *query.TaskStatusQuery
 	QueryRunWorkbench            *query.RunWorkbenchQuery
 	QueryArtifactWorkbench       *query.ArtifactWorkbenchQuery
+	QueryArtifactCompare         *query.ArtifactCompareQuery
 	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
@@ -66,6 +67,7 @@ type Service struct {
 	QueryTaskStatus              *query.TaskStatusQuery
 	QueryRunWorkbench            *query.RunWorkbenchQuery
 	QueryArtifactWorkbench       *query.ArtifactWorkbenchQuery
+	QueryArtifactCompare         *query.ArtifactCompareQuery
 	QueryTaskWorkbench           *query.TaskWorkbenchQuery
 	QueryModuleBoard             *query.ModuleBoardQuery
 	QueryTaskBoard               *query.TaskBoardQuery
@@ -94,6 +96,7 @@ func NewService(deps Dependencies) *Service {
 		QueryTaskStatus:              deps.QueryTaskStatus,
 		QueryRunWorkbench:            deps.QueryRunWorkbench,
 		QueryArtifactWorkbench:       deps.QueryArtifactWorkbench,
+		QueryArtifactCompare:         deps.QueryArtifactCompare,
 		QueryTaskWorkbench:           deps.QueryTaskWorkbench,
 		QueryModuleBoard:             deps.QueryModuleBoard,
 		QueryTaskBoard:               deps.QueryTaskBoard,
@@ -223,6 +226,19 @@ func (s *Service) ArtifactWorkbench(ctx context.Context, artifactID string) (Art
 	view, err := s.QueryArtifactWorkbench.Execute(artifactID)
 	if err != nil {
 		return ArtifactWorkbenchView{}, normalizeArtifactWorkbenchError(artifactID, err)
+	}
+
+	return view, nil
+}
+
+func (s *Service) ArtifactCompare(ctx context.Context, artifactID string) (ArtifactCompareView, error) {
+	if err := ctxErr(ctx); err != nil {
+		return ArtifactCompareView{}, err
+	}
+
+	view, err := s.QueryArtifactCompare.Execute(artifactID)
+	if err != nil {
+		return ArtifactCompareView{}, normalizeArtifactCompareError(artifactID, err)
 	}
 
 	return view, nil
@@ -587,6 +603,17 @@ func normalizeArtifactWorkbenchError(artifactID string, err error) error {
 		return fmt.Errorf("%w: artifact %s not found", ErrArtifactWorkbenchNotFound, artifactID)
 	case errors.Is(err, ports.ErrArtifactRunLinkageConflict):
 		return fmt.Errorf("%w: %v", ErrArtifactWorkbenchConflict, err)
+	default:
+		return err
+	}
+}
+
+func normalizeArtifactCompareError(artifactID string, err error) error {
+	switch {
+	case errors.Is(err, ErrArtifactCompareNotFound):
+		return err
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("%w: artifact %s not found", ErrArtifactCompareNotFound, artifactID)
 	default:
 		return err
 	}

@@ -30,6 +30,9 @@ func NewRouter(app App) *gin.Engine {
 	router.GET("/board/artifacts/workbench", func(c *gin.Context) {
 		c.File(filepath.Join(boardAssetDir(), "artifact-workbench.html"))
 	})
+	router.GET("/board/artifacts/compare", func(c *gin.Context) {
+		c.File(filepath.Join(boardAssetDir(), "artifact-compare.html"))
+	})
 	router.StaticFS("/board/assets", http.Dir(boardAssetDir()))
 	router.GET("/board/modules", handlers.ModuleBoard)
 	router.GET("/board/tasks", handlers.TaskBoard)
@@ -49,6 +52,7 @@ func NewRouter(app App) *gin.Engine {
 		router.GET("/api/manager/tasks/:id", managerHandlers.ManagerTaskStatus)
 		router.GET("/api/manager/runs/:id/workbench", managerHandlers.ManagerRunWorkbench)
 		router.GET("/api/manager/artifacts/:id/workbench", managerHandlers.ManagerArtifactWorkbench)
+		router.GET("/api/manager/artifacts/:id/compare", managerHandlers.ManagerArtifactCompare)
 		router.GET("/api/manager/artifacts/:id/content", managerHandlers.ManagerArtifactContent)
 		router.GET("/api/manager/tasks/:id/workbench", managerHandlers.ManagerTaskWorkbench)
 		router.POST("/api/manager/tasks/:id/dispatch", managerHandlers.DispatchTaskWorkbench)
